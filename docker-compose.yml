@@ -1,6 +1,6 @@
 services:
   darkbox-node:
-    build: ./services/node
+    build: ./infra/node
     networks: [hidden_net]
     volumes:
       - node_data:/var/lib/darkbox-node
@@ -48,7 +48,7 @@ services:
     networks: [egress_net]
 
   darkbox-frontend:
-    build: ./services/frontend
+    build: ./apps/frontend
     networks: [public_net]
     depends_on: [darkbox-indexer]
     ports:

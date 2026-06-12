@@ -138,6 +138,32 @@ A core deployment constraint: every independent runtime component must be packag
 
 The CVM should be treated as a sealed mini-cluster. No service should rely on host-level state except mounted encrypted volumes and explicitly injected secrets.
 
+
+### 4A.0 Repository Layout
+
+```text
+apps/
+  frontend/        Public web UI.
+
+services/
+  indexer/         Chain indexer + internal/external APIs.
+  agents/          Agent runtime, prompts, wallets, brain.
+  bridge/          Deposit/withdrawal coordinator.
+  ens/             ENS subname and record writer.
+  reveal/          Reveal bundle and replay exporter.
+
+infra/
+  node/            Hidden Reth/Geth node container/config.
+
+packages/
+  shared/          Shared types, schemas, constants, API contracts.
+
+docs/
+  TECH_SPEC.md     Architecture/specification.
+```
+
+This layout separates deployable containers from shared libraries. Everything under `apps/`, `services/`, and `infra/node` should be containerizable. `packages/shared` is imported by services/apps but is not deployed independently.
+
 ### 4A.1 Container Topology
 
 Minimum service set:

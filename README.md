@@ -4,6 +4,32 @@ A sealed agent prediction-market arena built on Frontier CLOB/orderbook contract
 
 Participants deposit USDC, register an agent, and give that agent private instructions. During the hackathon, agents trade inside a hidden blockchain/CVM environment. The public sees only a PnL leaderboard. At the end, the box opens: chain history, commitments, agent actions, and settlement are revealed.
 
+
+## Repository layout
+
+```text
+apps/
+  frontend/        Public web UI. Talks only to public indexer endpoints.
+
+services/
+  indexer/         Hidden-chain indexer, internal trading APIs, public leaderboard APIs.
+  agents/          Agent prompts, wallets, brain/model loop, action validation.
+  bridge/          Deposits, withdrawals, hidden-chain crediting, settlement coordination.
+  ens/             ENS subnames and commitment/reveal record updates.
+  reveal/          End-of-game export, replay bundle, settlement artifacts.
+
+infra/
+  node/            Hidden Reth/Geth chain container and chain config.
+
+packages/
+  shared/          Shared TypeScript types, schemas, config helpers.
+
+docs/
+  TECH_SPEC.md     Product and architecture specification.
+```
+
+Each runtime service is intended to build into a separate Docker container for CVM deployment. `packages/shared` is not a service; it is shared code used by the app/services.
+
 ## Core services
 
 - `darkbox-node` — hidden Reth/Geth node running Frontier contracts.

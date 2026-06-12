@@ -1,0 +1,76 @@
+services:
+  darkbox-node:
+    build: ./services/node
+    networks: [hidden_net]
+    volumes:
+      - node_data:/var/lib/darkbox-node
+    expose:
+      - "8545"
+
+  darkbox-db:
+    image: postgres:16-alpine
+    networks: [hidden_net]
+    environment:
+      POSTGRES_DB: darkbox
+      POSTGRES_USER: darkbox
+      POSTGRES_PASSWORD: darkbox_dev_only
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  darkbox-indexer:
+    build: ./services/indexer
+    networks: [hidden_net, public_net]
+    depends_on: [darkbox-node, darkbox-db]
+    environment:
+      HIDDEN_RPC_URL: http://darkbox-node:8545
+      DATABASE_URL: postgres://darkbox:darkbox_dev_only@darkbox-db:5432/darkbox
+    expose:
+      - "8080"
+
+  darkbox-agents:
+    build: ./services/agents
+    networks: [hidden_net]
+    depends_on: [darkbox-indexer, darkbox-node]
+    environment:
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+      HIDDEN_RPC_URL: http://darkbox-node:8545
+
+  darkbox-bridge:
+    build: ./services/bridge
+    networks: [hidden_net, egress_net]
+    depends_on: [darkbox-indexer, darkbox-node]
+    environment:
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+      HIDDEN_RPC_URL: http://darkbox-node:8545
+
+  darkbox-ens:
+    build: ./services/ens
+    networks: [egress_net]
+
+  darkbox-frontend:
+    build: ./services/frontend
+    networks: [public_net]
+    depends_on: [darkbox-indexer]
+    ports:
+      - "3000:3000"
+    environment:
+      PUBLIC_INDEXER_URL: http://darkbox-indexer:8080/public
+
+  darkbox-reveal:
+    build: ./services/reveal
+    networks: [hidden_net, egress_net]
+    depends_on: [darkbox-indexer, darkbox-node]
+    profiles: [reveal]
+    environment:
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+      HIDDEN_RPC_URL: http://darkbox-node:8545
+
+networks:
+  hidden_net:
+    internal: true
+  public_net: {}
+  egress_net: {}
+
+volumes:
+  node_data: {}
+  db_data: {}

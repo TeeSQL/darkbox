@@ -501,20 +501,20 @@ html.bestiary-html .daemon-stage {
 .daemon-wait-portrait.mic-reactive {
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.40),
-    0 0 calc(22px + (52px * var(--wait-mic))) rgba(139, 123, 255, calc(0.28 + (0.30 * var(--wait-mic)))),
-    0 0 calc(14px + (42px * var(--wait-mic))) rgba(255, 74, 126, calc(0.18 + (0.24 * var(--wait-mic))));
+    0 0 calc(16px + (30px * var(--wait-mic))) rgba(139, 123, 255, calc(0.18 + (0.18 * var(--wait-mic)))),
+    0 0 calc(10px + (22px * var(--wait-mic))) rgba(255, 74, 126, calc(0.10 + (0.14 * var(--wait-mic))));
 }
 .daemon-wait-portrait.mic-reactive img {
   filter:
-    contrast(calc(1.10 + (0.10 * var(--wait-mic))))
-    brightness(calc(1.08 + (0.14 * var(--wait-mic))))
-    saturate(calc(1.14 + (0.28 * var(--wait-mic))));
+    contrast(calc(1.08 + (0.05 * var(--wait-mic))))
+    brightness(calc(1.06 + (0.07 * var(--wait-mic))))
+    saturate(calc(1.10 + (0.12 * var(--wait-mic))));
 }
 .daemon-wait-portrait.mic-reactive::before {
-  opacity: calc(0.62 + (0.28 * var(--wait-mic)));
+  opacity: calc(0.36 + (0.16 * var(--wait-mic)));
 }
 .daemon-wait-portrait.mic-reactive::after {
-  opacity: calc(0.70 + (0.28 * var(--wait-mic)));
+  opacity: calc(0.42 + (0.14 * var(--wait-mic)));
 }
 .daemon-wait-shader {
   position: absolute;
@@ -524,7 +524,7 @@ html.bestiary-html .daemon-stage {
   height: 100%;
   pointer-events: none;
   mix-blend-mode: screen;
-  opacity: 1;
+  opacity: 0.58;
 }
 .daemon-wait-portrait::before {
   content: "";
@@ -533,12 +533,12 @@ html.bestiary-html .daemon-stage {
   z-index: 3;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 48%, transparent 38%, rgba(146, 118, 255, 0.34) 56%, transparent 71%),
-    conic-gradient(from 0deg at 50% 50%, rgba(255, 74, 126, 0.0), rgba(255, 74, 126, 0.34), rgba(93, 94, 255, 0.36), rgba(255, 74, 126, 0.0)),
-    repeating-linear-gradient(180deg, rgba(255,255,255,.055) 0 1px, transparent 1px 7px);
-  opacity: 0.62;
+    radial-gradient(circle at 50% 48%, transparent 42%, rgba(146, 118, 255, 0.22) 58%, transparent 73%),
+    conic-gradient(from 0deg at 50% 50%, rgba(255, 74, 126, 0.0), rgba(255, 74, 126, 0.16), rgba(93, 94, 255, 0.20), rgba(255, 74, 126, 0.0)),
+    repeating-linear-gradient(180deg, rgba(255,255,255,.026) 0 1px, transparent 1px 10px);
+  opacity: 0.36;
   mix-blend-mode: screen;
-  animation: daemonWaitScan 4.6s linear infinite, daemonWaitHalo 3.8s ease-in-out infinite;
+  animation: daemonWaitScan 8s linear infinite, daemonWaitHalo 5.6s ease-in-out infinite;
 }
 .daemon-wait-portrait::after {
   content: "";
@@ -547,38 +547,38 @@ html.bestiary-html .daemon-stage {
   z-index: 4;
   pointer-events: none;
   border: 1px solid rgba(231, 227, 217, 0.22);
-  background: linear-gradient(105deg, transparent 34%, rgba(255,255,255,.18) 48%, transparent 62%);
+  background: linear-gradient(105deg, transparent 36%, rgba(255,255,255,.10) 50%, transparent 64%);
   background-size: 260% 100%;
   box-shadow:
     inset 0 0 46px rgba(0, 0, 0, 0.28),
-    inset 0 0 44px rgba(139, 123, 255, 0.24),
-    0 0 34px rgba(255, 74, 126, 0.22);
-  animation: daemonWaitAura 3.8s ease-in-out infinite, daemonWaitSweep 4.2s ease-in-out infinite;
+    inset 0 0 34px rgba(139, 123, 255, 0.14),
+    0 0 20px rgba(255, 74, 126, 0.12);
+  animation: daemonWaitAura 5.2s ease-in-out infinite, daemonWaitSweep 7.5s ease-in-out infinite;
 }
 @keyframes daemonWaitPhotoPulse {
   0%, 100% { filter: contrast(1.07) brightness(1.03) saturate(1.08); }
-  50% { filter: contrast(1.14) brightness(1.18) saturate(1.28); }
+  50% { filter: contrast(1.10) brightness(1.11) saturate(1.16); }
 }
 @keyframes daemonWaitBreath {
-  0%, 100% { box-shadow: 0 18px 46px rgba(0, 0, 0, 0.32), 0 0 16px rgba(139, 123, 255, 0.10), 0 0 0 rgba(255, 74, 126, 0); }
-  50% { box-shadow: 0 18px 50px rgba(0, 0, 0, 0.40), 0 0 46px rgba(139, 123, 255, 0.38), 0 0 34px rgba(255, 74, 126, 0.22); }
+  0%, 100% { box-shadow: 0 18px 42px rgba(0, 0, 0, 0.30), 0 0 12px rgba(139, 123, 255, 0.08), 0 0 0 rgba(255, 74, 126, 0); }
+  50% { box-shadow: 0 18px 46px rgba(0, 0, 0, 0.36), 0 0 30px rgba(139, 123, 255, 0.24), 0 0 18px rgba(255, 74, 126, 0.12); }
 }
 @keyframes daemonWaitAura {
-  0%, 100% { opacity: 0.62; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.38; }
+  50% { opacity: 0.62; }
 }
 @keyframes daemonWaitHalo {
-  0%, 100% { opacity: 0.42; transform: rotate(0deg) scale(1); }
-  50% { opacity: 0.86; transform: rotate(8deg) scale(1.04); }
+  0%, 100% { opacity: 0.28; transform: rotate(0deg) scale(1); }
+  50% { opacity: 0.54; transform: rotate(4deg) scale(1.02); }
 }
 @keyframes daemonWaitScan {
   from { background-position: 0 0, 0 0, 0 0; }
-  to { background-position: 0 0, 0 0, 0 48px; }
+  to { background-position: 0 0, 0 0, 0 28px; }
 }
 @keyframes daemonWaitSweep {
-  0%, 18% { background-position: 130% 0; opacity: 0.44; }
-  48% { background-position: -90% 0; opacity: 0.92; }
-  100% { background-position: -90% 0; opacity: 0.54; }
+  0%, 28% { background-position: 130% 0; opacity: 0.24; }
+  54% { background-position: -90% 0; opacity: 0.48; }
+  100% { background-position: -90% 0; opacity: 0.28; }
 }
 @media (prefers-reduced-motion: reduce) {
   .daemon-wait-portrait.daemon-wait-alive,
@@ -592,6 +592,9 @@ html.bestiary-html .daemon-stage {
   .daemon-reveal-stage { min-height: 360px; }
   .daemon-reveal-fallback { padding: 12px; }
   .daemon-wait-portrait { width: min(100%, 320px); }
+  .daemon-wait-shader { opacity: 0.42; }
+  .daemon-wait-portrait::before { opacity: 0.30; }
+  .daemon-wait-portrait::after { opacity: 0.36; }
 }
 
 /* Reveal screen polish: name first, smaller apparition. */
@@ -676,4 +679,55 @@ html.bestiary-html .daemon-stage {
   margin: 0;
   border-top: 0;
   border-bottom: 0;
+}
+
+/* Voice recording states — make tap/hold behavior unmistakable. */
+.voice-state {
+  min-width: 96px;
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.028);
+  color: var(--mut);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  text-transform: lowercase;
+  white-space: nowrap;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.voice-state[data-state="hold-arming"] {
+  color: var(--bone);
+  border-color: rgba(139, 123, 255, 0.62);
+  background: rgba(139, 123, 255, 0.10);
+  box-shadow: 0 0 20px rgba(139, 123, 255, 0.18);
+}
+.voice-state[data-state="recording-toggle"],
+.voice-state[data-state="recording-hold"] {
+  color: var(--bone);
+  border-color: rgba(255, 74, 126, 0.74);
+  background: rgba(255, 74, 126, 0.12);
+  box-shadow: 0 0 24px rgba(255, 74, 126, 0.24);
+  animation: voiceStatePulse 1s ease-in-out infinite;
+}
+.voice-button.arming {
+  color: var(--bone);
+  border-color: rgba(139, 123, 255, 0.62);
+  background: rgba(139, 123, 255, 0.10);
+  box-shadow: 0 0 24px rgba(139, 123, 255, 0.22);
+}
+.voice-button.listening {
+  color: var(--hot);
+  border-color: rgba(255, 74, 126, 0.72);
+  background: rgba(255, 74, 126, 0.12);
+  box-shadow: 0 0 28px rgba(255, 74, 126, 0.32);
+  animation: voiceButtonPulse 1s ease-in-out infinite;
+}
+@keyframes voiceButtonPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes voiceStatePulse { 0%, 100% { transform: translateY(0); opacity: .82; } 50% { transform: translateY(-1px); opacity: 1; } }
+@media (max-width: 520px) {
+  .whisper-field { gap: 8px; }
+  .voice-state { min-width: 74px; padding-inline: 7px; font-size: 9px; letter-spacing: 0.04em; }
 }

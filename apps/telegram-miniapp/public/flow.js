@@ -6,6 +6,7 @@ const views = [...document.querySelectorAll('.view')];
 const navButtons = [...document.querySelectorAll('[data-go]')];
 const input = document.querySelector('#whisper-input');
 const voiceButton = document.querySelector('#voice-button');
+const voiceStateEl = document.querySelector('#voice-state');
 const sealWhisperButton = document.querySelector('#seal-whisper');
 const whisperStatus = document.querySelector('#whisper-status');
 const landingCountdownEl = document.querySelector('#landing-countdown');
@@ -358,10 +359,25 @@ async function requestMicFallback() {
   await requestMicAccess('mic allowed. speech transcription is unavailable here. type the final whisper.');
 }
 
-function setVoiceButtonState(active, mode = '') {
+function setVoiceVisualState(state = 'idle') {
+  const active = state === 'recording-toggle' || state === 'recording-hold';
   voiceButton?.classList.toggle('listening', active);
+  voiceButton?.classList.toggle('arming', state === 'hold-arming');
   voiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
-  if (voiceButton) voiceButton.dataset.recordingMode = active ? mode : '';
+  if (voiceButton) voiceButton.dataset.recordingMode = state;
+  if (!voiceStateEl) return;
+  voiceStateEl.dataset.state = state;
+  voiceStateEl.textContent = {
+    idle: 'tap / hold',
+    'hold-arming': 'hold…',
+    'recording-toggle': 'recording · tap to stop',
+    'recording-hold': 'recording · release to stop',
+    stopping: 'stopping…',
+  }[state] || 'tap / hold';
+}
+
+function setVoiceButtonState(active, mode = '') {
+  setVoiceVisualState(active ? (mode === 'hold' ? 'recording-hold' : 'recording-toggle') : 'idle');
 }
 
 function ensureRecognition() {
@@ -379,6 +395,7 @@ function ensureRecognition() {
     wantedListening = false;
     listening = false;
     setVoiceButtonState(false);
+    setVoiceVisualState('idle');
     if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
   };
   recognition.onend = () => {
@@ -434,6 +451,7 @@ async function beginVoice(mode = 'toggle') {
 function stopVoice(statusText = 'recording stopped. review before sealing.') {
   wantedListening = false;
   holdRecording = false;
+  setVoiceVisualState('stopping');
   if (whisperStatus) whisperStatus.textContent = statusText;
   try { recognition?.stop?.(); }
   catch (_) {}
@@ -488,6 +506,7 @@ voiceButton?.addEventListener('pointerdown', (event) => {
   if (event.button !== undefined && event.button !== 0) return;
   if (wantedListening || listening) return;
   voiceButton.setPointerCapture?.(event.pointerId);
+  setVoiceVisualState('hold-arming');
   holdTimer = window.setTimeout(async () => {
     holdTimer = 0;
     holdRecording = true;
@@ -499,6 +518,7 @@ voiceButton?.addEventListener('pointerup', (event) => {
   if (holdTimer) {
     window.clearTimeout(holdTimer);
     holdTimer = 0;
+    setVoiceVisualState('idle');
     return;
   }
   if (holdRecording) {
@@ -511,6 +531,7 @@ voiceButton?.addEventListener('pointercancel', () => {
   if (holdTimer) window.clearTimeout(holdTimer);
   holdTimer = 0;
   if (holdRecording) stopVoice('recording cancelled. review before sealing.');
+  else setVoiceVisualState('idle');
 });
 voiceButton?.addEventListener('click', startVoice);
 terminalButton?.addEventListener('click', openSealedTerminal);

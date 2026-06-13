@@ -51,6 +51,14 @@
   .voice-button{width:38px;height:38px;border:1px solid rgba(231,227,217,.18);border-radius:999px;background:rgba(255,255,255,.035);color:#8a8a96;display:grid;place-items:center;cursor:pointer;transition:transform .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease}
   .voice-button:hover,.voice-button:focus-visible{color:var(--bone);border-color:rgba(139,123,255,.58);box-shadow:0 0 28px rgba(139,123,255,.20);transform:translateY(-1px)}
   .voice-button.listening{color:var(--hot);border-color:rgba(255,74,126,.62);box-shadow:0 0 28px rgba(255,74,126,.30)}
+.voice-state{min-width:96px;flex:0 0 auto;padding:7px 9px;border:1px solid var(--hair);border-radius:999px;background:rgba(255,255,255,.028);color:var(--mut);font-size:10px;letter-spacing:.08em;line-height:1;text-align:center;text-transform:lowercase;white-space:nowrap;transition:color .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,transform .18s ease}
+.voice-state[data-state="hold-arming"]{color:var(--bone);border-color:rgba(139,123,255,.62);background:rgba(139,123,255,.10);box-shadow:0 0 20px rgba(139,123,255,.18)}
+.voice-state[data-state="recording-toggle"],.voice-state[data-state="recording-hold"]{color:var(--bone);border-color:rgba(255,74,126,.74);background:rgba(255,74,126,.12);box-shadow:0 0 24px rgba(255,74,126,.24);animation:voiceStatePulse 1s ease-in-out infinite}
+.voice-button.arming{color:var(--bone);border-color:rgba(139,123,255,.62);background:rgba(139,123,255,.10);box-shadow:0 0 24px rgba(139,123,255,.22)}
+.voice-button.listening{color:var(--hot);border-color:rgba(255,74,126,.72);background:rgba(255,74,126,.12);box-shadow:0 0 28px rgba(255,74,126,.32);animation:voiceButtonPulse 1s ease-in-out infinite}
+@keyframes voiceButtonPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes voiceStatePulse{0%,100%{transform:translateY(0);opacity:.82}50%{transform:translateY(-1px);opacity:1}}
+@media(max-width:520px){.whisper-field{gap:8px}.voice-state{min-width:74px;padding-inline:7px;font-size:9px;letter-spacing:.04em}}
 
   .steps{width:100%;text-align:left;margin-top:26px;border-top:1px solid var(--hair)}
   .step{display:flex;gap:16px;align-items:baseline;padding:13px 2px;border-bottom:1px solid var(--hair);font-size:13px}
@@ -107,17 +115,17 @@
   .daemon-wait-portrait img{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;background:#101016;filter:contrast(1.08) brightness(1.08) saturate(1.12);animation:daemonWaitPhotoPulse 3.8s ease-in-out infinite}
   .daemon-wait-shader{position:absolute;inset:0;z-index:2;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen;opacity:1}
   .daemon-wait-portrait.mic-reactive{box-shadow:0 18px 50px rgba(0,0,0,.40),0 0 calc(22px + (52px * var(--wait-mic))) rgba(139,123,255,calc(.28 + (.30 * var(--wait-mic)))),0 0 calc(14px + (42px * var(--wait-mic))) rgba(255,74,126,calc(.18 + (.24 * var(--wait-mic))))}
-  .daemon-wait-portrait.mic-reactive img{filter:contrast(calc(1.10 + (.10 * var(--wait-mic)))) brightness(calc(1.08 + (.14 * var(--wait-mic)))) saturate(calc(1.14 + (.28 * var(--wait-mic))))}
-  .daemon-wait-portrait.mic-reactive:before{opacity:calc(.62 + (.28 * var(--wait-mic)))}
-  .daemon-wait-portrait.mic-reactive:after{opacity:calc(.70 + (.28 * var(--wait-mic)))}
-  .daemon-wait-portrait:before{content:"";position:absolute;inset:-18%;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 38%,rgba(146,118,255,.34) 56%,transparent 71%),conic-gradient(from 0deg at 50% 50%,rgba(255,74,126,0),rgba(255,74,126,.34),rgba(93,94,255,.36),rgba(255,74,126,0)),repeating-linear-gradient(180deg,rgba(255,255,255,.055) 0 1px,transparent 1px 7px);opacity:.62;mix-blend-mode:screen;animation:daemonWaitScan 4.6s linear infinite,daemonWaitHalo 3.8s ease-in-out infinite}
-  .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.22);background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.18) 48%,transparent 62%);background-size:260% 100%;box-shadow:inset 0 0 46px rgba(0,0,0,.28),inset 0 0 44px rgba(139,123,255,.24),0 0 34px rgba(255,74,126,.22);animation:daemonWaitAura 3.8s ease-in-out infinite,daemonWaitSweep 4.2s ease-in-out infinite}
-  @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08)}50%{filter:contrast(1.14) brightness(1.18) saturate(1.28)}}
-  @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 46px rgba(0,0,0,.32),0 0 16px rgba(139,123,255,.10),0 0 0 rgba(255,74,126,0)}50%{box-shadow:0 18px 50px rgba(0,0,0,.40),0 0 46px rgba(139,123,255,.38),0 0 34px rgba(255,74,126,.22)}}
-  @keyframes daemonWaitAura{0%,100%{opacity:.62}50%{opacity:1}}
-  @keyframes daemonWaitHalo{0%,100%{opacity:.42;transform:rotate(0deg) scale(1)}50%{opacity:.86;transform:rotate(8deg) scale(1.04)}}
-  @keyframes daemonWaitScan{from{background-position:0 0,0 0,0 0}to{background-position:0 0,0 0,0 48px}}
-  @keyframes daemonWaitSweep{0%,18%{background-position:130% 0;opacity:.44}48%{background-position:-90% 0;opacity:.92}100%{background-position:-90% 0;opacity:.54}}
+  .daemon-wait-portrait.mic-reactive img{filter:contrast(calc(1.08 + (.05 * var(--wait-mic)))) brightness(calc(1.06 + (.07 * var(--wait-mic)))) saturate(calc(1.10 + (.12 * var(--wait-mic))))}
+  .daemon-wait-portrait.mic-reactive:before{opacity:calc(.36 + (.16 * var(--wait-mic)))}
+  .daemon-wait-portrait.mic-reactive:after{opacity:calc(.42 + (.14 * var(--wait-mic)))}
+  .daemon-wait-portrait:before{content:"";position:absolute;inset:-18%;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 42%,rgba(146,118,255,.22) 58%,transparent 73%),conic-gradient(from 0deg at 50% 50%,rgba(255,74,126,0),rgba(255,74,126,.16),rgba(93,94,255,.20),rgba(255,74,126,0)),repeating-linear-gradient(180deg,rgba(255,255,255,.026) 0 1px,transparent 1px 10px);opacity:.36;mix-blend-mode:screen;animation:daemonWaitScan 8s linear infinite,daemonWaitHalo 5.6s ease-in-out infinite}
+  .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.22);background:linear-gradient(105deg,transparent 36%,rgba(255,255,255,.10) 50%,transparent 64%);background-size:260% 100%;box-shadow:inset 0 0 46px rgba(0,0,0,.28),inset 0 0 34px rgba(139,123,255,.14),0 0 20px rgba(255,74,126,.12);animation:daemonWaitAura 5.2s ease-in-out infinite,daemonWaitSweep 7.5s ease-in-out infinite}
+  @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08)}50%{filter:contrast(1.10) brightness(1.11) saturate(1.16)}}
+  @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 42px rgba(0,0,0,.30),0 0 12px rgba(139,123,255,.08),0 0 0 rgba(255,74,126,0)}50%{box-shadow:0 18px 46px rgba(0,0,0,.36),0 0 30px rgba(139,123,255,.24),0 0 18px rgba(255,74,126,.12)}}
+  @keyframes daemonWaitAura{0%,100%{opacity:.38}50%{opacity:.62}}
+  @keyframes daemonWaitHalo{0%,100%{opacity:.28;transform:rotate(0deg) scale(1)}50%{opacity:.54;transform:rotate(4deg) scale(1.02)}}
+  @keyframes daemonWaitScan{from{background-position:0 0,0 0,0 0}to{background-position:0 0,0 0,0 28px}}
+  @keyframes daemonWaitSweep{0%,28%{background-position:130% 0;opacity:.24}54%{background-position:-90% 0;opacity:.48}100%{background-position:-90% 0;opacity:.28}}
   @media (prefers-reduced-motion:reduce){.daemon-wait-portrait,.daemon-wait-portrait img,.daemon-wait-portrait:before,.daemon-wait-portrait:after{animation:none}}
 
   /* command bar — pinned to the bottom of every screen */
@@ -195,9 +203,10 @@
       <div class="whisper-field">
         <span class="prompt">&gt;</span>
         <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence…" aria-label="whisper"></textarea>
-        <button id="voice-button" class="voice-button" type="button" aria-label="Tap to start or stop recording. Hold to record.">
+        <button id="voice-button" class="voice-button" type="button" aria-label="Tap to start or stop recording. Hold to record." aria-pressed="false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
         </button>
+        <span id="voice-state" class="voice-state" aria-live="polite">tap / hold</span>
       </div>
     </div>
     <div id="whisper-status" class="sub">read it back. you can't unsay it.<br><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
@@ -336,6 +345,6 @@
 </div>
 
 <script src="/src/daemon-reveal.ts" type="module"></script>
-<script src="/flow.js?v=20260613-press-hold-record" type="module"></script>
+<script src="/flow.js?v=20260613-voice-visible-states" type="module"></script>
 </body>
 </html>

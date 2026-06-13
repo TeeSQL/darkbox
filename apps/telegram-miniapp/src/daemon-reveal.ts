@@ -31,6 +31,7 @@ let waitCamera: THREE.OrthographicCamera | null = null;
 let waitMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | null = null;
 let waitLoader: THREE.TextureLoader | null = null;
 let waitRaf = 0;
+let waitCharacterRaf = 0;
 let waitStarted = false;
 let waitLoadedAspect = 1024 / 1536;
 let waitMicStream: MediaStream | null = null;
@@ -79,6 +80,10 @@ const fragmentShader = `
     float gate = step(0.993 - uWake * 0.055, hash(vec2(floor(uTime * 10.0), floor(uv.y * 44.0))));
     float slice = (hash(vec2(floor(uv.y * 92.0), floor(uTime * 15.0))) - 0.5) * gate * (0.014 + uWake * 0.04);
     float breathe = sin(uTime * 1.0) * 0.0025;
+    vec2 centered = uv - vec2(0.5, 0.48);
+    float apparition =
+      smoothstep(0.72, 0.10, length(centered * vec2(0.82, 1.18))) *
+      smoothstep(0.98, 0.26, abs(centered.x) + abs(centered.y) * 0.68);
 
     vec4 base = texture2D(uMap, uv + vec2(slice + breathe, 0.0));
     vec4 red = texture2D(uMap, uv + vec2(slice + 0.0035 + uWake * 0.006, 0.0));
@@ -87,15 +92,19 @@ const fragmentShader = `
     base.b = mix(base.b, blue.b, 0.18 + uWake * 0.20);
 
     float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
-    float creature = smoothstep(0.06, 0.42, luma);
+    float creature = max(smoothstep(0.06, 0.42, luma), apparition * 0.72);
     float scan = sin((uv.y + uTime * 0.014) * 860.0) * 0.018;
     float noise = (hash(uv * vec2(720.0, 1280.0) + floor(uTime * 28.0)) - 0.5) * 0.042;
-    vec3 glow = vec3(0.55, 0.49, 1.0) * creature * (0.10 + uWake * 0.22);
-    vec3 color = base.rgb + glow + scan + noise;
+    float vein = sin((uv.y * 17.0) + sin(uv.x * 19.0 + uTime * 0.8) + uTime * 1.15) * 0.5 + 0.5;
+    vec3 plasma = mix(vec3(0.22, 0.10, 0.46), vec3(0.92, 0.30, 0.62), vein);
+    vec3 ghost = plasma * creature * (0.40 + uWake * 0.58);
+    vec3 glow = vec3(0.55, 0.49, 1.0) * creature * (0.14 + uWake * 0.30);
+    vec3 color = mix(base.rgb * 0.34, ghost, 0.76) + glow + scan + noise;
 
     float vignette = smoothstep(0.96, 0.22, distance(uv, vec2(0.5, 0.48)));
-    color *= mix(0.56, 1.10, vignette);
-    color += gate * creature * vec3(0.14, 0.09, 0.24);
+    color *= mix(0.68, 1.18, vignette);
+    color += gate * creature * vec3(0.24, 0.11, 0.38);
+    color += vec3(0.035, 0.030, 0.055);
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -184,6 +193,13 @@ function resize() {
     imageHeight = imageWidth / loadedAspect;
   }
   mesh.scale.set(imageWidth, imageHeight, 1);
+}
+
+function scheduleRevealResize() {
+  requestAnimationFrame(() => {
+    resize();
+    requestAnimationFrame(resize);
+  });
 }
 
 function animate(time = 0) {
@@ -276,13 +292,36 @@ function scheduleWaitPortraitResize() {
   });
 }
 
+function updateWaitCharacterMotion(time = 0) {
+  waitMicLevel += (waitMicTarget - waitMicLevel) * 0.16;
+  const autonomousWake = targetWake * (0.72 + Math.sin(time * 0.00105) * 0.12);
+  const wakeTarget = waitMicMode === 'idle' ? autonomousWake : Math.max(autonomousWake, waitMicLevel);
+  if (waitImage) {
+    const t = time * 0.001;
+    const breath = 0.5 + Math.sin(t * 1.08) * 0.5;
+    const mic = waitMicMode === 'idle' ? 0 : waitMicLevel;
+    const scale = 1 + breath * 0.014 + mic * 0.038;
+    const lift = -1.5 - breath * 2.4 - mic * 6.0;
+    const sway = Math.sin(t * 0.72) * (0.9 + mic * 2.2);
+    waitImage.style.transform = `translate3d(${sway.toFixed(2)}px, ${lift.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`;
+  }
+  return wakeTarget;
+}
+
+function animateWaitCharacter(time = 0) {
+  waitCharacterRaf = requestAnimationFrame(animateWaitCharacter);
+  if (!waitRenderer) updateWaitCharacterMotion(time);
+}
+
+function startWaitCharacterMotion() {
+  if (!waitCharacterRaf) waitCharacterRaf = requestAnimationFrame(animateWaitCharacter);
+}
+
 function animateWaitPortrait(time = 0) {
   waitRaf = requestAnimationFrame(animateWaitPortrait);
   if (!waitRenderer || !waitScene || !waitCamera || !waitMesh) return;
-  waitMicLevel += (waitMicTarget - waitMicLevel) * 0.16;
   waitMesh.material.uniforms.uTime.value = time * 0.001;
-  const autonomousWake = targetWake * (0.72 + Math.sin(time * 0.00105) * 0.12);
-  const wakeTarget = waitMicMode === 'idle' ? autonomousWake : Math.max(autonomousWake, waitMicLevel);
+  const wakeTarget = updateWaitCharacterMotion(time);
   waitMesh.material.uniforms.uWake.value += (wakeTarget - waitMesh.material.uniforms.uWake.value) * 0.07;
   waitRenderer.render(waitScene, waitCamera);
 }
@@ -345,6 +384,7 @@ function initWaitPortrait() {
   if (!waitPortrait || waitStarted) return Boolean(waitRenderer);
   waitStarted = true;
   waitPortrait.classList.add('daemon-wait-alive');
+  startWaitCharacterMotion();
   try {
     waitRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     waitRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -417,6 +457,13 @@ if (waitView && waitPortrait) {
   }).observe(waitView, { attributes: true, attributeFilter: ['class'] });
 }
 
+const revealView = document.querySelector('#v-reveal');
+if (revealView && stage) {
+  new MutationObserver(() => {
+    if (revealView.classList.contains('active')) scheduleRevealResize();
+  }).observe(revealView, { attributes: true, attributeFilter: ['class'] });
+}
+
 window.__daemonhallSetWaitMicLevelForTest = (level: number) => setWaitMicLevel(level, 'test');
 window.addEventListener('daemonhall:wait-mic-level', (event) => {
   setWaitMicLevel((event as CustomEvent<number>).detail, 'test');
@@ -434,6 +481,7 @@ function hashCode(seed: string) {
 window.addEventListener('pagehide', () => {
   if (raf) cancelAnimationFrame(raf);
   if (waitRaf) cancelAnimationFrame(waitRaf);
+  if (waitCharacterRaf) cancelAnimationFrame(waitCharacterRaf);
   stopWaitMic();
 });
 

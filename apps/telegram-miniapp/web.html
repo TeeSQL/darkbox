@@ -65,6 +65,17 @@
   .prow:last-child{border-bottom:none}
   .prow .k{color:var(--mut);font-size:11px;letter-spacing:.1em;white-space:nowrap}
   .prow .v{color:var(--silver);text-align:right}
+  .daemon-reveal-panel{width:100%;margin-top:18px;border:1px solid var(--hair);background:var(--srf);border-radius:10px;overflow:hidden;text-align:left}
+  .daemon-reveal-copy{display:grid;gap:4px;padding:15px 18px 13px;border-bottom:1px solid var(--hair);background:linear-gradient(180deg,rgba(139,123,255,.075),rgba(255,255,255,.018));text-align:center}
+  .daemon-reveal-copy .k{color:var(--mut);font-size:10px;letter-spacing:.16em}
+  .daemon-reveal-copy strong{color:var(--bone);font-family:var(--display);font-style:italic;text-transform:uppercase;font-size:clamp(1.58rem,7.2vw,2.35rem);line-height:1.05;letter-spacing:.04em}
+  .daemon-reveal-copy span:last-child{color:var(--mut);font-size:12px}
+  .daemon-reveal-stage{position:relative;width:100%;min-height:min(38vh,300px);max-height:320px;background:#101016;border-bottom:1px solid var(--hair);overflow:hidden;display:grid;place-items:center}
+  .daemon-reveal-stage canvas,.daemon-reveal-fallback{position:absolute;inset:0;width:100%;height:100%}
+  .daemon-reveal-stage canvas{z-index:2}
+  .daemon-reveal-fallback{z-index:1;object-fit:contain;padding:26px 34px;filter:contrast(1.08) brightness(.86)}
+  .daemon-reveal-stage.webgl-ready .daemon-reveal-fallback{opacity:.16;filter:contrast(1.18) brightness(.62) saturate(.7) blur(1px);mix-blend-mode:screen}
+  .daemon-reveal-stage:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 7px),radial-gradient(70% 62% at 50% 42%,transparent 45%,rgba(0,0,0,.48) 100%);mix-blend-mode:screen;opacity:.38}
 
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:26px;width:100%}
   .stat{border:1px solid var(--hair);padding:12px;text-align:center}
@@ -98,7 +109,7 @@
   .daemon-wait-portrait.mic-reactive:after{opacity:calc(.70 + (.28 * var(--wait-mic)))}
   .daemon-wait-portrait:before{content:"";position:absolute;inset:-18%;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 38%,rgba(146,118,255,.34) 56%,transparent 71%),conic-gradient(from 0deg at 50% 50%,rgba(255,74,126,0),rgba(255,74,126,.34),rgba(93,94,255,.36),rgba(255,74,126,0)),repeating-linear-gradient(180deg,rgba(255,255,255,.055) 0 1px,transparent 1px 7px);opacity:.62;mix-blend-mode:screen;animation:daemonWaitScan 4.6s linear infinite,daemonWaitHalo 3.8s ease-in-out infinite}
   .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.22);background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.18) 48%,transparent 62%);background-size:260% 100%;box-shadow:inset 0 0 46px rgba(0,0,0,.28),inset 0 0 44px rgba(139,123,255,.24),0 0 34px rgba(255,74,126,.22);animation:daemonWaitAura 3.8s ease-in-out infinite,daemonWaitSweep 4.2s ease-in-out infinite}
-  @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08);transform:scale(1)}50%{filter:contrast(1.14) brightness(1.18) saturate(1.28);transform:scale(1.012)}}
+  @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08)}50%{filter:contrast(1.14) brightness(1.18) saturate(1.28)}}
   @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 46px rgba(0,0,0,.32),0 0 16px rgba(139,123,255,.10),0 0 0 rgba(255,74,126,0)}50%{box-shadow:0 18px 50px rgba(0,0,0,.40),0 0 46px rgba(139,123,255,.38),0 0 34px rgba(255,74,126,.22)}}
   @keyframes daemonWaitAura{0%,100%{opacity:.62}50%{opacity:1}}
   @keyframes daemonWaitHalo{0%,100%{opacity:.42;transform:rotate(0deg) scale(1)}50%{opacity:.86;transform:rotate(8deg) scale(1.04)}}
@@ -128,6 +139,8 @@
     .cmdbar .hint{text-align:center}
     .cmdbar .actions{flex-direction:column-reverse}
     .btn-primary,.btn-ghost{justify-content:center;text-align:center;clip-path:none}
+    .daemon-reveal-stage{min-height:min(35vh,270px)}
+    .daemon-reveal-fallback{padding:24px 32px}
     .daemon-wait-portrait{width:min(100%,320px)}
   }
 
@@ -199,11 +212,34 @@
   </div></div>
   <div class="cmdbar">
     <span class="hint">this can't be undone.</span>
-    <div class="actions"><button class="btn-primary" data-go="v-wait">seal the pact <span class="ret">&#8629;</span></button></div>
+    <div class="actions"><button class="btn-primary" data-go="v-reveal">seal the pact <span class="ret">&#8629;</span></button></div>
   </div>
 </section>
 
-<!-- 4 · WAITING -->
+<!-- 4 · PRIVATE REVEAL -->
+<section class="view" id="v-reveal">
+  <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
+  <div class="content"><div class="wrap reveal-wrap">
+    <h2 class="headline reveal-headline">something took your shape.</h2>
+    <div class="daemon-reveal-panel" aria-label="Private daemon render">
+      <div class="daemon-reveal-copy daemon-reveal-copy-top">
+        <span class="k">YOUR DAEMON</span>
+        <strong id="reveal-daemon-name">hopiumd</strong>
+        <span id="reveal-daemon-meta">shader sealed · private preview</span>
+      </div>
+      <div id="daemon-reveal-stage" class="daemon-reveal-stage" aria-label="Your daemon preview">
+        <img id="daemon-reveal-fallback" class="daemon-reveal-fallback" src="/daemons/rasp-05.webp" alt="your daemon" />
+      </div>
+    </div>
+    <div class="sub"><span class="tell">only you see this private render.</span><br>send it in to see the portrait you sealed.</div>
+  </div></div>
+  <div class="cmdbar">
+    <span class="hint">it is awake now.</span>
+    <div class="actions"><button class="btn-primary" data-go="v-wait">send it into the hall <span class="ret">&#8629;</span></button></div>
+  </div>
+</section>
+
+<!-- 5 · WAITING -->
 <section class="view" id="v-wait">
   <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
   <div class="content"><div class="wrap wait-wrap">

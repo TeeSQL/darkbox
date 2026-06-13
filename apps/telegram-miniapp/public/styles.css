@@ -359,7 +359,11 @@ html.bestiary-html .daemon-stage {
   padding: 18px;
   filter: contrast(1.08) brightness(0.86);
 }
-.daemon-reveal-stage.webgl-ready .daemon-reveal-fallback { opacity: 0; }
+.daemon-reveal-stage.webgl-ready .daemon-reveal-fallback {
+  opacity: 0.16;
+  filter: contrast(1.18) brightness(0.62) saturate(0.7) blur(1px);
+  mix-blend-mode: screen;
+}
 .daemon-reveal-stage::after {
   content: "";
   position: absolute;
@@ -480,8 +484,8 @@ html.bestiary-html .daemon-stage {
   animation: daemonWaitAura 3.8s ease-in-out infinite, daemonWaitSweep 4.2s ease-in-out infinite;
 }
 @keyframes daemonWaitPhotoPulse {
-  0%, 100% { filter: contrast(1.07) brightness(1.03) saturate(1.08); transform: scale(1); }
-  50% { filter: contrast(1.14) brightness(1.18) saturate(1.28); transform: scale(1.012); }
+  0%, 100% { filter: contrast(1.07) brightness(1.03) saturate(1.08); }
+  50% { filter: contrast(1.14) brightness(1.18) saturate(1.28); }
 }
 @keyframes daemonWaitBreath {
   0%, 100% { box-shadow: 0 18px 46px rgba(0, 0, 0, 0.32), 0 0 16px rgba(139, 123, 255, 0.10), 0 0 0 rgba(255, 74, 126, 0); }

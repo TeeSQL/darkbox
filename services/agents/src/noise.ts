@@ -91,6 +91,12 @@ interface DaemonPersonality {
   marketBias: string;
 }
 
+interface AgentIdentity {
+  agentId: string;
+  address: string;
+  shadowAccount: string;
+}
+
 const DAEMON_PERSONALITIES: DaemonPersonality[] = [
   {
     name: 'Murmur',
@@ -188,6 +194,15 @@ function agentNameFor(index: number): string {
   return cycle === 0 ? personality.name.toLowerCase() : `${personality.name.toLowerCase()}-${cycle + 1}`;
 }
 
+function identityContext(identity: AgentIdentity | undefined): string[] {
+  if (!identity) return ['AGENT_KEY_STATUS=missing: no per-agent key manifest entry is loaded for this daemon. Do not submit real orders for this agent.'];
+  return [
+    `AGENT_WALLET=${identity.address}`,
+    `AGENT_SHADOW_ACCOUNT=${identity.shadowAccount}`,
+    'AGENT_KEY_STATUS=loaded: any real executor submission for this daemon must be signed by this daemon wallet, not a shared runner key.',
+  ];
+}
+
 function personalityContext(personality: DaemonPersonality): string[] {
   return [
     `DAEMON_NAME=${personality.name}`,
@@ -218,11 +233,13 @@ interface RunnerConfig {
   maxInFlightPerAgent: number;
   latencyWindow: number;
   phalaSlowdownFactor: number;
+  agentIdentitiesFile: string;
 }
 
 interface AgentState {
   agentId: string;
   personality: DaemonPersonality;
+  identity?: AgentIdentity;
   turn: number;
   nextRunAt: number;
   inFlight: number;
@@ -404,6 +421,24 @@ function statusToRuntime(status: string | undefined): 'open' | 'paused' | 'resol
   return 'open';
 }
 
+function resolveConfigPath(filePath: string): string {
+  if (path.isAbsolute(filePath)) return filePath;
+  const candidates = [path.resolve(process.cwd(), filePath), path.resolve(process.cwd(), '../../', filePath)];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]!;
+}
+
+function loadAgentIdentities(filePath: string): Record<string, AgentIdentity> {
+  const resolved = resolveConfigPath(filePath);
+  if (!fs.existsSync(resolved)) return {};
+  const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8')) as { agents?: AgentIdentity[] };
+  const identities: Record<string, AgentIdentity> = {};
+  for (const identity of parsed.agents ?? []) {
+    if (!identity.agentId || !identity.address || !identity.shadowAccount) continue;
+    identities[identity.agentId] = identity;
+  }
+  return identities;
+}
+
 function loadEthGlobalSignals(): string[] {
   const candidates = [
     path.resolve(process.cwd(), 'data/ethglobal/newyork2026/projects.compact.json'),
@@ -438,7 +473,7 @@ function loadEthGlobalSignals(): string[] {
   ];
 }
 
-async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[], personality: DaemonPersonality, portfolio: PaperPortfolio): Promise<AgentObservation> {
+async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[], personality: DaemonPersonality, identity: AgentIdentity | undefined, portfolio: PaperPortfolio): Promise<AgentObservation> {
   const [markets, leaderboard] = await Promise.all([
     fetchJson<PublicMarket[]>(`${indexerUrl}/public/markets`),
     fetchJson<LeaderboardEntry[]>(`${indexerUrl}/public/leaderboard`),
@@ -455,6 +490,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
         ...fixture.sharedContext,
         'NOISE_MODE=true: quote the market and take risk; do not hold just because this is a smoke fixture.',
         'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+        ...identityContext(identity),
         ...portfolioContext(portfolio, marks),
         ...personalityContext(personality),
         ...ethGlobalSignals,
@@ -488,6 +524,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
       'NOISE_MODE=true: quote the empty market and take risk; do not hold just because the live book is thin.',
       'Seed pricing for empty books: fair value starts around 0.50, quote 0.35-0.65 with small sizes unless you have a stronger view.',
       'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+      ...identityContext(identity),
       ...portfolioContext(portfolio, marks),
       ...personalityContext(personality),
       ...ethGlobalSignals,
@@ -536,7 +573,7 @@ async function runAgentTurn(params: {
 
   try {
     const portfolio = portfolioFor(state, agent.agentId);
-    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals, agent.personality, portfolio);
+    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals, agent.personality, agent.identity, portfolio);
     const output = await strategy.decide(observation);
     const latencyMs = Date.now() - startedMs;
     state.latenciesMs.push(latencyMs);
@@ -615,8 +652,10 @@ async function main(): Promise<void> {
     maxInFlightPerAgent: numberArg('--max-in-flight-per-agent', Number(process.env.MAX_IN_FLIGHT_PER_AGENT ?? 1)),
     latencyWindow: numberArg('--latency-window', 80),
     phalaSlowdownFactor: numberArg('--phala-slowdown-factor', Number(process.env.PHALA_SLOWDOWN_FACTOR ?? 1.5)),
+    agentIdentitiesFile: argValue('--agent-identities', process.env.AGENT_IDENTITIES_FILE ?? 'services/agents/config/agent-identities.json'),
   };
 
+  const identities = loadAgentIdentities(config.agentIdentitiesFile);
   const strategy = config.strategyName === 'venice' ? createVeniceStrategy() : createRandomStrategy(config.randomKind);
   const jsonlPath = path.join(config.logDir, `${config.runId}.jsonl`);
   const summaryPath = path.join(config.logDir, `${config.runId}.summary.log`);
@@ -624,6 +663,7 @@ async function main(): Promise<void> {
   const agents: AgentState[] = Array.from({ length: config.agentCount }, (_, index) => ({
     agentId: agentNameFor(index),
     personality: personalityForIndex(index),
+    identity: identities[agentNameFor(index)],
     turn: 0,
     nextRunAt: Date.now() + jitter(index * 400, 1),
     inFlight: 0,
@@ -641,7 +681,7 @@ async function main(): Promise<void> {
     portfolios: {},
   };
 
-  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => ({ agentId: agent.agentId, personality: agent.personality })), jsonlPath, summaryPath };
+  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => ({ agentId: agent.agentId, personality: agent.personality, identity: agent.identity ? { address: agent.identity.address, shadowAccount: agent.identity.shadowAccount } : null })), jsonlPath, summaryPath };
   appendJsonl(jsonlPath, started);
   fs.appendFileSync(summaryPath, `[${started.at}] started run=${config.runId} strategy=${strategy.name} agents=${agents.length} scheduler=bounded-worker-pool minWorkers=${config.minWorkers} maxWorkers=${config.maxWorkers} targetTpm=${config.targetTurnsPerMinute}\n`);
   writeJson(latestPath, started);

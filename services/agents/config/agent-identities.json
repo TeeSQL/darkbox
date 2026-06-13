@@ -1,0 +1,130 @@
+{
+  "generatedAt": "2026-06-13T07:00:11.192Z",
+  "agents": [
+    {
+      "agentId": "murmur",
+      "address": "0x79c306936eFe2995cFcF70D5eBb56810223d7D95",
+      "shadowAccount": "0x00000000000000000000000079c306936efe2995cfcf70d5ebb56810223d7d95"
+    },
+    {
+      "agentId": "ash",
+      "address": "0x28Af1aEee757455be447689F0e246170B305a6d6",
+      "shadowAccount": "0x00000000000000000000000028af1aeee757455be447689f0e246170b305a6d6"
+    },
+    {
+      "agentId": "vesper",
+      "address": "0xd9f398A057fbFA068c146c3E2be14271b0E816A3",
+      "shadowAccount": "0x000000000000000000000000d9f398a057fbfa068c146c3e2be14271b0e816a3"
+    },
+    {
+      "agentId": "gloam",
+      "address": "0xef2bCAb8665CB5b2Cd03cBa2c1975165d839Da69",
+      "shadowAccount": "0x000000000000000000000000ef2bcab8665cb5b2cd03cba2c1975165d839da69"
+    },
+    {
+      "agentId": "rook",
+      "address": "0xBDDEb3447e6169A1426437C529Ce8e6C17A80c3f",
+      "shadowAccount": "0x000000000000000000000000bddeb3447e6169a1426437c529ce8e6c17a80c3f"
+    },
+    {
+      "agentId": "nix",
+      "address": "0xeb971e803dc3F5AA44290F772Cc362Af554D283D",
+      "shadowAccount": "0x000000000000000000000000eb971e803dc3f5aa44290f772cc362af554d283d"
+    },
+    {
+      "agentId": "omen",
+      "address": "0xd1c8B390fe6138Ed107C75fb01705AA4d67D9b83",
+      "shadowAccount": "0x000000000000000000000000d1c8b390fe6138ed107c75fb01705aa4d67d9b83"
+    },
+    {
+      "agentId": "sable",
+      "address": "0x7Fd7181ce45a44B65A636FA57B1feBB38C2f483E",
+      "shadowAccount": "0x0000000000000000000000007fd7181ce45a44b65a636fa57b1febb38c2f483e"
+    },
+    {
+      "agentId": "hex",
+      "address": "0x43752884e2793866fc25EF789086d8C25FA3d4B6",
+      "shadowAccount": "0x00000000000000000000000043752884e2793866fc25ef789086d8c25fa3d4b6"
+    },
+    {
+      "agentId": "wisp",
+      "address": "0xE7c1Bb1a65f352F47E9Ad7235323093A6282376f",
+      "shadowAccount": "0x000000000000000000000000e7c1bb1a65f352f47e9ad7235323093a6282376f"
+    },
+    {
+      "agentId": "grin",
+      "address": "0xA04706cf854DBf03e5f534f227C9d236647374C8",
+      "shadowAccount": "0x000000000000000000000000a04706cf854dbf03e5f534f227c9d236647374c8"
+    },
+    {
+      "agentId": "null",
+      "address": "0xFfb216025D37599fe6F6b6564Edd24cB69AD6068",
+      "shadowAccount": "0x000000000000000000000000ffb216025d37599fe6f6b6564edd24cb69ad6068"
+    },
+    {
+      "agentId": "murmur-2",
+      "address": "0x003c9b3074B902b095636EeCD35620E3E831CfC6",
+      "shadowAccount": "0x000000000000000000000000003c9b3074b902b095636eecd35620e3e831cfc6"
+    },
+    {
+      "agentId": "ash-2",
+      "address": "0x86d44C570D3bC7f677ed9732d70a9519307F120B",
+      "shadowAccount": "0x00000000000000000000000086d44c570d3bc7f677ed9732d70a9519307f120b"
+    },
+    {
+      "agentId": "vesper-2",
+      "address": "0x79C456443Ab5F6B43afEF72edad42d8Cf33B62b0",
+      "shadowAccount": "0x00000000000000000000000079c456443ab5f6b43afef72edad42d8cf33b62b0"
+    },
+    {
+      "agentId": "gloam-2",
+      "address": "0x6a70CFDbEd00d7172F606E58A9D6e854FCaC2e31",
+      "shadowAccount": "0x0000000000000000000000006a70cfdbed00d7172f606e58a9d6e854fcac2e31"
+    },
+    {
+      "agentId": "rook-2",
+      "address": "0x4a22b44537CF04adEdbA92D22012eadf1e351086",
+      "shadowAccount": "0x0000000000000000000000004a22b44537cf04adedba92d22012eadf1e351086"
+    },
+    {
+      "agentId": "nix-2",
+      "address": "0xF5bc6379Ef36ab613a5a0bd8903e1971334A13C0",
+      "shadowAccount": "0x000000000000000000000000f5bc6379ef36ab613a5a0bd8903e1971334a13c0"
+    },
+    {
+      "agentId": "omen-2",
+      "address": "0xf954C6DD3b21390ce02D60dCAF60d55878DFE015",
+      "shadowAccount": "0x000000000000000000000000f954c6dd3b21390ce02d60dcaf60d55878dfe015"
+    },
+    {
+      "agentId": "sable-2",
+      "address": "0xf9675BEA764Aa5EfCD0246001C1d690364244EA9",
+      "shadowAccount": "0x000000000000000000000000f9675bea764aa5efcd0246001c1d690364244ea9"
+    },
+    {
+      "agentId": "hex-2",
+      "address": "0x5432a03f40c1BA4E5542e9324De836e1085aD967",
+      "shadowAccount": "0x0000000000000000000000005432a03f40c1ba4e5542e9324de836e1085ad967"
+    },
+    {
+      "agentId": "wisp-2",
+      "address": "0x40a6eA13112371De6CfAC0C52893c00F34dA8104",
+      "shadowAccount": "0x00000000000000000000000040a6ea13112371de6cfac0c52893c00f34da8104"
+    },
+    {
+      "agentId": "grin-2",
+      "address": "0xA00A864cf56eEB21e0ca091521D6f4Dc7bE03ae3",
+      "shadowAccount": "0x000000000000000000000000a00a864cf56eeb21e0ca091521d6f4dc7be03ae3"
+    },
+    {
+      "agentId": "null-2",
+      "address": "0x050Dde76F12927881Ff8295c8fCA325B054D76a3",
+      "shadowAccount": "0x000000000000000000000000050dde76f12927881ff8295c8fca325b054d76a3"
+    },
+    {
+      "agentId": "murmur-3",
+      "address": "0x9B4a4a7d984eC9131c62C64Fb473922a7440439b",
+      "shadowAccount": "0x0000000000000000000000009b4a4a7d984ec9131c62c64fb473922a7440439b"
+    }
+  ]
+}

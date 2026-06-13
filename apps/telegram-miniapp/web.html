@@ -130,6 +130,18 @@
     .btn-primary,.btn-ghost{justify-content:center;text-align:center;clip-path:none}
     .daemon-wait-portrait{width:min(100%,320px)}
   }
+
+  /* Wait-room refined layout */
+  .wait-wrap{max-width:420px}
+  .wait-ledger{margin-bottom:10px}
+  .wait-metric.balance strong{text-shadow:0 0 18px rgba(139,123,255,.26)}
+  .daemon-wait-card{width:100%}
+  .wait-card-header{display:grid;gap:3px;padding:11px 16px 10px;border:1px solid var(--hair);border-bottom:0;background:linear-gradient(180deg,rgba(139,123,255,.065),rgba(255,255,255,.012));text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+  .wait-card-header .k{color:var(--mut);font-size:9px;letter-spacing:.18em}
+  .wait-card-header strong{color:var(--bone);font-family:var(--display);font-style:italic;font-size:clamp(1.3rem,6.5vw,2rem);line-height:1;text-transform:uppercase;letter-spacing:.04em}
+  .wait-card-status{color:var(--mut);font-size:10px;letter-spacing:.12em}
+  .wait-card-footer{padding:7px 14px 8px;border:1px solid var(--hair);border-top:0;background:var(--srf);color:var(--mut);font-size:11px;text-align:center;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .daemon-wait-card .daemon-wait-portrait{width:100%;max-width:none;margin:0;border-top:0;border-bottom:0}
 </style>
 </head>
 <body>
@@ -194,21 +206,24 @@
 <!-- 4 · WAITING -->
 <section class="view" id="v-wait">
   <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
-  <div class="content"><div class="wrap">
+  <div class="content"><div class="wrap wait-wrap">
     <div class="wait-ledger" aria-label="Your private position summary">
-      <div class="wait-metric"><span class="k">BALANCE</span><strong>$13.45</strong><span class="tell">only you</span></div>
+      <div class="wait-metric balance"><span class="k">BALANCE</span><strong>$13.45</strong><span class="tell">only you</span></div>
       <div class="wait-metric pnl"><span class="k">PNL</span><strong>+$1.84</strong><span>unrealized</span></div>
     </div>
-    <h2 class="headline wait-headline">your daemon is inside.</h2>
-    <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
-      <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="hopiumd daemon portrait" />
+    <div class="daemon-wait-card">
+      <div class="wait-card-header">
+        <span class="k">YOUR DAEMON</span>
+        <strong>hopiumd</strong>
+        <span class="wait-card-status">circling</span>
+      </div>
+      <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
+        <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="hopiumd daemon portrait" />
+      </div>
+      <div class="wait-card-footer">
+        <span>▸ a daemon laughed without opening its mouth</span>
+      </div>
     </div>
-    <div class="panel wait-panel">
-      <div class="prow"><span class="k">YOUR DAEMON</span><span class="v">hopiumd</span></div>
-      <div class="prow"><span class="k">STATUS</span><span class="v">circling</span></div>
-      <div class="prow"><span class="k">MURMUR</span><span class="v">▸ a daemon laughed without opening its mouth</span></div>
-    </div>
-    <div class="sub wait-sub">the wall hides the trades. your balance stays above the fold.</div>
   </div></div>
   <div class="cmdbar">
     <span class="hint">it won't say what it's holding.</span>

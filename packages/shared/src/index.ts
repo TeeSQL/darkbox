@@ -22,6 +22,7 @@ export * from "./eip712.js";
 export * from "./states.js";
 export * from "./idempotency.js";
 export * from "./schemas.js";
+export * from "./marketPolicy.js";
 
 /** Decode a wire `WithdrawCommand` (decimal strings) into bigint form. */
 export function decodeWithdrawCommand(w: WithdrawCommandWire): WithdrawCommand {

@@ -53,6 +53,39 @@ function reqEnv(name: string): string {
   return v;
 }
 
+async function waitForPublicTokenState(args: {
+  publicClient: ReturnType<typeof createPublicClient>;
+  token: Address;
+  owner: Address;
+  spender: Address;
+  minBalance: bigint;
+  minAllowance: bigint;
+  timeoutMs?: number;
+}) {
+  const deadline = Date.now() + (args.timeoutMs ?? 60_000);
+  let lastBalance = 0n;
+  let lastAllowance = 0n;
+  while (Date.now() < deadline) {
+    lastBalance = await args.publicClient.readContract({
+      address: args.token,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [args.owner],
+    });
+    lastAllowance = await args.publicClient.readContract({
+      address: args.token,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [args.owner, args.spender],
+    });
+    if (lastBalance >= args.minBalance && lastAllowance >= args.minAllowance) return;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error(
+    `token state not visible before deposit: balance=${lastBalance} allowance=${lastAllowance} required=${args.minBalance}`,
+  );
+}
+
 function printRequirements() {
   console.error(`
 Required env for the smoke test:
@@ -157,6 +190,14 @@ async function main() {
     args: [bridge, depositAmount],
   });
   await publicClient.waitForTransactionReceipt({ hash: approveHash });
+  await waitForPublicTokenState({
+    publicClient,
+    token: usdc,
+    owner: userAccount.address,
+    spender: bridge,
+    minBalance: depositAmount,
+    minAllowance: depositAmount,
+  });
 
   const depositHash = await userWallet.writeContract({
     address: bridge,
@@ -272,6 +313,15 @@ async function main() {
 
   // --- 5. user submits the public withdraw(...) ---
   const a = result.authorization.payload;
+  await waitForPublicTokenState({
+    publicClient,
+    token: usdc,
+    owner: bridge,
+    spender: bridge,
+    minBalance: a.amount,
+    minAllowance: 0n,
+  });
+
   const withdrawHash = await userWallet.writeContract({
     address: bridge,
     abi: darkBoxBridgeAbi,

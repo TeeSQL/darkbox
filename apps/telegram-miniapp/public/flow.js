@@ -347,9 +347,9 @@ function tickCountdown() {
 }
 
 function autosize() {
+  // Composer height is fixed so the mic target never shifts while the user talks/types.
   if (!input) return;
-  input.style.height = 'auto';
-  input.style.height = `${Math.min(input.scrollHeight, Math.max(84, window.innerHeight * 0.26))}px`;
+  input.style.height = '';
 }
 
 function handleInput() {
@@ -366,9 +366,9 @@ function handleInput() {
 
 
 function autosizeTerminal() {
+  // Keep terminal composer stable too; long messages scroll inside the field.
   if (!terminalInput) return;
-  terminalInput.style.height = 'auto';
-  terminalInput.style.height = `${Math.min(terminalInput.scrollHeight, 160)}px`;
+  terminalInput.style.height = '';
 }
 
 function handleTerminalInput() {

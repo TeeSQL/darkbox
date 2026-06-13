@@ -99,12 +99,14 @@ button { -webkit-tap-highlight-color: transparent; }
   padding: 12px;
 }
 .terminal-whisper-field {
-  min-height: 54px;
+  min-height: 100px;
   align-items: center;
 }
 .terminal-whisper-field textarea {
-  min-height: 42px;
-  max-height: 160px;
+  height: 72px;
+  min-height: 72px;
+  max-height: 72px;
+  overflow-y: auto;
   font-size: 13px;
 }
 .terminal-compose-actions {
@@ -116,6 +118,7 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 .terminal-compose-status {
   min-width: 0;
+  min-height: 34px;
   color: var(--mut);
   font-size: 11px;
   line-height: 1.45;
@@ -239,16 +242,24 @@ button { -webkit-tap-highlight-color: transparent; }
 .sub { margin-top: 15px; color: var(--mut); font-size: 13px; line-height: 1.7; }
 .tell { color: var(--violet); }
 .whisper { width: 100%; margin-top: 28px; text-align: left; }
-.whisper-field { display: flex; align-items: flex-end; gap: 12px; border-bottom: 1px solid var(--hair2); padding: 15px 4px 13px; }
+.whisper-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 116px;
+  border-bottom: 1px solid var(--hair2);
+  padding: 12px 4px 14px;
+}
 .prompt { color: var(--violet); font-size: 16px; line-height: 1.4; padding-bottom: 2px; }
 textarea {
-  flex: 1;
   width: 100%;
   min-width: 0;
-  min-height: 30px;
-  max-height: 26svh;
+  height: 84px;
+  min-height: 84px;
+  max-height: 84px;
   resize: none;
-  overflow: hidden;
+  overflow-y: auto;
   border: 0;
   outline: 0;
   background: transparent;
@@ -259,17 +270,23 @@ textarea {
 }
 textarea::placeholder { color: #54545e; }
 .voice-button {
-  width: 38px;
-  height: 38px;
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--mut);
+  border: 1px solid rgba(231,227,217,.22);
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.10), rgba(255,255,255,.035) 62%, rgba(139,123,255,.08));
+  color: var(--bone);
   cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 0 8px rgba(255,255,255,.025), 0 14px 34px rgba(0,0,0,.32);
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
-.voice-button.listening { color: var(--bone); border-color: var(--hair2); background: var(--srf2); }
+.voice-button.listening { color: var(--hot); border-color: rgba(255,74,126,.78); background: rgba(255,74,126,.13); box-shadow: 0 0 0 10px rgba(255,74,126,.08), 0 0 34px rgba(255,74,126,.34), 0 14px 34px rgba(0,0,0,.36); }
 .steps { width: 100%; margin-top: 26px; border-top: 1px solid var(--hair); text-align: left; }
 .step { display: flex; gap: 16px; align-items: baseline; padding: 13px 2px; border-bottom: 1px solid var(--hair); font-size: 13px; }
 .step .n { min-width: 18px; color: var(--mut); font-size: 11px; }
@@ -887,36 +904,7 @@ html.bestiary-html .daemon-stage {
 }
 
 /* Voice recording states — make tap/hold behavior unmistakable. */
-.voice-state {
-  min-width: 96px;
-  flex: 0 0 auto;
-  padding: 7px 9px;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.028);
-  color: var(--mut);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-align: center;
-  text-transform: lowercase;
-  white-space: nowrap;
-  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-}
-.voice-state[data-state="hold-arming"] {
-  color: var(--bone);
-  border-color: rgba(139, 123, 255, 0.62);
-  background: rgba(139, 123, 255, 0.10);
-  box-shadow: 0 0 20px rgba(139, 123, 255, 0.18);
-}
-.voice-state[data-state="recording-toggle"],
-.voice-state[data-state="recording-hold"] {
-  color: var(--bone);
-  border-color: rgba(255, 74, 126, 0.74);
-  background: rgba(255, 74, 126, 0.12);
-  box-shadow: 0 0 24px rgba(255, 74, 126, 0.24);
-  animation: voiceStatePulse 1s ease-in-out infinite;
-}
+.voice-state { display: none !important; }
 .voice-button.arming {
   color: var(--bone);
   border-color: rgba(139, 123, 255, 0.62);
@@ -933,8 +921,9 @@ html.bestiary-html .daemon-stage {
 @keyframes voiceButtonPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 @keyframes voiceStatePulse { 0%, 100% { transform: translateY(0); opacity: .82; } 50% { transform: translateY(-1px); opacity: 1; } }
 @media (max-width: 520px) {
-  .whisper-field { gap: 8px; }
-  .voice-state { min-width: 74px; padding-inline: 7px; font-size: 9px; letter-spacing: 0.04em; }
+  .whisper-field { gap: 10px; min-height: 112px; padding-block: 10px 12px; }
+  .voice-button { width: 76px; height: 76px; min-width: 76px; }
+  .voice-button svg { width: 30px; height: 30px; }
 }
 @media (hover: none) and (pointer: coarse) {
   .view.active .content { animation-duration: 0.24s; }

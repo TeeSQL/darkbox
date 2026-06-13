@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DAEMON HALL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --void:#0a0a0f; --srf:#101016; --srf2:#16161d; --hair:#24242e; --hair2:#2b2b35;
+    --silver:#d7d7df; --bone:#e7e3d9; --mut:#8a8a96; --violet:#8b7bff;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --display:'Chakra Petch','JetBrains Mono',sans-serif;
+  }
+  html{color-scheme:dark}
+  body{background:var(--void);color:var(--silver);font-family:var(--mono);font-weight:400;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  ::selection{background:rgba(139,123,255,.3)}
+  button{font-family:var(--mono)}
+
+  .grain{position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.045;mix-blend-mode:overlay}
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(130% 100% at 50% 30%,transparent 45%,#060608 100%)}
+
+  .view{display:none;min-height:100vh;min-height:100svh;flex-direction:column;position:relative;z-index:2}
+  .view.active{display:flex}
+  @media (prefers-reduced-motion:no-preference){.view.active .content{animation:rise .6s ease both}}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 26px;border-bottom:1px solid var(--hair);font-size:11px;letter-spacing:.1em;color:var(--mut)}
+  .wm-sm{font-family:var(--display);font-style:italic;font-weight:700;font-size:17px;letter-spacing:.02em;text-transform:uppercase;background:linear-gradient(180deg,#fff,#9a98a4);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .st .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--silver);margin-right:7px;vertical-align:middle}
+
+  .content{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:54px 26px 130px;width:100%}
+  .wrap{width:100%;max-width:560px;margin:0 auto}
+
+  .hero-wm{font-family:var(--display);font-style:italic;font-weight:700;font-size:clamp(3rem,11vw,7rem);line-height:.92;letter-spacing:.01em;text-transform:uppercase;background:linear-gradient(180deg,#ffffff 0%,#d6d4df 44%,#8d8b97 56%,#f3f2f7 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 26px rgba(176,166,206,.3))}
+  .sealed{margin-top:32px;font-size:12px;letter-spacing:.16em;color:var(--mut)}
+  .sealed .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--silver);box-shadow:0 0 8px var(--silver);margin-right:9px;vertical-align:middle}
+
+  .eyebrow{font-size:11px;letter-spacing:.22em;color:var(--mut);margin-bottom:13px}
+  .headline{font-size:clamp(1.45rem,3.6vw,2.05rem);color:var(--silver);letter-spacing:.005em;line-height:1.22}
+  .sub{margin-top:15px;font-size:13px;color:var(--mut);line-height:1.7}
+  .tell{color:var(--violet)}
+
+  .whisper{margin-top:28px;width:100%;text-align:left}
+  .whisper-field{display:flex;align-items:center;gap:13px;border-bottom:1px solid var(--hair2);padding:15px 4px}
+  .whisper-field .prompt{color:var(--violet);font-size:16px}
+  .whisper-field input{flex:1;background:transparent;border:none;outline:none;color:var(--silver);font-family:var(--mono);font-size:16px}
+  .whisper-field input::placeholder{color:#54545e}
+
+  .steps{width:100%;text-align:left;margin-top:26px;border-top:1px solid var(--hair)}
+  .step{display:flex;gap:16px;align-items:baseline;padding:13px 2px;border-bottom:1px solid var(--hair);font-size:13px}
+  .step .n{color:var(--mut);font-size:11px;min-width:18px}
+  .step .x{color:var(--silver)}
+  .hash{color:var(--mut)}
+
+  .chips{display:flex;gap:10px;justify-content:center;margin-top:24px}
+  .chip{font-size:12px;letter-spacing:.03em;color:var(--mut);background:transparent;border:1px solid var(--hair2);padding:9px 16px;cursor:pointer;transition:border-color .2s,color .2s}
+  .chip.on{color:var(--silver);border-color:var(--silver);background:rgba(215,215,223,.07)}
+  .chip:hover{border-color:var(--silver)}
+
+  .panel{width:100%;border:1px solid var(--hair);background:var(--srf);margin-top:26px;text-align:left}
+  .prow{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--hair);font-size:13px}
+  .prow:last-child{border-bottom:none}
+  .prow .k{color:var(--mut);font-size:11px;letter-spacing:.1em;white-space:nowrap}
+  .prow .v{color:var(--silver);text-align:right}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:26px;width:100%}
+  .stat{border:1px solid var(--hair);padding:12px;text-align:center}
+  .stat .k{font-size:10px;letter-spacing:.12em;color:var(--mut)}
+  .stat .v{font-size:18px;color:var(--silver);margin-top:5px}
+  .board{width:100%;margin-top:22px;text-align:left}
+  .brow{display:grid;grid-template-columns:26px 1fr auto;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--hair);font-size:13px}
+  .brow.head{color:var(--mut);font-size:10px;letter-spacing:.14em;border-bottom:1px solid var(--hair2)}
+  .brow .rank{color:var(--mut)}
+  .brow .dn{color:var(--silver)}
+  .brow.you .dn{color:var(--bone)}
+  .brow .pulse{color:var(--mut);text-align:right;white-space:nowrap}
+  .brow .pulse .pct{color:var(--silver)}
+  .board-note{margin-top:18px;font-size:11px;color:var(--mut);line-height:1.7;text-align:center}
+
+  /* command bar — pinned to the bottom of every screen */
+  .cmdbar{position:fixed;left:0;right:0;bottom:0;z-index:30;border-top:1px solid var(--hair);background:rgba(10,10,15,.82);backdrop-filter:blur(10px);padding:16px 26px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .cmdbar .hint{font-size:12px;color:var(--mut);letter-spacing:.04em}
+  .cmdbar .actions{display:flex;gap:12px;align-items:center}
+
+  /* buttons — sharp, angular, cut corner. no pills. */
+  .btn-primary{font-weight:600;font-size:13px;letter-spacing:.08em;color:var(--void);background:var(--bone);border:none;padding:16px 30px;cursor:pointer;display:inline-flex;align-items:center;gap:13px;
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 13px),calc(100% - 13px) 100%,0 100%);
+    transition:background .2s,box-shadow .25s}
+  .btn-primary:hover{background:#fff;box-shadow:0 0 30px -6px rgba(231,227,217,.55)}
+  .btn-primary .ret{font-size:14px;opacity:.55}
+  .btn-primary:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+  .btn-ghost{font-weight:500;font-size:13px;letter-spacing:.08em;color:var(--silver);background:var(--srf2);border:1px solid var(--hair2);padding:15px 26px;cursor:pointer;transition:border-color .2s,color .2s}
+  .btn-ghost:hover{border-color:var(--silver);color:var(--bone)}
+  .btn-ghost:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+
+  @media (max-width:560px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .cmdbar{flex-direction:column;align-items:stretch}
+    .cmdbar .hint{text-align:center}
+    .cmdbar .actions{flex-direction:column-reverse}
+    .btn-primary,.btn-ghost{justify-content:center;text-align:center;clip-path:none}
+  }
+</style>
+</head>
+<body>
+
+<svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+<div class="vignette" aria-hidden="true"></div>
+
+<!-- 1 · LANDING -->
+<section class="view active" id="v-landing">
+  <div class="content">
+    <h1 class="hero-wm">Daemon<br>Hall</h1>
+    <div class="sealed"><span class="dot"></span>SEALED &nbsp;·&nbsp; BOXES OPEN IN 1D 09:40:16</div>
+  </div>
+  <div class="cmdbar">
+    <span class="hint">a market sealed in the dark.</span>
+    <div class="actions"><button class="btn-primary" data-go="v-whisper">step inside <span class="ret">&#8629;</span></button></div>
+  </div>
+</section>
+
+<!-- 2 · WHISPER -->
+<section class="view" id="v-whisper">
+  <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
+  <div class="content"><div class="wrap">
+    <div class="eyebrow">tell it what to do — quietly</div>
+    <h2 class="headline">whisper your daemon's orders.</h2>
+    <div class="whisper">
+      <div class="whisper-field">
+        <span class="prompt">&gt;</span>
+        <input type="text" placeholder="say it in a sentence…" aria-label="whisper" />
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a8a96" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+      </div>
+    </div>
+    <div class="sub">read it back. you can't unsay it.<br><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
+  </div></div>
+  <div class="cmdbar">
+    <span class="hint">&#8629; to seal</span>
+    <div class="actions"><button class="btn-primary" data-go="v-seal">seal the whisper <span class="ret">&#8629;</span></button></div>
+  </div>
+</section>
+
+<!-- 3 · SEAL -->
+<section class="view" id="v-seal">
+  <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
+  <div class="content"><div class="wrap">
+    <div class="eyebrow">the pact waits</div>
+    <h2 class="headline">what you're agreeing to.</h2>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><span class="x">your whisper is sealed</span></div>
+      <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span class="hash">0x9b813e…4d832d</span></span></div>
+      <div class="step"><span class="n">03</span><span class="x"><span class="tell">your key. your eyes only. not the house.</span></span></div>
+      <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — free to play</span></div>
+    </div>
+    <div class="chips"><button class="chip on">$5 house</button><button class="chip">$25</button><button class="chip">$100</button></div>
+    <div class="sub">prototype — no wallet, no backend.</div>
+  </div></div>
+  <div class="cmdbar">
+    <span class="hint">this can't be undone.</span>
+    <div class="actions"><button class="btn-primary" data-go="v-wait">seal the pact <span class="ret">&#8629;</span></button></div>
+  </div>
+</section>
+
+<!-- 4 · WAITING -->
+<section class="view" id="v-wait">
+  <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
+  <div class="content"><div class="wrap">
+    <div class="eyebrow">the hall is closed</div>
+    <h2 class="headline">your daemon is inside.</h2>
+    <div class="panel">
+      <div class="prow"><span class="k">YOUR DAEMON</span><span class="v">hopiumd</span></div>
+      <div class="prow"><span class="k">YOUR BALANCE</span><span class="v">$13.45 <span class="tell">· only you</span></span></div>
+      <div class="prow"><span class="k">STATUS</span><span class="v">circling</span></div>
+      <div class="prow"><span class="k">MURMUR</span><span class="v">▸ a daemon laughed without opening its mouth</span></div>
+    </div>
+    <div class="sub">the wall is all you get.</div>
+  </div></div>
+  <div class="cmdbar">
+    <span class="hint">it won't say what it's holding.</span>
+    <div class="actions">
+      <button class="btn-ghost" data-go="v-whisper">whisper again</button>
+      <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · THE HALL -->
+<section class="view" id="v-hall">
+  <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
+  <div class="content"><div class="wrap" style="max-width:640px">
+    <div class="eyebrow">muffled through stone</div>
+    <h2 class="headline">something is happening in the hall.</h2>
+    <div class="sub">the numbers are echoes, not windows.</div>
+    <div class="stats">
+      <div class="stat"><div class="k">VOLUME</div><div class="v">$14.4k</div></div>
+      <div class="stat"><div class="k">TRADES</div><div class="v">405</div></div>
+      <div class="stat"><div class="k">SEALED</div><div class="v">95</div></div>
+      <div class="stat"><div class="k">FINGERPRINTS</div><div class="v">155</div></div>
+    </div>
+    <div class="board">
+      <div class="brow head"><span class="rank">#</span><span class="dn">DAEMON</span><span class="pulse">PULSE</span></div>
+      <div class="brow"><span class="rank">1</span><span class="dn">rugd</span><span class="pulse"><span class="pct">+17.14%</span> · running</span></div>
+      <div class="brow"><span class="rank">2</span><span class="dn">greedd</span><span class="pulse"><span class="pct">+2.89%</span> · sleeping</span></div>
+      <div class="brow"><span class="rank">3</span><span class="dn">fomod</span><span class="pulse"><span class="pct">+17.80%</span> · circling</span></div>
+      <div class="brow"><span class="rank">4</span><span class="dn">copiumd</span><span class="pulse"><span class="pct">+10.20%</span> · running</span></div>
+      <div class="brow"><span class="rank">5</span><span class="dn">panicd</span><span class="pulse"><span class="pct">&#8722;5.32%</span> · zombie</span></div>
+      <div class="brow you"><span class="rank">6</span><span class="dn">hopiumd &#9666; you</span><span class="pulse"><span class="pct">+9.50%</span> · circling</span></div>
+    </div>
+    <div class="board-note">names and a coarse pulse, nothing more. positions, orders, and balances stay sealed until the boxes open.</div>
+  </div></div>
+  <div class="cmdbar">
+    <span class="hint">you can feel the crowd you cannot read.</span>
+    <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; back</button></div>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll('[data-go]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var id=b.getAttribute('data-go');
+      document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active');});
+      var t=document.getElementById(id);
+      if(t){t.classList.add('active');window.scrollTo(0,0);}
+    });
+  });
+</script>
+</body>
+</html>

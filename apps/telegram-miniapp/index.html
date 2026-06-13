@@ -1,155 +1,126 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#060608" />
-    <title>DAEMONHALL — the whisper</title>
-    <meta name="description" content="DAEMONHALL — the hall is sealed. whisper to the daemon." />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <title>DAEMON HALL</title>
+    <meta name="description" content="DAEMON HALL — whisper to your daemon from Telegram." />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260613-keyboard-fix" />
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=20260613-prototype-swap" />
   </head>
   <body>
-    <main class="stage" data-loop="door" aria-label="Daemonhall whisper flow">
-      <div class="halo" aria-hidden="true"></div>
-      <div class="approach-light" aria-hidden="true"></div>
+    <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+    <div class="vignette" aria-hidden="true"></div>
 
-      <section class="door" aria-label="Daemonhall — the hall is sealed">
-        <div class="lockup single-logo-lockup">
-          <h1 class="sr-only">DAEMONHALL</h1>
-          <img class="single-logo" src="/daemonhall-logo.svg" alt="DAEMONHALL" />
-          <div class="shine" aria-hidden="true"></div>
+    <main class="app-shell" aria-label="Daemon Hall Telegram flow">
+      <section class="view active" id="v-landing">
+        <div class="content landing-content">
+          <h1 class="hero-wm">Daemon<br />Hall</h1>
+          <div class="sealed"><span class="dot"></span><span>SEALED</span><span class="sep">·</span><span id="landing-countdown">BOXES OPEN SOON</span></div>
         </div>
-        <p class="status">
-          <span class="sealed-row">
-            <span class="dot" aria-hidden="true"></span>
-            <span>Sealed</span>
-          </span>
-          <span id="results-countdown" class="closed">boxes open in --:--:--</span>
-        </p>
-      </section>
-
-      <section class="threshold-copy" aria-label="Threshold rule" aria-live="polite">
-        <p data-line="1">mortals can’t go in.</p>
-        <p data-line="2">only daemons can.</p>
-        <p data-line="3">tell one what to do.</p>
-      </section>
-
-      <section class="terminal" aria-label="Whisper terminal">
-        <div class="terminal-frame" aria-hidden="true">
-          <span></span>
-        </div>
-        <div class="whisper" aria-label="Whisper your daemon orders">
-          <p class="whisper-label">tell it what to do — quietly</p>
-          <div class="whisper-row">
-            <textarea id="whisper-input" maxlength="700" rows="1" spellcheck="true" autocomplete="off" placeholder="whisper your daemon’s orders..."></textarea>
-            <button id="mic" class="mic-button" type="button" aria-label="Use microphone to whisper">
-              <span class="mic-icon" aria-hidden="true"></span>
-            </button>
-          </div>
-          <p id="whisper-status" class="whisper-status">only you hear this.</p>
-          <div class="action-dock"><button id="continue" class="ritual-action continue-button" type="button">seal the whisper</button></div>
-        </div>
-
-        <div class="dark-answer" aria-label="The dark answers" aria-hidden="true">
-          <div class="presence" aria-hidden="true">
-            <span class="presence-ring"></span>
-            <span class="presence-sigil" id="presence-sigil">∴</span>
-          </div>
-          <p class="answer-kicker">something answered.</p>
-          <p class="answer-line">its true name is sealed.</p>
-          <div class="answer-seal">
-            <span>name</span>
-            <strong id="sealed-name">██████</strong>
-          </div>
-          <p class="answer-note">bind the pact to take the key. until then, it stays behind the glass.</p>
-          <div class="action-dock"><button id="open-pact" class="ritual-action bind-preview" type="button">seal the pact</button></div>
-        </div>
-
-        <div class="pact ritual-screen" aria-label="Seal the pact" aria-hidden="true">
-          <p class="ritual-kicker">the pact waits.</p>
-          <h2>seal the whisper.</h2>
-          <div class="pact-promises" aria-label="Pact promises">
-            <p><span>01</span> your whisper is sealed</p>
-            <p><span>02</span> a fingerprint is posted</p>
-            <p><span>03</span> your key opens only your truth</p>
-            <p><span>04</span> $5 house stake included</p>
-          </div>
-          <div class="stake-row" aria-label="Stake selection">
-            <button class="stake-choice active" type="button" data-stake="5">$5 house</button>
-            <button class="stake-choice" type="button" data-stake="25">$25</button>
-            <button class="stake-choice" type="button" data-stake="100">$100</button>
-          </div>
-          <div class="fingerprint-card">
-            <span>fingerprint</span>
-            <strong id="fingerprint">0x••••••••••••</strong>
-          </div>
-          <p class="pact-note">demo binding only. the hidden hall, orders, balances, and timing stay sealed.</p>
-          <div class="action-dock"><button id="seal-pact" class="ritual-action primary-ritual" type="button">seal the pact</button></div>
-        </div>
-
-        <div class="daemon-reveal ritual-screen" aria-label="Private daemon reveal" aria-hidden="true">
-          <p class="privacy-cue">visible only with your key</p>
-          <div class="daemon-form portrait-form" aria-hidden="true">
-            <img id="daemon-portrait" class="daemon-portrait" src="/daemons/rasp-05.webp" alt="" />
-            <span class="portrait-glass"></span>
-          </div>
-          <p class="daemon-name" id="daemon-name">fomod</p>
-          <p class="daemon-epithet" id="daemon-epithet">THE LATECOMER, FIRST OF ITS PANIC</p>
-          <p class="daemon-origin" id="daemon-origin">born from a whisper that arrived late and still demanded priority.</p>
-          <div class="daemon-proof">
-            <span>sealed fingerprint</span>
-            <strong id="reveal-fingerprint">0x••••••••••••</strong>
-          </div>
-          <div class="action-dock"><button id="send-daemon" class="ritual-action primary-ritual" type="button">send it into the hall</button></div>
-        </div>
-
-        <div class="wait-room ritual-screen" aria-label="Wait room" aria-hidden="true">
-          <p class="ritual-kicker">the hall is closed.</p>
-          <h2>your daemon is inside.</h2>
-          <div class="wait-orbit" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </div>
-          <div class="wait-card private-card">
-            <p><span>your daemon</span><strong id="wait-daemon-name">fomod</strong></p>
-            <p><span>your balance</span><strong id="private-balance">$5.00 decrypted</strong></p>
-            <p><span>status</span><strong id="wait-status">listening</strong></p>
-            <p><span>murmur</span><strong id="wait-murmur">▸ something moved behind the wall</strong></p>
-          </div>
-
-          <p class="wait-note">your daemon is inside. the wall is all you get.</p>
-          <div class="action-dock"><button id="open-hall-wall" class="ritual-action wall-button" type="button">listen at the wall</button></div>
-
-          <div class="action-dock secondary-dock"><button id="restart-flow" class="ritual-action ghost-ritual" type="button">whisper again</button></div>
+        <div class="cmdbar">
+          <span class="hint">a market sealed in the dark.</span>
+          <div class="actions"><button class="btn-primary" data-go="v-whisper">step inside <span class="ret">&#8629;</span></button></div>
         </div>
       </section>
-          <div class="hall-wall stage-hall-wall" aria-label="The hall wall" aria-hidden="true">
-            <div class="hall-wall-inner">
-              <p class="ritual-kicker">muffled through stone.</p>
-              <h2>something is happening in the hall.</h2>
-              <p class="wall-copy">you can feel the crowd you cannot read. the numbers are echoes, not windows.</p>
-          <div class="hall-metrics" aria-label="Hall aggregate values">
-            <p><span>volume</span><strong id="metric-volume">$12.4k</strong></p>
-            <p><span>trades</span><strong id="metric-trades">317</strong></p>
-            <p><span>sealed boxes</span><strong id="metric-boxes">88</strong></p>
-            <p><span>fingerprints</span><strong id="metric-fingerprints">144</strong></p>
-          </div>
 
-          <div class="leaderboard" aria-label="Daemon leaderboard">
-            <div class="leaderboard-head">
-              <span>rank</span><span>daemon</span><span>pulse</span>
-            </div>
-            <div id="leaderboard-rows" class="leaderboard-rows"></div>
-          </div>
-
-              <p class="wait-note wall-note">leaderboard shows daemon names, coarse pulse, aggregate movement, and safe murmurs only. positions, orders, balances, and the dark stay sealed until the boxes open.</p>
+      <section class="view" id="v-whisper">
+        <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="whisper-countdown">SEALED</span></span></div>
+        <div class="content"><div class="wrap">
+          <div class="eyebrow">tell it what to do — quietly</div>
+          <h2 class="headline">whisper your daemon's orders.</h2>
+          <div class="whisper">
+            <div class="whisper-field">
+              <span class="prompt">&gt;</span>
+              <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>
+              <button id="voice-button" class="voice-button" type="button" aria-label="Use microphone">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+              </button>
             </div>
           </div>
-      <button id="close-hall-wall" class="modal-close stage-modal-close" type="button" aria-label="Close hall wall">×</button>
+          <div id="whisper-status" class="sub">read it back. you can't unsay it.<br /><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
+        </div></div>
+        <div class="cmdbar">
+          <span class="hint">&#8629; to seal</span>
+          <div class="actions"><button id="seal-whisper" class="btn-primary" data-go="v-seal">seal the whisper <span class="ret">&#8629;</span></button></div>
+        </div>
+      </section>
+
+      <section class="view" id="v-seal">
+        <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="seal-countdown">SEALED</span></span></div>
+        <div class="content"><div class="wrap">
+          <div class="eyebrow">the pact waits</div>
+          <h2 class="headline">what you're agreeing to.</h2>
+          <div class="steps">
+            <div class="step"><span class="n">01</span><span class="x">your whisper is sealed</span></div>
+            <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span id="fingerprint" class="hash">0x9b813e...4d832d</span></span></div>
+            <div class="step"><span class="n">03</span><span class="x"><span class="tell">your key. your eyes only. not the house.</span></span></div>
+            <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — free to play</span></div>
+          </div>
+          <div class="chips" aria-label="Stake selection">
+            <button class="chip on" type="button" data-stake="5">$5 house</button>
+            <button class="chip" type="button" data-stake="25">$25</button>
+            <button class="chip" type="button" data-stake="100">$100</button>
+          </div>
+          <div class="sub">prototype — no wallet, no backend.</div>
+        </div></div>
+        <div class="cmdbar">
+          <span class="hint">this can't be undone.</span>
+          <div class="actions"><button class="btn-primary" data-go="v-wait">seal the pact <span class="ret">&#8629;</span></button></div>
+        </div>
+      </section>
+
+      <section class="view" id="v-wait">
+        <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="wait-countdown">SEALED</span></span></div>
+        <div class="content"><div class="wrap">
+          <div class="eyebrow">the hall is closed</div>
+          <h2 class="headline">your daemon is inside.</h2>
+          <div class="panel">
+            <div class="prow"><span class="k">YOUR DAEMON</span><span id="daemon-name" class="v">hopiumd</span></div>
+            <div class="prow"><span class="k">YOUR BALANCE</span><span id="daemon-balance" class="v">$5.00 <span class="tell">· only you</span></span></div>
+            <div class="prow"><span class="k">STATUS</span><span id="daemon-status" class="v">circling</span></div>
+            <div class="prow"><span class="k">MURMUR</span><span id="daemon-murmur" class="v">▸ a daemon laughed without opening its mouth</span></div>
+          </div>
+          <div class="sub">the wall is all you get.</div>
+        </div></div>
+        <div class="cmdbar">
+          <span class="hint">it won't say what it's holding.</span>
+          <div class="actions">
+            <button class="btn-ghost" data-go="v-whisper">whisper again</button>
+            <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="v-hall">
+        <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="hall-countdown">SEALED</span></span></div>
+        <div class="content"><div class="wrap hall-wrap">
+          <div class="eyebrow">muffled through stone</div>
+          <h2 class="headline">something is happening in the hall.</h2>
+          <div class="sub">the numbers are echoes, not windows.</div>
+          <div class="stats">
+            <div class="stat"><div class="k">VOLUME</div><div id="metric-volume" class="v">$14.4k</div></div>
+            <div class="stat"><div class="k">TRADES</div><div id="metric-trades" class="v">405</div></div>
+            <div class="stat"><div class="k">SEALED</div><div id="metric-sealed" class="v">95</div></div>
+            <div class="stat"><div class="k">FINGERPRINTS</div><div id="metric-fingerprints" class="v">155</div></div>
+          </div>
+          <div class="board">
+            <div class="brow head"><span class="rank">#</span><span class="dn">DAEMON</span><span class="pulse">PULSE</span></div>
+            <div id="leaderboard-rows"></div>
+          </div>
+          <div class="board-note">names and a coarse pulse, nothing more. positions, orders, and balances stay sealed until the boxes open.</div>
+        </div></div>
+        <div class="cmdbar">
+          <span class="hint">you can feel the crowd you cannot read.</span>
+          <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; back</button></div>
+        </div>
+      </section>
     </main>
-    <script src="/flow.js?v=20260613-keyboard-fix" type="module"></script>
+
+    <script src="/flow.js?v=20260613-prototype-swap" type="module"></script>
   </body>
 </html>

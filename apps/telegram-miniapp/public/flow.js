@@ -2,90 +2,44 @@ const tg = window.Telegram?.WebApp;
 tg?.ready?.();
 tg?.expand?.();
 
-const stage = document.querySelector('.stage');
+const views = [...document.querySelectorAll('.view')];
+const navButtons = [...document.querySelectorAll('[data-go]')];
 const input = document.querySelector('#whisper-input');
-const mic = document.querySelector('#mic');
-const statusEl = document.querySelector('#whisper-status');
-const continueButton = document.querySelector('#continue');
-const countdownEl = document.querySelector('#results-countdown');
-const sealedNameEl = document.querySelector('#sealed-name');
-const presenceSigilEl = document.querySelector('#presence-sigil');
-const openPactButton = document.querySelector('#open-pact');
-const sealPactButton = document.querySelector('#seal-pact');
-const sendDaemonButton = document.querySelector('#send-daemon');
-const restartButton = document.querySelector('#restart-flow');
-const stakeButtons = [...document.querySelectorAll('.stake-choice')];
+const voiceButton = document.querySelector('#voice-button');
+const sealWhisperButton = document.querySelector('#seal-whisper');
+const whisperStatus = document.querySelector('#whisper-status');
+const landingCountdownEl = document.querySelector('#landing-countdown');
+const countdownEls = [
+  document.querySelector('#whisper-countdown'),
+  document.querySelector('#seal-countdown'),
+  document.querySelector('#wait-countdown'),
+  document.querySelector('#hall-countdown'),
+].filter(Boolean);
 const fingerprintEl = document.querySelector('#fingerprint');
-const revealFingerprintEl = document.querySelector('#reveal-fingerprint');
 const daemonNameEl = document.querySelector('#daemon-name');
-const daemonEpithetEl = document.querySelector('#daemon-epithet');
-const daemonOriginEl = document.querySelector('#daemon-origin');
-const daemonPortraitEl = document.querySelector('#daemon-portrait');
-const waitDaemonNameEl = document.querySelector('#wait-daemon-name');
-const waitStatusEl = document.querySelector('#wait-status');
-const waitMurmurEl = document.querySelector('#wait-murmur');
-const privateBalanceEl = document.querySelector('#private-balance');
+const daemonBalanceEl = document.querySelector('#daemon-balance');
+const daemonStatusEl = document.querySelector('#daemon-status');
+const daemonMurmurEl = document.querySelector('#daemon-murmur');
 const metricVolumeEl = document.querySelector('#metric-volume');
 const metricTradesEl = document.querySelector('#metric-trades');
-const metricBoxesEl = document.querySelector('#metric-boxes');
+const metricSealedEl = document.querySelector('#metric-sealed');
 const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
 const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
-const openHallWallButton = document.querySelector('#open-hall-wall');
-const closeHallWallButton = document.querySelector('#close-hall-wall');
+const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
-const defaultStatus = 'only you hear this.';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
-let flowEntered = false;
-let terminalEntered = false;
-let darkAnswered = false;
 let selectedStake = 5;
-let currentDaemon = null;
 
-const names = ['fomod', 'hopiumd', 'rugd', 'panicd', 'greedd', 'lateforkd', 'copex', 'whisprd', 'doubtd', 'moonwaitd'];
-const epithets = [
-  'THE LATECOMER, FIRST OF ITS PANIC',
-  'STILL BELIEVING AFTER THE LIGHTS WENT OUT',
-  'TRUSTED THE WRONG GATE AND CALLED IT ALPHA',
-  'SWEETEST MOUTH IN THE WRONG MARKET',
-  'BORN SHORT, PRAYING LONG',
-  'THE ONE WHO READ THE ROOM TOO LATE',
-  'WALKS IN CIRCLES UNTIL PROFIT LOOKS LIKE FATE',
-  'A LITTLE TOO BRAVE FOR THE SIZE OF ITS BAG',
-];
-const statuses = ['running', 'listening', 'circling', 'hungry', 'quiet', 'committed', 'still believing', 'overclocked'];
-const leaderboardNames = ['fomod', 'hopiumd', 'greedd', 'panicd', 'rugd', 'copiumd', 'lateforkd', 'doubtd'];
-const daemonPortraits = [
-  '/daemons/murmur-01.webp',
-  '/daemons/sable-02.webp',
-  '/daemons/veil-03.webp',
-  '/daemons/null-04.webp',
-  '/daemons/rasp-05.webp',
-  '/daemons/crown-06.webp',
-  '/daemons/gloam-07.webp',
-  '/daemons/wisp-08.webp',
-  '/daemons/hex-09.webp',
-  '/daemons/ash-10.webp',
-  '/daemons/nix-11.webp',
-  '/daemons/omen-12.webp',
-  '/daemons/rune-13.webp',
-  '/daemons/grin-14.webp',
-  '/daemons/lilt-15.webp',
-  '/daemons/rook-16.webp',
-  '/daemons/vesper-17.webp',
-  '/daemons/knell-18.webp',
-  '/daemons/vant-19.webp',
-  '/daemons/thorn-20.webp',
-];
-
+const names = ['hopiumd', 'fomod', 'rugd', 'greedd', 'panicd', 'copiumd', 'lateforkd', 'doubtd'];
+const statuses = ['circling', 'running', 'sleeping', 'listening', 'quiet', 'zombie'];
 const murmurs = [
-  '▸ something moved behind the wall',
   '▸ a daemon laughed without opening its mouth',
+  '▸ something moved behind the wall',
   '▸ the hall counted wrong, then counted again',
   '▸ a sealed order learned patience',
-  '▸ box 88 made a sound like teeth',
   '▸ no one outside saw what changed',
 ];
 
@@ -97,31 +51,47 @@ function hashNumber(seed) {
   }
   return h >>> 0;
 }
-function pick(list, seed, offset = 0) { return list[(hashNumber(`${seed}:${offset}`)) % list.length]; }
-function tinyFingerprint(seed) {
-  const h1 = hashNumber(seed).toString(16).padStart(8, '0');
-  const h2 = hashNumber(`${seed}:seal`).toString(16).padStart(8, '0');
-  const h3 = hashNumber(`${seed}:key`).toString(16).padStart(8, '0');
-  return `0x${h1}${h2}${h3}`;
+
+function pick(list, seed, offset = 0) {
+  return list[hashNumber(`${seed}:${offset}`) % list.length];
 }
 
-function signedPercent(seed, offset = 0) {
-  const raw = hashNumber(`${seed}:pulse:${offset}`) % 4200;
-  const value = (raw - 1600) / 100;
+function fingerprint(seed) {
+  const a = hashNumber(seed).toString(16).padStart(8, '0');
+  const b = hashNumber(`${seed}:seal`).toString(16).padStart(8, '0');
+  return `0x${a}...${b.slice(-6)}`;
+}
+
+function signedPercent(seed, offset) {
+  const raw = hashNumber(`${seed}:pulse:${offset}`) % 3800;
+  const value = (raw - 1200) / 100;
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
-function paintHallMetrics(seed) {
-  const h = hashNumber(seed || 'silence');
-  if (privateBalanceEl) privateBalanceEl.textContent = `$${(5 + (h % 900) / 100).toFixed(2)} decrypted`;
-  if (metricVolumeEl) metricVolumeEl.textContent = `$${(8.2 + (h % 9200) / 1000).toFixed(1)}k`;
-  if (metricTradesEl) metricTradesEl.textContent = String(180 + (h % 260));
-  if (metricBoxesEl) metricBoxesEl.textContent = String(64 + (h % 41));
-  if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(120 + (h % 90));
+
+function currentSeed() {
+  return `${input?.value.trim() || 'silence'}:${selectedStake}`;
 }
-function paintLeaderboard(seed) {
+
+function renderPrivateState() {
+  const seed = currentSeed();
+  const h = hashNumber(seed);
+  const ownName = pick(names, seed);
+  const status = pick(statuses, seed, 2);
+  if (fingerprintEl) fingerprintEl.textContent = fingerprint(seed);
+  if (daemonNameEl) daemonNameEl.textContent = ownName;
+  if (daemonBalanceEl) daemonBalanceEl.innerHTML = `$${(selectedStake + (h % 900) / 100).toFixed(2)} <span class="tell">· only you</span>`;
+  if (daemonStatusEl) daemonStatusEl.textContent = status;
+  if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, seed, 3);
+  if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
+  if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
+  if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
+  if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
+  renderLeaderboard(seed, ownName);
+}
+
+function renderLeaderboard(seed, ownName) {
   if (!leaderboardRowsEl) return;
-  const ownName = currentDaemon?.name || pick(names, seed);
-  const rows = [ownName, ...leaderboardNames.filter((name) => name !== ownName)]
+  const rows = [ownName, ...names.filter((name) => name !== ownName)]
     .slice(0, 6)
     .map((name, index) => ({
       name,
@@ -132,16 +102,24 @@ function paintLeaderboard(seed) {
     .sort((a, b) => b.score - a.score)
     .map((row, index) => ({ ...row, rank: index + 1 }));
   leaderboardRowsEl.innerHTML = rows.map((row) => `
-    <p class="${row.name === ownName ? 'is-user' : ''}">
-      <span>${row.rank}</span>
-      <strong>${row.name}</strong>
-      <em>${row.pulse} · ${row.status}</em>
-    </p>
+    <div class="brow ${row.name === ownName ? 'you' : ''}">
+      <span class="rank">${row.rank}</span>
+      <span class="dn">${row.name}${row.name === ownName ? ' ◂ you' : ''}</span>
+      <span class="pulse"><span class="pct">${row.pulse}</span> · ${row.status}</span>
+    </div>
   `).join('');
 }
 
+function showView(id) {
+  views.forEach((view) => view.classList.toggle('active', view.id === id));
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  renderPrivateState();
+  if (id === 'v-whisper') window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
+  tg?.HapticFeedback?.impactOccurred?.('light');
+}
+
 function formatCountdown(ms) {
-  if (ms <= 0) return 'boxes open now';
+  if (ms <= 0) return 'BOXES OPEN NOW';
   const totalSeconds = Math.floor(ms / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -150,129 +128,48 @@ function formatCountdown(ms) {
   const hh = String(hours).padStart(2, '0');
   const mm = String(minutes).padStart(2, '0');
   const ss = String(seconds).padStart(2, '0');
-  return days > 0 ? `boxes open in ${days}d ${hh}:${mm}:${ss}` : `boxes open in ${hh}:${mm}:${ss}`;
+  return days > 0 ? `SEALED · ${days}D ${hh}:${mm}:${ss}` : `SEALED · ${hh}:${mm}:${ss}`;
 }
+
 function tickCountdown() {
-  if (countdownEl) countdownEl.textContent = formatCountdown(RESULTS_AT.getTime() - Date.now());
+  const text = formatCountdown(RESULTS_AT.getTime() - Date.now());
+  countdownEls.forEach((el) => { el.textContent = text; });
+  if (landingCountdownEl) landingCountdownEl.textContent = text.replace(/^SEALED · /, '');
 }
-function setStatus(text) { statusEl.textContent = text || defaultStatus; }
+
 function autosize() {
+  if (!input) return;
   input.style.height = 'auto';
-  input.style.height = `${Math.min(input.scrollHeight, window.innerHeight * 0.28)}px`;
+  input.style.height = `${Math.min(input.scrollHeight, Math.max(84, window.innerHeight * 0.26))}px`;
 }
-function answerGlyph(seed) {
-  const glyphs = ['∴', '◇', '◌', '⌁', '✦', '☉', '⟡', '◍'];
-  return pick(glyphs, seed);
-}
-function sealedMask(seed) {
-  return pick(['██████', '███•██', '██•███', '████•█'], seed, 1);
-}
-function buildDaemon() {
-  const whisper = input.value.trim() || 'silence';
-  const fp = tinyFingerprint(`${whisper}:${selectedStake}`);
-  const name = pick(names, whisper);
-  const epithet = pick(epithets, whisper, 2);
-  const phrase = whisper.toLowerCase().replace(/\s+/g, ' ').slice(0, 64);
-  const origin = phrase.length > 12
-    ? `born from “${phrase}${whisper.length > 64 ? '…' : ''}” and already pretending it was a plan.`
-    : 'born from a whisper too small to admit what it wanted.';
-  currentDaemon = {
-    name,
-    epithet,
-    origin,
-    fingerprint: fp,
-    portrait: pick(daemonPortraits, whisper, 5),
-    status: pick(statuses, whisper, 3),
-    murmur: pick(murmurs, whisper, 4),
-  };
-  return currentDaemon;
-}
-function paintDaemon() {
-  const daemon = currentDaemon || buildDaemon();
-  if (fingerprintEl) fingerprintEl.textContent = `${daemon.fingerprint.slice(0, 8)}…${daemon.fingerprint.slice(-6)}`;
-  if (revealFingerprintEl) revealFingerprintEl.textContent = `${daemon.fingerprint.slice(0, 10)}…${daemon.fingerprint.slice(-8)}`;
-  if (daemonNameEl) daemonNameEl.textContent = daemon.name;
-  if (daemonEpithetEl) daemonEpithetEl.textContent = daemon.epithet;
-  if (daemonOriginEl) daemonOriginEl.textContent = daemon.origin;
-  if (daemonPortraitEl) {
-    daemonPortraitEl.src = daemon.portrait;
-    daemonPortraitEl.alt = `${daemon.name} private daemon portrait`;
+
+function handleInput() {
+  autosize();
+  const hasText = Boolean(input?.value.trim());
+  if (sealWhisperButton) sealWhisperButton.disabled = !hasText;
+  if (whisperStatus) {
+    whisperStatus.innerHTML = hasText
+      ? 'read it back. you can seal it when it says what you mean.<br /><span class="tell">only your key reveals your private truth.</span>'
+      : 'read it back. you can\'t unsay it.<br /><span class="tell">no one else will ever hear this — not the players, not the house.</span>';
   }
-  if (waitDaemonNameEl) waitDaemonNameEl.textContent = daemon.name;
-  if (waitStatusEl) waitStatusEl.textContent = daemon.status;
-  if (waitMurmurEl) waitMurmurEl.textContent = daemon.murmur;
-  paintHallMetrics(input.value.trim() || daemon.name);
-  paintLeaderboard(input.value.trim() || daemon.name);
+  renderPrivateState();
 }
-function enterFlow() {
-  if (flowEntered) return;
-  flowEntered = true;
-  stage.dataset.loop = 'threshold-copy';
-  window.setTimeout(enterTerminal, 2600);
-}
-function enterTerminal() {
-  if (terminalEntered) return;
-  terminalEntered = true;
-  stage.dataset.loop = 'terminal';
-  window.setTimeout(() => input.focus({ preventScroll: true }), 980);
-}
-function enterDarkAnswer() {
-  if (darkAnswered) return;
-  darkAnswered = true;
-  stopListening();
-  const whisper = input.value.trim();
-  currentDaemon = null;
-  buildDaemon();
-  paintDaemon();
-  if (presenceSigilEl) presenceSigilEl.textContent = answerGlyph(whisper);
-  if (sealedNameEl) sealedNameEl.textContent = sealedMask(whisper);
-  stage.dataset.loop = 'dark-answer';
-}
-function enterPact() {
-  buildDaemon();
-  paintDaemon();
-  stage.dataset.loop = 'pact';
-}
-function enterReveal() {
-  paintDaemon();
-  stage.dataset.loop = 'daemon-reveal';
-}
-function enterWaitRoom() {
-  paintDaemon();
-  stage.classList.remove('hall-open');
-  stage.dataset.loop = 'wait-room';
-}
-function restartFlow(event) {
-  event?.stopPropagation?.();
-  stopListening();
-  input.value = '';
-  currentDaemon = null;
-  darkAnswered = false;
-  handleInput();
-  stage.dataset.loop = 'terminal';
-  window.setTimeout(() => input.focus({ preventScroll: true }), 260);
-}
+
 async function requestMicFallback() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    setStatus('voice unavailable here. type the whisper.');
+    if (whisperStatus) whisperStatus.textContent = 'voice unavailable here. type the whisper.';
     return;
   }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   stream.getTracks().forEach((track) => track.stop());
-  setStatus('mic allowed. speech transcription is unavailable here. type the final whisper.');
+  if (whisperStatus) whisperStatus.textContent = 'mic allowed. speech transcription is unavailable here. type the final whisper.';
 }
-function stopListening() {
-  if (recognition && listening) recognition.stop();
-  listening = false;
-  mic.classList.remove('listening');
-}
+
 async function startVoice(event) {
-  event.stopPropagation();
-  if (!flowEntered) enterFlow();
-  if (!terminalEntered) enterTerminal();
+  event.preventDefault();
   if (!SpeechRecognition) {
     try { await requestMicFallback(); }
-    catch (_) { setStatus('mic denied. type the whisper instead.'); }
+    catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
     return;
   }
   if (!recognition) {
@@ -282,76 +179,61 @@ async function startVoice(event) {
     recognition.continuous = false;
     recognition.onstart = () => {
       listening = true;
-      mic.classList.add('listening');
-      setStatus('listening. speak it low.');
+      voiceButton?.classList.add('listening');
+      if (whisperStatus) whisperStatus.textContent = 'listening. speak it low.';
     };
-    recognition.onerror = (event) => {
+    recognition.onerror = () => {
       listening = false;
-      mic.classList.remove('listening');
-      setStatus(event.error === 'not-allowed' ? 'mic denied. type the whisper instead.' : 'voice broke. type or try again.');
+      voiceButton?.classList.remove('listening');
+      if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
     };
     recognition.onend = () => {
       listening = false;
-      mic.classList.remove('listening');
-      setStatus(input.value.trim() ? 'review the text before the dark answers.' : defaultStatus);
+      voiceButton?.classList.remove('listening');
+      handleInput();
     };
     recognition.onresult = (event) => {
       let transcript = '';
       for (const result of event.results) transcript += result[0].transcript;
-      input.value = transcript.trimStart();
+      if (input) input.value = transcript.trimStart();
       handleInput();
     };
   }
-  if (listening) stopListening();
+  if (listening) recognition.stop();
   else recognition.start();
 }
-function handleInput() {
-  autosize();
-  darkAnswered = false;
-  currentDaemon = null;
-  const hasText = input.value.trim().length > 0;
-  continueButton.classList.toggle('ready', hasText);
-  setStatus(hasText ? 'review the text before the dark answers.' : defaultStatus);
-}
-function handleContinue(event) {
-  event.stopPropagation();
-  if (!input.value.trim()) {
-    setStatus('the hall heard almost nothing. whisper first.');
-    input.focus();
-    return;
-  }
-  setStatus('seal the whisper.');
-  enterPact();
+
+function syncKeyboardState() {
+  const viewport = window.visualViewport;
+  const keyboardOpen = document.activeElement === input && viewport && viewport.height < window.innerHeight * 0.82;
+  document.body.classList.toggle('keyboard-open', Boolean(keyboardOpen || document.activeElement === input));
 }
 
-window.addEventListener('click', () => { if (!flowEntered) enterFlow(); });
-window.addEventListener('touchstart', () => { if (!flowEntered) enterFlow(); }, { passive: true });
-window.addEventListener('wheel', (event) => { if (event.deltaY > 8 && !flowEntered) enterFlow(); }, { passive: true });
-window.addEventListener('keydown', (event) => { if (!flowEntered && ['Enter', ' ', 'ArrowDown'].includes(event.key)) enterFlow(); });
-input.addEventListener('click', (event) => event.stopPropagation());
-input.addEventListener('focus', () => stage.classList.add('keyboard-open'));
-input.addEventListener('blur', () => window.setTimeout(() => stage.classList.remove('keyboard-open'), 120));
-window.visualViewport?.addEventListener('resize', () => {
-  const keyboardLikelyOpen = document.activeElement === input && window.visualViewport.height < window.innerHeight * 0.82;
-  stage.classList.toggle('keyboard-open', keyboardLikelyOpen || document.activeElement === input);
+navButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    const next = button.getAttribute('data-go');
+    if (next === 'v-seal' && !input?.value.trim()) {
+      input?.focus({ preventScroll: true });
+      if (whisperStatus) whisperStatus.textContent = 'the hall heard almost nothing. whisper first.';
+      return;
+    }
+    if (next) showView(next);
+  });
 });
-input.addEventListener('input', handleInput);
-mic.addEventListener('click', startVoice);
-continueButton.addEventListener('click', handleContinue);
-openPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterPact(); });
-sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterReveal(); });
-sendDaemonButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
-restartButton?.addEventListener('click', restartFlow);
-openHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); paintDaemon(); stage.classList.add('hall-open'); });
-closeHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); stage.classList.remove('hall-open'); });
-stakeButtons.forEach((button) => button.addEventListener('click', (event) => {
-  event.stopPropagation();
-  selectedStake = Number(button.dataset.stake || 5);
-  stakeButtons.forEach((choice) => choice.classList.toggle('active', choice === button));
-  buildDaemon();
-  paintDaemon();
-}));
-window.addEventListener('pagehide', stopListening);
+stakeButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    selectedStake = Number(button.getAttribute('data-stake') || 5);
+    stakeButtons.forEach((choice) => choice.classList.toggle('on', choice === button));
+    renderPrivateState();
+  });
+});
+input?.addEventListener('input', handleInput);
+input?.addEventListener('focus', syncKeyboardState);
+input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
+voiceButton?.addEventListener('click', startVoice);
+window.visualViewport?.addEventListener('resize', syncKeyboardState);
+window.addEventListener('pagehide', () => recognition?.stop?.());
+
 tickCountdown();
 window.setInterval(tickCountdown, 1000);
-autosize();
+handleInput();

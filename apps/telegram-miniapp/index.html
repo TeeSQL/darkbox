@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05030a" />
+    <title>DarkBox Telegram Lab</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <p class="eyebrow">DarkBox experiment</p>
+        <h1>Telegram Lab</h1>
+        <p class="copy">Mini App probes plus a live public-safe window into the agent arena.</p>
+
+        <div class="tabs" role="tablist" aria-label="Experiments">
+          <button id="mic-tab" class="tab active" type="button">Mic</button>
+          <button id="blink-tab" class="tab" type="button">Blink deposit</button>
+          <button id="agents-tab" class="tab" type="button">Agent feed</button>
+          <button id="snapshot-tab" class="tab" type="button">Market snapshot</button>
+        </div>
+
+        <section id="mic-panel" class="panel active" aria-labelledby="mic-tab">
+          <p class="copy small">Tap the button, allow microphone access if prompted, then speak. Audio is measured locally only; it is not uploaded or saved.</p>
+          <div class="status" id="status">Idle. No mic request has been made yet.</div>
+          <div class="meter" aria-label="microphone input level">
+            <div id="bar" class="bar"></div>
+          </div>
+          <div id="details" class="details"></div>
+          <div class="actions">
+            <button id="start" type="button">Request microphone</button>
+            <button id="stop" type="button" class="secondary" disabled>Stop</button>
+          </div>
+        </section>
+
+        <section id="blink-panel" class="panel" aria-labelledby="blink-tab">
+          <p class="copy small">Blink SDK installed: <code>@swype-org/deposit</code>. This opens Blink’s hosted flow once the server signer has a merchant ID/private key.</p>
+          <label class="field">
+            <span>Deposit amount (USD)</span>
+            <input id="blink-amount" inputmode="decimal" value="5" />
+          </label>
+          <label class="field">
+            <span>Destination wallet address</span>
+            <input id="blink-address" placeholder="0x… user embedded wallet" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Destination chain/token</span>
+            <select id="blink-chain">
+              <option value="base-usdc">Base USDC · 8453</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="blink-deposit" type="button">Open Blink deposit</button>
+          </div>
+          <div id="blink-status" class="details">Signer endpoint: /api/blink/sign-payment</div>
+        </section>
+
+        <section id="agents-panel" class="panel" aria-labelledby="agents-tab">
+          <p class="copy small">Live DarkBox agent noise, filtered for public viewing. Raw hidden-state logs stay sealed on teebox.</p>
+          <div class="feed-status">
+            <span id="agent-feed-live-dot" class="live-dot stale"></span>
+            <span id="agent-feed-status">Waiting for feed…</span>
+          </div>
+          <div id="agent-feed-stats" class="stat-grid">
+            <div class="stat"><span>Run</span><strong>—</strong></div>
+            <div class="stat"><span>Turns</span><strong>—</strong></div>
+            <div class="stat"><span>Actions</span><strong>—</strong></div>
+          </div>
+          <div class="feed-head">
+            <span>Latest daemon murmurs</span>
+            <button id="agent-feed-refresh" class="mini-button" type="button">Refresh</button>
+          </div>
+          <div id="agent-feed-list" class="feed-list">No agent turns loaded yet.</div>
+        </section>
+
+        <section id="snapshot-panel" class="panel" aria-labelledby="snapshot-tab">
+          <p class="copy small">Public market snapshot from the indexer: aggregate activity, live markets, and leaderboard only. No hidden orders, positions, or balances are exposed.</p>
+          <div class="feed-status">
+            <span id="snapshot-live-dot" class="live-dot stale"></span>
+            <span id="snapshot-status">Waiting for market snapshot…</span>
+          </div>
+          <div id="snapshot-summary" class="snapshot-summary">
+            <div class="stat"><span>Markets</span><strong>—</strong></div>
+            <div class="stat"><span>Trades</span><strong>—</strong></div>
+            <div class="stat"><span>Volume</span><strong>—</strong></div>
+            <div class="stat"><span>Agents</span><strong>—</strong></div>
+          </div>
+          <div class="feed-head">
+            <span>Live markets</span>
+            <button id="snapshot-refresh" class="mini-button" type="button">Refresh</button>
+          </div>
+          <div id="snapshot-markets" class="market-list">No markets loaded yet.</div>
+          <div class="feed-head"><span>Leaderboard pulse</span></div>
+          <div id="snapshot-leaderboard" class="leaderboard-list">No leaderboard loaded yet.</div>
+        </section>
+      </section>
+    </main>
+    <script src="/src/client.ts" type="module"></script>
+  </body>
+</html>

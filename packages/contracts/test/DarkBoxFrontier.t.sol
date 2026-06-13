@@ -139,7 +139,7 @@ contract DarkBoxFrontierTest is Test {
 
     function test_CreateEmitsMarketCreated() public {
         sUSDC.approve(address(pm), type(uint256).max);
-        bytes32 qh = pm.computeQuestionHash("E?", ResolverType.AdminManual, uint64(block.timestamp + 7 days), "ipfs://m");
+        bytes32 qh = pm.computeQuestionHash(GAME, "E?", ResolverType.AdminManual, uint64(block.timestamp + 7 days), "ipfs://m");
         bytes32 expectedId = keccak256(abi.encode(GAME, qh));
         vm.expectEmit(true, true, true, false);
         emit MarketCreated(GAME, expectedId, admin, address(0), "E?", "ipfs://m", 0, 0, ResolverType.AdminManual);
@@ -151,6 +151,21 @@ contract DarkBoxFrontierTest is Test {
         pm.createMarket(_params("dup", ResolverType.AdminManual, admin));
         vm.expectRevert(DarkBoxMarketFactory.DuplicateQuestion.selector);
         pm.createMarket(_params("dup", ResolverType.AdminManual, admin));
+    }
+
+    // Audit M-1 regression: an identical question in a DIFFERENT game must not
+    // collide on the global duplicate guard (previously it did, enabling a
+    // cross-game / front-run DoS that could brick the canonical market).
+    function test_SameQuestionDifferentGamesDoNotCollide() public {
+        sUSDC.approve(address(pm), type(uint256).max);
+        CreateMarketParams memory p2 = _params("xgame", ResolverType.AdminManual, admin);
+        p2.gameId = keccak256("game-2");
+        (bytes32 id1, ) = pm.createMarket(_params("xgame", ResolverType.AdminManual, admin));
+        (bytes32 id2, ) = pm.createMarket(p2);
+        assertTrue(id1 != id2, "distinct ids across games");
+        // Same (game, question) still reverts as a duplicate.
+        vm.expectRevert(DarkBoxMarketFactory.DuplicateQuestion.selector);
+        pm.createMarket(_params("xgame", ResolverType.AdminManual, admin));
     }
 
     function test_RevertEmptyQuestion() public {

@@ -106,6 +106,7 @@ contract DarkBoxMarketFactory {
     error BondAlreadySettled();
     error CanonicalRestricted();
     error TransferFailed();
+    error InvalidBook();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -145,7 +146,7 @@ contract DarkBoxMarketFactory {
         }
 
         bytes32 questionHash = computeQuestionHash(
-            params.question, params.resolver.resolverType, params.closeTime, params.metadataURI
+            params.gameId, params.question, params.resolver.resolverType, params.closeTime, params.metadataURI
         );
         if (questionHashUsed[questionHash]) revert DuplicateQuestion();
         questionHashUsed[questionHash] = true;
@@ -224,12 +225,15 @@ contract DarkBoxMarketFactory {
     /// @notice Canonical duplicate guard (market spec §5.2). Off-chain callers
     ///         must normalize casing/spacing of `question` before hashing.
     function computeQuestionHash(
+        bytes32 gameId,
         string memory question,
         ResolverType resolverType,
         uint64 closeTime,
         string memory metadataURI
     ) public pure returns (bytes32) {
-        return keccak256(abi.encode(question, resolverType, closeTime, metadataURI));
+        // gameId is part of the hash so identical questions in different games do
+        // not collide on the global duplicate guard (audit M-1: cross-game DoS).
+        return keccak256(abi.encode(gameId, question, resolverType, closeTime, metadataURI));
     }
 
     // ---------------------------------------------------------------------
@@ -254,6 +258,10 @@ contract DarkBoxMarketFactory {
         noBook = frontierFactory.createGeoBookWithFees(
             noTok, collateralToken, bookTickSpacing, bookStartTick, feeRecipient, bookMakerFeeBps, bookTakerFeeBps
         );
+
+        // Validate the books the (owner-mutable) Frontier factory handed back
+        // before latching them in (audit M-3): non-zero and distinct.
+        if (yesBook == address(0) || noBook == address(0) || yesBook == noBook) revert InvalidBook();
 
         info.yesBook = yesBook;
         info.noBook = noBook;

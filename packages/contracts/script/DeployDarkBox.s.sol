@@ -71,7 +71,7 @@ contract DeployDarkBox is Script {
             description: "Canonical DarkBox hackathon-winner market.",
             metadataURI: "ipfs://darkbox/canonical-market.json",
             resolver: ResolverConfig({
-                resolverType: ResolverType.CanonicalWinner,
+                resolverType: ResolverType.AdminManual,
                 resolver: deployer,
                 sourceId: keccak256("hackathon-judges"),
                 data: ""
@@ -83,7 +83,7 @@ contract DeployDarkBox is Script {
         });
 
         (bytes32 marketId, address market) = pmFactory.createMarket(params);
-        (address yesBook, address noBook) = pmFactory.createBooks(marketId);
+        (address yesBook, address noBook) = pmFactory.getBooks(marketId);
 
         vm.stopBroadcast();
 

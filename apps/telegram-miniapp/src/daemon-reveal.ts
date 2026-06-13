@@ -107,7 +107,7 @@ const waitFragmentShader = `
   void main() {
     vec2 uv = vUv;
     float breathe = 0.5 + 0.5 * sin(uTime * 1.05);
-    float drift = sin((uv.y * 9.0) + uTime * 0.72) * 0.0018;
+    float drift = sin((uv.y * 9.0) + uTime * 0.92) * 0.0045;
     float edgeMask =
       smoothstep(0.10, 0.0, uv.x) +
       smoothstep(0.90, 1.0, uv.x) +
@@ -121,15 +121,15 @@ const waitFragmentShader = `
     float presence = smoothstep(0.08, 0.55, luma);
     float scan = smoothstep(0.965, 1.0, sin((uv.y + uTime * 0.018) * 720.0) * 0.5 + 0.5);
     float grain = hash(floor(uv * vec2(220.0, 360.0)) + floor(uTime * 10.0)) - 0.5;
-    float pulse = 0.08 + breathe * (0.10 + uWake * 0.06);
+    float pulse = 0.18 + breathe * (0.26 + uWake * 0.10);
 
     vec3 chroma = vec3(red.r, base.g, blue.b) - base.rgb;
-    vec3 livingGlow = vec3(0.42, 0.36, 0.95) * presence * pulse;
-    vec3 edgeColor = vec3(0.92, 0.28, 0.55) * edgeMask * (0.08 + breathe * 0.12);
-    vec3 scanColor = vec3(0.72, 0.78, 1.0) * scan * presence * 0.035;
-    vec3 color = chroma * (0.52 + edgeMask) + livingGlow + edgeColor + scanColor + grain * 0.012;
+    vec3 livingGlow = vec3(0.56, 0.42, 1.0) * presence * pulse;
+    vec3 edgeColor = vec3(1.0, 0.24, 0.58) * edgeMask * (0.18 + breathe * 0.28);
+    vec3 scanColor = vec3(0.78, 0.84, 1.0) * scan * presence * 0.11;
+    vec3 color = chroma * (0.82 + edgeMask * 1.4) + livingGlow + edgeColor + scanColor + grain * 0.018;
 
-    float alpha = clamp(0.05 + presence * (0.10 + breathe * 0.08) + edgeMask * 0.12 + scan * 0.05, 0.0, 0.32);
+    float alpha = clamp(0.10 + presence * (0.20 + breathe * 0.18) + edgeMask * 0.24 + scan * 0.12, 0.0, 0.58);
     gl_FragColor = vec4(color, alpha);
   }
 `;

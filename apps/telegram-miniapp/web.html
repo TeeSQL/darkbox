@@ -79,14 +79,17 @@
   .brow .pulse{color:var(--mut);text-align:right;white-space:nowrap}
   .brow .pulse .pct{color:var(--silver)}
   .board-note{margin-top:18px;font-size:11px;color:var(--mut);line-height:1.7;text-align:center}
-  .daemon-wait-portrait{position:relative;width:min(100%,360px);aspect-ratio:2/3;margin:24px auto 22px;border:1px solid var(--hair);background:#101016;overflow:hidden;isolation:isolate;box-shadow:0 18px 46px rgba(0,0,0,.32);animation:daemonWaitBreath 5.6s ease-in-out infinite}
-  .daemon-wait-portrait img{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;background:#101016;filter:contrast(1.04) brightness(1.03) saturate(1.02)}
-  .daemon-wait-portrait:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(90deg,rgba(255,72,126,.12),transparent 16%,transparent 84%,rgba(93,94,255,.12)),repeating-linear-gradient(180deg,rgba(255,255,255,.026) 0 1px,transparent 1px 8px);opacity:.32;mix-blend-mode:screen;animation:daemonWaitScan 6.8s linear infinite}
-  .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.08);box-shadow:inset 0 0 42px rgba(0,0,0,.34),inset 0 0 28px rgba(139,123,255,.10);animation:daemonWaitAura 5.6s ease-in-out infinite}
-  @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 46px rgba(0,0,0,.32),0 0 0 rgba(139,123,255,0)}50%{box-shadow:0 18px 48px rgba(0,0,0,.36),0 0 34px rgba(139,123,255,.16)}}
-  @keyframes daemonWaitAura{0%,100%{opacity:.62}50%{opacity:.94}}
-  @keyframes daemonWaitScan{from{background-position:0 0,0 0}to{background-position:18px 0,0 56px}}
-  @media (prefers-reduced-motion:reduce){.daemon-wait-portrait,.daemon-wait-portrait:before,.daemon-wait-portrait:after{animation:none}}
+  .daemon-wait-portrait{position:relative;width:min(100%,360px);aspect-ratio:2/3;margin:24px auto 22px;border:1px solid var(--hair);background:#101016;overflow:hidden;isolation:isolate;box-shadow:0 18px 46px rgba(0,0,0,.32);animation:daemonWaitBreath 3.8s ease-in-out infinite}
+  .daemon-wait-portrait img{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;background:#101016;filter:contrast(1.08) brightness(1.08) saturate(1.12);animation:daemonWaitPhotoPulse 3.8s ease-in-out infinite}
+  .daemon-wait-portrait:before{content:"";position:absolute;inset:-18%;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 38%,rgba(146,118,255,.34) 56%,transparent 71%),conic-gradient(from 0deg at 50% 50%,rgba(255,74,126,0),rgba(255,74,126,.34),rgba(93,94,255,.36),rgba(255,74,126,0)),repeating-linear-gradient(180deg,rgba(255,255,255,.055) 0 1px,transparent 1px 7px);opacity:.62;mix-blend-mode:screen;animation:daemonWaitScan 4.6s linear infinite,daemonWaitHalo 3.8s ease-in-out infinite}
+  .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.22);background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.18) 48%,transparent 62%);background-size:260% 100%;box-shadow:inset 0 0 46px rgba(0,0,0,.28),inset 0 0 44px rgba(139,123,255,.24),0 0 34px rgba(255,74,126,.22);animation:daemonWaitAura 3.8s ease-in-out infinite,daemonWaitSweep 4.2s ease-in-out infinite}
+  @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08);transform:scale(1)}50%{filter:contrast(1.14) brightness(1.18) saturate(1.28);transform:scale(1.012)}}
+  @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 46px rgba(0,0,0,.32),0 0 16px rgba(139,123,255,.10),0 0 0 rgba(255,74,126,0)}50%{box-shadow:0 18px 50px rgba(0,0,0,.40),0 0 46px rgba(139,123,255,.38),0 0 34px rgba(255,74,126,.22)}}
+  @keyframes daemonWaitAura{0%,100%{opacity:.62}50%{opacity:1}}
+  @keyframes daemonWaitHalo{0%,100%{opacity:.42;transform:rotate(0deg) scale(1)}50%{opacity:.86;transform:rotate(8deg) scale(1.04)}}
+  @keyframes daemonWaitScan{from{background-position:0 0,0 0,0 0}to{background-position:0 0,0 0,0 48px}}
+  @keyframes daemonWaitSweep{0%,18%{background-position:130% 0;opacity:.44}48%{background-position:-90% 0;opacity:.92}100%{background-position:-90% 0;opacity:.54}}
+  @media (prefers-reduced-motion:reduce){.daemon-wait-portrait,.daemon-wait-portrait img,.daemon-wait-portrait:before,.daemon-wait-portrait:after{animation:none}}
 
   /* command bar — pinned to the bottom of every screen */
   .cmdbar{position:fixed;left:0;right:0;bottom:0;z-index:30;border-top:1px solid var(--hair);background:rgba(10,10,15,.82);backdrop-filter:blur(10px);padding:16px 26px;display:flex;align-items:center;justify-content:space-between;gap:16px}

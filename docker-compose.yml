@@ -56,6 +56,32 @@ services:
     environment:
       PUBLIC_INDEXER_URL: http://darkbox-indexer:8080/public
 
+  # Authenticated player BFF (the only /api/* surface). Public-facing: it stays
+  # OFF hidden_net by design. It reaches the indexer over public_net; bridge /
+  # transcriber integrations (deposits, withdrawals, audio whisper) attach later
+  # over a narrow internal channel once those services expose HTTP — until then
+  # the gateway serves its own state + the typed-instruction whisper fallback.
+  darkbox-gateway:
+    build: ./services/gateway
+    networks: [public_net]
+    depends_on: [darkbox-indexer]
+    ports:
+      - "8090:8090"
+    environment:
+      PORT: "8090"
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080
+      # Auth: provide a real token via .env for prod; dev fallback otherwise.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ALLOW_INSECURE_DEV_AUTH: ${ALLOW_INSECURE_DEV_AUTH:-false}
+      # Demo posture: withdrawals locked until settlement.
+      WITHDRAWALS_ENABLED: ${WITHDRAWALS_ENABLED:-false}
+      BRIDGE_ADDRESS: ${BRIDGE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      PROMO_AMOUNT: ${PROMO_AMOUNT:-5.00}
+      PROMO_UNLOCK_AT: ${PROMO_UNLOCK_AT:-2026-06-15T17:00:00.000Z}
+      REGISTRATION_FREEZE_AT: ${REGISTRATION_FREEZE_AT:-2026-06-14T09:00:00.000Z}
+      # TRANSCRIBER_URL: http://darkbox-transcriber:8095   # set once transcriber lands
+      # BRIDGE_URL: http://darkbox-bridge:8081             # set once bridge exposes HTTP
+
   darkbox-reveal:
     build: ./services/reveal
     networks: [hidden_net, egress_net]

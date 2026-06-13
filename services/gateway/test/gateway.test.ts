@@ -113,6 +113,19 @@ test("whisper typed flow produces an instruction commitment", async () => {
   assert.match(c.instructionHash, /^0x[0-9a-f]{64}$/);
 });
 
+test("arbitrary audioUrl is not accepted on the public whisper route (SSRF guard)", async () => {
+  const headers = authHeader(makeInitData({ id: 77 }, nowSec()));
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/whispers/transcriptions",
+    headers,
+    payload: { audioUrl: "http://169.254.169.254/latest/meta-data" },
+  });
+  // audioUrl is not in the schema, so it's ignored -> no text/audio -> 400.
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.json().error, "need_text_or_audio");
+});
+
 test("another user cannot read someone else's whisper draft", async () => {
   const aliceHeaders = authHeader(makeInitData({ id: 100 }, nowSec()));
   const bobHeaders = authHeader(makeInitData({ id: 200 }, nowSec()));

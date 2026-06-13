@@ -33,7 +33,7 @@ or `X-Telegram-Init-Data`). Local dev without a bot token:
 | `GET /api/self/status` | ✅ | extra fields added: `ownerIsSynthetic` (bool), `registrationFreezeAt`. `fundingStatus` ∈ `unfunded`\|`promo_funded` (spec said `funded`). `withdrawableAvailableBalance` may be `null` (= "ask the bridge", not zero) while bridge read is unwired. `inviteId` is `null` when no claim. |
 | `POST /api/invites/claim` | ✅ | `claimStatus` ∈ `claimed`\|`already_claimed` (idempotent; second call returns the same `inviteId`, no double credit). Promo mint itself is the bridge's job (recorded here, surfaced via self-status). |
 | `POST /api/registrations` | ✅ | adds `frozen` (bool). Rejects with `409 registration_frozen` after `REGISTRATION_FREEZE_AT`. |
-| `POST /api/whispers/transcriptions` | ✅ | accepts `{ text }` (typed fallback) **or** audio (`telegramFileId`/`audioUrl`); audio proxies to `darkbox-transcriber` when `TRANSCRIBER_URL` is set, else `503 transcriber_not_configured`. |
+| `POST /api/whispers/transcriptions` | ✅ | accepts `{ text }` (typed fallback) **or** a Telegram `telegramFileId`; no arbitrary `audioUrl` (SSRF-safe). Audio proxies to `darkbox-transcriber` when `TRANSCRIBER_URL` is set, else `503 transcriber_not_configured`. |
 | `GET /api/whispers/transcriptions/{id}` | ✅ | per-user isolation (others get `403`). |
 | `POST /api/whispers/transcriptions/{id}/confirm` | ✅ | returns `instructionHash` + `commitmentPayload`. |
 | `POST /api/deposit-intents` | 🟡 | returns a real intent shape (`depositAddress` = bridge escrow); confirmation/mint is the bridge watcher's job. |

@@ -36,6 +36,27 @@ test("missing audio is rejected", async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test("a path-traversal / non-token telegramFileId is rejected (SSRF guard)", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/whispers/transcriptions",
+    payload: { telegramFileId: "../../etc/passwd" },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test("arbitrary audioUrl is no longer an accepted field", async () => {
+  // audioUrl is dropped from the schema; with no audioBase64/telegramFileId this
+  // must fall through to need_audio, never fetch the URL.
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/whispers/transcriptions",
+    payload: { audioUrl: "http://169.254.169.254/latest/meta-data" },
+  });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.json().error, "need_audio");
+});
+
 test("unknown whisper id is 404", async () => {
   const res = await app.inject({ method: "GET", url: "/api/whispers/transcriptions/nope" });
   assert.equal(res.statusCode, 404);

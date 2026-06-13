@@ -22,10 +22,12 @@ import { newId } from "../ids.js";
 import { instructionHash, transcriptHash, audioHash } from "../commitment.js";
 import { upstreamJson } from "../upstream.js";
 
+// NOTE: no arbitrary `audioUrl`. Accepting a public URL here and forwarding it to
+// the private transcriber would be an SSRF / resource-fetch vector from the
+// confidential plane. Audio enters only as a Telegram file id or typed text.
 const createBody = z.object({
   text: z.string().min(1).max(100000).optional(),
   telegramFileId: z.string().max(512).optional(),
-  audioUrl: z.string().url().max(2048).optional(),
   languageHint: z.string().max(16).optional(),
 });
 
@@ -54,8 +56,8 @@ export async function whispersRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_body", detail: parsed.error.issues });
     }
-    const { text, telegramFileId, audioUrl, languageHint } = parsed.data;
-    const hasAudio = Boolean(telegramFileId || audioUrl);
+    const { text, telegramFileId, languageHint } = parsed.data;
+    const hasAudio = Boolean(telegramFileId);
 
     if (!text && !hasAudio) {
       return reply.status(400).send({ error: "need_text_or_audio" });
@@ -81,13 +83,13 @@ export async function whispersRoutes(app: FastifyInstance): Promise<void> {
         }>(`${config.transcriberUrl}/api/whispers/transcriptions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ telegramFileId, audioUrl, languageHint }),
+          body: JSON.stringify({ telegramFileId, languageHint }),
           timeoutMs: 20000,
         });
         transcript = r.transcript;
         language = r.language ?? language;
         durationMs = r.durationMs ?? 0;
-        aHash = r.audioHash ?? audioHash(telegramFileId ?? audioUrl ?? "");
+        aHash = r.audioHash ?? audioHash(telegramFileId ?? "");
         source = "audio";
       } catch (err) {
         req.log.error({ err }, "transcriber upstream failed");

@@ -5,8 +5,8 @@
  *  GET  /api/whispers/transcriptions/:whisperId — poll draft (no raw audio)
  *  POST /api/whispers/transcriptions/:whisperId/confirm — confirm/edit → commit
  *
- * Accepts audio as base64 JSON, an `audioUrl`, or a `telegramFileId` (resolved
- * via the bot file API when `TELEGRAM_FILE_BASE_URL` is set). The confirmed
+ * Accepts audio as base64 JSON or a sanitized `telegramFileId` (resolved against
+ * the trusted `TELEGRAM_FILE_BASE_URL` only — no arbitrary URLs). The confirmed
  * transcript is the instruction preimage; its hash is what the gateway commits.
  */
 import type { FastifyInstance } from "fastify";
@@ -19,10 +19,14 @@ import { audioHash, transcriptHash, instructionHash } from "./hash.js";
 
 const newId = () => `whsp_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
 
+// No arbitrary `audioUrl`: the only remote fetch is to the operator-configured,
+// trusted Telegram file base, addressed by a sanitized file id (no SSRF surface).
+// Audio otherwise arrives as uploaded bytes.
 const createBody = z.object({
   audioBase64: z.string().optional(),
-  audioUrl: z.string().url().max(2048).optional(),
-  telegramFileId: z.string().max(512).optional(),
+  // Telegram file ids are URL-safe tokens; reject anything else to prevent
+  // path traversal / host injection when composing the fetch URL.
+  telegramFileId: z.string().max(512).regex(/^[A-Za-z0-9_-]+$/).optional(),
   languageHint: z.string().max(16).optional(),
 });
 
@@ -51,7 +55,7 @@ export async function whisperRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_body", detail: parsed.error.issues });
     }
-    const { audioBase64, audioUrl, telegramFileId, languageHint } = parsed.data;
+    const { audioBase64, telegramFileId, languageHint } = parsed.data;
 
     let audio: Uint8Array | undefined;
     if (audioBase64) {
@@ -62,8 +66,10 @@ export async function whisperRoutes(app: FastifyInstance): Promise<void> {
       audio = new Uint8Array(buf);
     }
 
-    let resolvedUrl = audioUrl;
-    if (!audio && !resolvedUrl && telegramFileId && config.telegramFileBaseUrl) {
+    // The only remote fetch target is the trusted Telegram file base + a
+    // sanitized id (validated by the schema regex above).
+    let resolvedUrl: string | undefined;
+    if (!audio && telegramFileId && config.telegramFileBaseUrl) {
       resolvedUrl = `${config.telegramFileBaseUrl}/${telegramFileId}`;
     }
     if (!audio && !resolvedUrl && !telegramFileId) {

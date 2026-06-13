@@ -40,9 +40,15 @@ async function httpTranscribe(input: TranscribeInput): Promise<TranscribeResult>
   if (!config.sttUrl) throw new Error("STT_URL not configured for http mode");
   let audio = input.audio;
   if (!audio && input.audioUrl) {
-    const r = await fetch(input.audioUrl);
+    const r = await fetch(input.audioUrl, { signal: AbortSignal.timeout(20000) });
     if (!r.ok) throw new Error(`fetch audio failed: ${r.status}`);
-    audio = new Uint8Array(await r.arrayBuffer());
+    // Resource-exhaustion guard: reject oversized bodies up front via
+    // Content-Length, and again after reading in case the header lied.
+    const declared = Number(r.headers.get("content-length") ?? "0");
+    if (declared > config.maxAudioBytes) throw new Error("audio too large");
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.byteLength > config.maxAudioBytes) throw new Error("audio too large");
+    audio = buf;
   }
   if (!audio) throw new Error("no audio bytes to transcribe");
 

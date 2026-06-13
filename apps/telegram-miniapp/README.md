@@ -3,7 +3,7 @@
 Telegram Mini App experiment for DarkBox onboarding probes: browser microphone support and Blink cross-chain stablecoin deposit UX.
 
 - Primary bot: `@daemonhall_bot` (menu button: **Enter Daemon Hall**)
-- Legacy experiment bot: `@darkbox_mic_lab_bot` (testmic bot; currently points at `/dynamic-flow.html` for the cross-chain deposit lab)
+- Legacy experiment bot: `@darkbox_mic_lab_bot` has been repurposed as the separate admin bot (`Daemon Hall Admin`); do not point it at the player Mini App.
 - Public URL: `https://darkbox-mic.repo.box/`
 - Cross-chain deposit test URL: `https://darkbox-mic.repo.box/dynamic-flow.html`
 - Runtime: static files served from repo.box VPS Caddy
@@ -38,7 +38,7 @@ Do not put the private key in client code or public env vars. For a real DarkBox
 
 ## Cross-chain deposit lab
 
-The separate funding lab lives at `/dynamic-flow.html` so it can be opened from the legacy `@darkbox_mic_lab_bot` without touching the main Daemon Hall Mini App bot.
+The separate funding lab lives at `/dynamic-flow.html` for direct testing. Do not attach admin/operator surfaces to this player Mini App; those live under `apps/admin-miniapp` and `https://daemonhall-admin.repo.box/`.
 
 This page uses `@swype-org/deposit` / Blink hosted deposit flow. It signs a payment request through `/api/blink/sign-payment`, locked server-side to:
 

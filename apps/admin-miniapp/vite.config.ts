@@ -8,9 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        web: resolve(__dirname, 'web.html'),
-        daemons: resolve(__dirname, 'daemons.html'),
-        dynamicFlow: resolve(__dirname, 'dynamic-flow.html'),
+        rawData: resolve(__dirname, 'raw-data.html'),
       },
     },
   },

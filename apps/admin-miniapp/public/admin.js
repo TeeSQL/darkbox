@@ -4,15 +4,22 @@ tg?.expand?.();
 
 const endpointGroups = [
   {
-    id: 'snapshot',
-    title: 'Market snapshot',
+    id: 'source-info',
+    title: 'Admin source',
     endpoints: [
-      { id: 'snapshot', label: 'Mini App snapshot', path: '/api/market-snapshot', critical: true },
+      { id: 'source-info', label: 'Admin source info', path: '/api/source-info', critical: true },
+    ],
+  },
+  {
+    id: 'snapshot',
+    title: 'Operator snapshot',
+    endpoints: [
+      { id: 'snapshot', label: 'Admin market snapshot', path: '/api/market-snapshot', critical: true },
     ],
   },
   {
     id: 'public',
-    title: 'Public indexer',
+    title: 'Indexer observer',
     endpoints: [
       { id: 'health', label: 'Indexer health', path: '/public/health', critical: true },
       { id: 'game', label: 'Game', path: '/public/game', critical: true },
@@ -33,7 +40,7 @@ const endpointGroups = [
   },
   {
     id: 'operator-pending',
-    title: 'Privileged admin — pending auth',
+    title: 'Privileged controls — pending auth',
     endpoints: [
       { id: 'hidden-orders', label: 'Hidden orders', path: null, pending: 'Needs authenticated operator API before exposing in Mini App.' },
       { id: 'positions', label: 'Positions / balances', path: null, pending: 'Needs authenticated operator API and reveal-safe policy.' },
@@ -125,7 +132,7 @@ async function loadOverview() {
   set('#admin-market-count', compactNumber(activity.activeMarkets ?? markets.length));
   set('#admin-market-note', `${markets.length} market payloads loaded`);
   set('#admin-agent-count', compactNumber(activity.activeAgents ?? feedData.agents ?? feedData.agentCount ?? 0));
-  set('#admin-agent-note', feedData.runId ? `run ${feedData.runId}` : 'feed summary / public aggregate');
+  set('#admin-agent-note', feedData.runId ? `run ${feedData.runId}` : 'feed summary / operator-safe aggregate');
   set('#admin-trade-count', compactNumber(activity.totalTrades ?? 0));
   set('#admin-trade-note', `volume ${activity.totalVolume ?? '0'}`);
 

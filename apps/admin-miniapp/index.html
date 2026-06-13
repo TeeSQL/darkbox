@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260613-admin-console" />
+    <link rel="stylesheet" href="/styles.css?v=20260613-admin-split" />
   </head>
   <body class="admin-page">
     <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
@@ -21,11 +21,10 @@
         <div>
           <p class="eyebrow">operator console</p>
           <h1 class="admin-title">Daemon Hall Admin</h1>
-          <p class="admin-sub">Live test controls and raw observability. This surface is for operators; production hidden-state boundaries still apply.</p>
+          <p class="admin-sub">Operator-only surface for monitoring, safe data inspection, and future privileged controls. No player hall, no public onboarding, no deposit UX.</p>
         </div>
         <div class="admin-actions">
-          <a class="btn-ghost" href="/">hall</a>
-          <a class="btn-ghost" href="/dynamic-flow.html">deposit lab</a>
+          <a class="btn-ghost" href="/raw-data.html#source-info">source info</a>
           <a class="btn-primary" href="/raw-data.html">raw data <span class="ret">↵</span></a>
         </div>
       </header>
@@ -59,14 +58,14 @@
 
       <section class="admin-panel">
         <div class="admin-panel-head">
-          <div><span class="k">ADMIN MAP</span><h2>Things wired here</h2></div>
+          <div><span class="k">ADMIN MAP</span><h2>Operator surfaces</h2></div>
         </div>
         <div class="admin-links">
-          <a href="/raw-data.html#snapshot"><strong>Market snapshot</strong><span>game, markets, leaderboard, activity</span></a>
-          <a href="/raw-data.html#public"><strong>Public indexer</strong><span>health, datapoints, timeseries, reveal status</span></a>
+          <a href="/raw-data.html#source-info"><strong>Source info</strong><span>admin host, configured feed, indexer source hash</span></a>
+          <a href="/raw-data.html#snapshot"><strong>Market snapshot</strong><span>operator-safe game, markets, leaderboard, activity</span></a>
+          <a href="/raw-data.html#public"><strong>Indexer observer</strong><span>health, datapoints, timeseries, reveal status</span></a>
           <a href="/raw-data.html#agent-feed"><strong>Agent feed</strong><span>runner summary and billboard-safe activity</span></a>
-          <a href="/dynamic-flow.html"><strong>Dynamic Flow</strong><span>deposit intent lab and settlement memo shape</span></a>
-          <a href="/daemons.html"><strong>Daemon gallery</strong><span>internal portrait pool and shader preview</span></a>
+          <a href="/raw-data.html#operator-pending"><strong>Pending privileged controls</strong><span>approvals, positions, resolution, agent control</span></a>
         </div>
       </section>
 
@@ -87,6 +86,6 @@
       </section>
     </main>
 
-    <script src="/admin.js?v=20260613-admin-console" type="module"></script>
+    <script src="/admin.js?v=20260613-admin-split" type="module"></script>
   </body>
 </html>

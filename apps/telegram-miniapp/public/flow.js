@@ -60,6 +60,7 @@ let listening = false;
 let wantedListening = false;
 let recognitionBaseText = '';
 let recognitionFinalText = '';
+let activeVoiceTarget = 'terminal';
 let selectedStake = 5;
 
 
@@ -463,7 +464,21 @@ function setTerminalVoiceState(state = 'idle') {
   if (terminalWhisperStatus && active) terminalWhisperStatus.textContent = 'recording in private terminal. click mic again to stop.';
 }
 
+function setMainVoiceState(state = 'idle') {
+  const active = state === 'recording-hold';
+  window.clearTimeout(mainMicPulseTimer);
+  voiceButton?.classList.toggle('listening', active);
+  voiceButton?.classList.toggle('arming', state === 'arming');
+  voiceButton?.setAttribute('aria-pressed', active || state === 'arming' ? 'true' : 'false');
+  voiceButton?.setAttribute('aria-label', active ? 'Release to stop recording' : 'Hold to speak');
+  if (whisperStatus && active) whisperStatus.textContent = 'recording. release the mic to stop.';
+}
+
 function setVoiceButtonState(active) {
+  if (activeVoiceTarget === 'main') {
+    setMainVoiceState(active ? 'recording-hold' : 'idle');
+    return;
+  }
   setTerminalVoiceState(active ? 'recording-toggle' : 'idle');
 }
 
@@ -476,14 +491,19 @@ function ensureRecognition() {
   recognition.onstart = () => {
     listening = true;
     setVoiceButtonState(true);
-    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording in private terminal. click mic again to stop.';
+    const status = activeVoiceTarget === 'main' ? whisperStatus : terminalWhisperStatus;
+    if (status) status.textContent = activeVoiceTarget === 'main'
+      ? 'recording. release the mic to stop.'
+      : 'recording in private terminal. click mic again to stop.';
   };
   recognition.onerror = () => {
     wantedListening = false;
     listening = false;
     setVoiceButtonState(false);
     setTerminalVoiceState('idle');
-    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'voice broke. type or try again.';
+    setMainVoiceState('idle');
+    const status = activeVoiceTarget === 'main' ? whisperStatus : terminalWhisperStatus;
+    if (status) status.textContent = 'voice broke. type or try again.';
   };
   recognition.onend = () => {
     listening = false;
@@ -492,11 +512,16 @@ function ensureRecognition() {
       window.setTimeout(() => {
         if (!wantedListening || listening) return;
         try { recognition.start(); }
-        catch (_) { wantedListening = false; handleTerminalInput(); }
+        catch (_) {
+          wantedListening = false;
+          if (activeVoiceTarget === 'main') handleInput();
+          else handleTerminalInput();
+        }
       }, 120);
       return;
     }
-    handleTerminalInput();
+    if (activeVoiceTarget === 'main') handleInput();
+    else handleTerminalInput();
   };
   recognition.onresult = (event) => {
     let interim = '';
@@ -506,28 +531,33 @@ function ensureRecognition() {
       else interim += result[0].transcript;
     }
     const spoken = `${recognitionFinalText}${interim}`.trim();
-    if (terminalInput) terminalInput.value = [recognitionBaseText, spoken].filter(Boolean).join(recognitionBaseText && spoken ? ' ' : '').trimStart();
-    handleTerminalInput();
+    const targetInput = activeVoiceTarget === 'main' ? input : terminalInput;
+    if (targetInput) targetInput.value = [recognitionBaseText, spoken].filter(Boolean).join(recognitionBaseText && spoken ? ' ' : '').trimStart();
+    if (activeVoiceTarget === 'main') handleInput();
+    else handleTerminalInput();
   };
   return recognition;
 }
 
-async function beginVoice() {
+async function beginVoice(target = 'terminal') {
+  activeVoiceTarget = target;
+  const status = target === 'main' ? whisperStatus : terminalWhisperStatus;
   if (!SpeechRecognition) {
     try { await requestMicFallback(); }
-    catch (_) { if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.'; }
+    catch (_) { if (status) status.textContent = 'mic denied. type instead.'; }
     return false;
   }
   try {
-    const allowed = await requestMicAccess('mic ready. terminal recording starts now.');
+    const allowed = await requestMicAccess(target === 'main' ? 'mic ready. hold to speak.' : 'mic ready. terminal recording starts now.');
     if (!allowed) return false;
   } catch (_) {
-    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
+    if (status) status.textContent = 'mic denied. type instead.';
     return false;
   }
   const recognizer = ensureRecognition();
   if (!recognizer) return false;
-  recognitionBaseText = terminalInput?.value.trim() || '';
+  const targetInput = target === 'main' ? input : terminalInput;
+  recognitionBaseText = targetInput?.value.trim() || '';
   recognitionFinalText = '';
   wantedListening = true;
   try { recognizer.start(); }
@@ -536,19 +566,58 @@ async function beginVoice() {
 }
 
 function stopVoice(statusText = 'recording stopped. review before sealing.') {
+  const target = activeVoiceTarget;
   wantedListening = false;
-  setTerminalVoiceState('stopping');
-  if (terminalWhisperStatus) terminalWhisperStatus.textContent = statusText;
+  if (target === 'terminal') setTerminalVoiceState('stopping');
+  else setMainVoiceState('idle');
+  const status = target === 'main' ? whisperStatus : terminalWhisperStatus;
+  if (status) status.textContent = statusText;
   try { recognition?.stop?.(); }
   catch (_) {}
   if (!listening) setVoiceButtonState(false);
-  handleTerminalInput();
+  if (target === 'main') handleInput();
+  else handleTerminalInput();
 }
 
 async function startVoice(event) {
   event.preventDefault();
   if (wantedListening || listening) stopVoice();
-  else await beginVoice();
+  else await beginVoice('terminal');
+}
+
+let mainHoldStartTimer = 0;
+let mainHoldActive = false;
+
+function clearMainHoldTimer() {
+  window.clearTimeout(mainHoldStartTimer);
+  mainHoldStartTimer = 0;
+}
+
+function startMainHoldToSpeak(event) {
+  if (!voiceButton) return;
+  event.preventDefault();
+  clearMainHoldTimer();
+  mainHoldActive = false;
+  setMainVoiceState('arming');
+  mainHoldStartTimer = window.setTimeout(async () => {
+    mainHoldActive = true;
+    await beginVoice('main');
+  }, 180);
+}
+
+function stopMainHoldToSpeak(event) {
+  if (!voiceButton) return;
+  event?.preventDefault?.();
+  if (mainHoldStartTimer && !mainHoldActive) {
+    clearMainHoldTimer();
+    void grantMicForVisuals({ preventDefault() {} });
+    return;
+  }
+  clearMainHoldTimer();
+  if (mainHoldActive) {
+    mainHoldActive = false;
+    if (activeVoiceTarget === 'main') stopVoice('recording stopped. review before sealing.');
+  }
 }
 
 async function grantMicForVisuals(event) {
@@ -604,7 +673,10 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
-voiceButton?.addEventListener('click', grantMicForVisuals);
+voiceButton?.addEventListener('pointerdown', startMainHoldToSpeak);
+voiceButton?.addEventListener('pointerup', stopMainHoldToSpeak);
+voiceButton?.addEventListener('pointercancel', stopMainHoldToSpeak);
+voiceButton?.addEventListener('pointerleave', (event) => { if (mainHoldActive) stopMainHoldToSpeak(event); });
 terminalInput?.addEventListener('input', handleTerminalInput);
 terminalSealButton?.addEventListener('click', sealTerminalWhisper);
 terminalVoiceButton?.addEventListener('click', startVoice);

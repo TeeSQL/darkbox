@@ -174,7 +174,7 @@
 
 .voice-state{display:none!important}.voice-button svg{width:28px;height:28px}@media(max-width:520px){.whisper-field{gap:10px;min-height:112px;padding-block:10px 12px}.voice-button{width:76px;height:76px;min-width:76px}.voice-button svg{width:30px;height:30px}}
 #whisper-status{min-height:44px}.terminal-compose-status{min-height:34px}</style>
-<link rel="stylesheet" href="/styles.css?v=20260613-mic-click-feedback" />
+<link rel="stylesheet" href="/styles.css?v=20260613-hold-to-speak" />
 </head>
 <body>
 
@@ -211,7 +211,7 @@
       <div class="whisper-field">
         <span class="prompt">&gt;</span>
         <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence…" aria-label="whisper"></textarea>
-        <button id="voice-button" class="voice-button" type="button" aria-label="Allow microphone for hall effects" aria-pressed="false">
+        <button id="voice-button" class="voice-button" type="button" aria-label="Hold to speak" aria-pressed="false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
         </button>
       </div>
@@ -394,6 +394,6 @@
 </div>
 
 <script src="/src/daemon-reveal.ts" type="module"></script>
-<script src="/flow.js?v=20260613-mic-click-feedback" type="module"></script>
+<script src="/flow.js?v=20260613-hold-to-speak" type="module"></script>
 </body>
 </html>

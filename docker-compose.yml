@@ -63,7 +63,7 @@ services:
   # the gateway serves its own state + the typed-instruction whisper fallback.
   darkbox-gateway:
     build: ./services/gateway
-    networks: [public_net]
+    networks: [public_net, gateway_net]
     depends_on: [darkbox-indexer]
     ports:
       - "8090:8090"
@@ -79,8 +79,24 @@ services:
       PROMO_AMOUNT: ${PROMO_AMOUNT:-5.00}
       PROMO_UNLOCK_AT: ${PROMO_UNLOCK_AT:-2026-06-15T17:00:00.000Z}
       REGISTRATION_FREEZE_AT: ${REGISTRATION_FREEZE_AT:-2026-06-14T09:00:00.000Z}
-      # TRANSCRIBER_URL: http://darkbox-transcriber:8095   # set once transcriber lands
+      TRANSCRIBER_URL: http://darkbox-transcriber:8095
       # BRIDGE_URL: http://darkbox-bridge:8081             # set once bridge exposes HTTP
+
+  # Private whisper transcription (hidden/TEE plane). Reachable only from the
+  # gateway over gateway_net; egress_net lets it call an STT provider in http
+  # mode. Defaults to STT_MODE=stub so the stack runs offline.
+  darkbox-transcriber:
+    build: ./services/transcriber
+    networks: [gateway_net, egress_net]
+    environment:
+      PORT: "8095"
+      STT_MODE: ${STT_MODE:-stub}
+      STT_URL: ${STT_URL:-}
+      STT_API_KEY: ${STT_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-whisper-1}
+      RETENTION_MS: ${TRANSCRIBER_RETENTION_MS:-900000}
+    expose:
+      - "8095"
 
   darkbox-reveal:
     build: ./services/reveal
@@ -96,6 +112,11 @@ networks:
     internal: true
   public_net: {}
   egress_net: {}
+  # Internal-only link between the public gateway and private backend services
+  # (transcriber now; signer/bridge HTTP later). Keeps the gateway OFF hidden_net
+  # while still giving it a private channel to confidential services.
+  gateway_net:
+    internal: true
 
 volumes:
   node_data: {}

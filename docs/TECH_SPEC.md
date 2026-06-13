@@ -26,8 +26,10 @@ Core promise:
 - Frontier-compatible prediction-market contracts deployed inside the hidden chain.
 - Standalone indexer service with internal and public API surfaces.
 - Agent runner service that reads constrained observations and submits trades.
+- Whisper/instruction transcription endpoint for user voice/audio instructions, with confirmation before commitment.
 - Public frontend that never touches hidden RPC or privileged APIs.
 - USDC funding/registration architecture with one concrete onboarding path and a direct Base USDC fallback.
+- Disposable invite links/codes that register users with a $5 promo shadow USDC starter credit, so hackathon participants can play without depositing first.
 - ENS identity/commitment integration that is meaningful, not cosmetic.
 - Leaderboard exposing public-safe PnL/rank data plus aggregate activity stats that prove the market is alive without leaking per-agent balances or positions.
 - Reveal bundle builder for post-game audit/replay.
@@ -38,6 +40,7 @@ Core promise:
 - One sponsor-aligned deposit adapter: Blink, Privy, Dynamic/Fireblocks, LI.FI, or Arc.
 - CVM or TEE deployment proof/attestation around the same Docker topology.
 - Replay UI that can scrub through revealed trades and leaderboard changes.
+- Telegram bot / Mini App surface for hackathon-floor onboarding, registration, deposit handoff, leaderboard viewing, and reveal links.
 - Per-agent sandbox containers instead of one shared agent runner.
 
 ### 2.3 Explicit Non-Goals
@@ -54,6 +57,7 @@ Core promise:
 These are non-negotiable. Coding agents should treat any violation as a bug.
 
 - Public frontend talks only to public APIs.
+- Telegram bot / Mini App, if shipped, is treated as a public frontend surface and talks only to the same public APIs.
 - Public frontend never connects to hidden node RPC.
 - Hidden node RPC is private-network only.
 - Indexer is a standalone service, not a thin frontend proxy.
@@ -64,6 +68,7 @@ These are non-negotiable. Coding agents should treat any violation as a bug.
 - Agents cannot call arbitrary tools or fetch arbitrary URLs unless explicitly allowed by runtime policy.
 - Agents receive observations only through constrained internal indexer endpoints and approved external context feeds.
 - Real USDC stays in the public escrow/onboarding layer; hidden chain uses synthetic game credit.
+- Promo signup credits are explicitly marked as invite-funded shadow USDC and must be anti-sybil bounded, auditable, and governed by a simple withdrawal lock: accounts that claimed the $5 bonus cannot withdraw until Sunday 17:00 event-local time.
 - Deposits are idempotent; the same public funding event must never mint hidden credit twice.
 - Withdrawals are disabled during live play.
 - Registration and instruction commitments freeze before game start.
@@ -97,7 +102,7 @@ Public:
 
 Private to the registered user:
 
-- Their deposit/funding status.
+- Their deposit/funding status, including whether they entered through a promo invite.
 - Their own registration status.
 - Their own agent identity.
 - Their instruction commitment hash.
@@ -109,7 +114,7 @@ Shared external context for all agents:
 - Hackathon project submissions list.
 - Project/team metadata.
 - Limited market-relevant public context.
-- Optional ETH/USDC price feed if the trading surface needs it.
+- No external price feed in MVP; DarkBox is USDC-collateralized prediction markets only.
 
 ### 4.2 Hidden During Game
 
@@ -148,10 +153,12 @@ Shared external context for all agents:
 ```text
 apps/
   frontend/        Public web UI. Talks only to public APIs.
+  telegram-miniapp/ Stretch public Telegram Mini App surface, same API boundary.
 
 services/
   indexer/         Hidden-chain indexer, internal APIs, public leaderboard APIs.
   agents/          Agent prompts, wallets, model loop, action validation, tx submission.
+  transcriber/     TEE/CVM voice/whisper transcription API for private user instructions.
   bridge/          Deposits, hidden credits, settlement coordination.
   ens/             ENS subnames and commitment/reveal record updates.
   reveal/          Reveal export, replay bundle, settlement artifacts.
@@ -196,6 +203,7 @@ Purpose: canonical derived state service.
 Responsibilities:
 
 - Ingest hidden-chain blocks, events, logs, and transactions.
+- Own the hidden Postgres database for indexed state. In production this Postgres instance should live with the indexer inside the indexer CVM boundary, not in the public frontend or agent container.
 - Maintain indexed tables for:
   - agents
   - markets
@@ -207,6 +215,7 @@ Responsibilities:
   - realized PnL
   - unrealized PnL
   - leaderboard snapshots
+  - internal agent turn logs / action commitments
   - reveal exports
 - Expose internal APIs for agents, bridge, and reveal service.
 - Expose public APIs for frontend.
@@ -217,6 +226,60 @@ Must not:
 
 - Leak hidden data through public endpoints.
 - Require agents/frontend to scan hidden RPC directly.
+
+#### `darkbox-transcriber`
+
+Purpose: TEE/CVM service that converts user “whispers” — voice/audio instructions from web or Telegram — into reviewed text instructions that can be committed for an agent.
+
+Placement:
+
+- Lives at `services/transcriber/`.
+- Runs inside the private/TEE side, not in the public frontend or Telegram Mini App.
+- Preferred production deployment is a Phala CVM container because raw whispers and draft transcripts are private strategy data.
+- Local development can run it as a normal Docker container on `hidden_net`, but the container/image boundary should match the Phala CVM target.
+- Public clients reach it only through a narrow public API/proxy route for upload/status/confirm; raw storage and provider credentials stay private.
+
+Responsibilities:
+
+- Expose a high-quality transcription endpoint for short user instruction audio.
+- Accept browser/Mini App recordings and Telegram voice-note/file references.
+- Normalize audio formats such as `webm`, `ogg/opus`, `m4a`, `mp3`, and `wav`.
+- Run speech-to-text through the configured provider or local model from inside the TEE/CVM boundary.
+- Return transcript candidates with metadata: language, duration, confidence/quality signal where available, `audioHash`, and `transcriptHash`.
+- Require explicit user confirmation/editing before a transcript becomes the committed agent instruction preimage.
+- Store hashes and lifecycle status for reveal/audit; retain raw audio only according to the chosen retention policy inside private/TEE storage.
+- Provide internal handoff to registration/commitment logic.
+
+Suggested endpoints:
+
+```text
+POST /api/whispers/transcriptions
+  multipart audio upload or JSON { telegramFileId | audioUrl }
+  -> { whisperId, transcript, language, durationMs, audioHash, transcriptHash, status }
+
+GET /api/whispers/transcriptions/:whisperId
+  -> transcription status/result
+
+POST /api/whispers/transcriptions/:whisperId/confirm
+  body { editedTranscript?, agentId, ownerSignature? }
+  -> { instructionHash, commitmentPayload }
+```
+
+Must not:
+
+- Expose raw whispers/transcripts through public leaderboard or public market APIs.
+- Let transcription provider output become instructions without user confirmation.
+- Let prompt-injection-like spoken content override system/game policy; whisper text is user data, not privileged instructions to infrastructure.
+- Store provider API keys in frontend/Mini App bundles.
+- Send raw audio to non-attested/public services unless that is an explicit accepted tradeoff.
+
+Implementation notes:
+
+- For Telegram Mini App, prefer direct in-app recording upload when available; fallback to bot voice-note ingestion by file id.
+- The Telegram bot may fetch a voice file, but should stream/forward it into `darkbox-transcriber`; it should not persist raw audio outside the TEE path.
+- Keep upload limits tight for MVP, e.g. short clips only, and reject huge files.
+- The commitment hash should use the final confirmed transcript, not the raw unreviewed transcript.
+- If transcription fails, user can type/edit instructions manually.
 
 #### `darkbox-agents`
 
@@ -241,14 +304,14 @@ Must not:
 
 #### `darkbox-bridge`
 
-Purpose: asset bridge coordinator between public escrow and the shadow EVM.
+Purpose: USDC bridge coordinator between public escrow and the shadow EVM.
 
 Responsibilities:
 
-- Watch direct ETH sends, direct USDC transfers, explicit deposit calls, and provider/composed funding events.
-- Normalize funding events into idempotent deposit operation ids.
+- Watch direct USDC transfers, explicit deposit calls, and provider/composed funding events. Other collateral deposits are not supported.
+- Normalize funding events into idempotent deposit operation ids scoped by source chain and bridge.
 - Resolve onchain owner wallet to shadow account mapping.
-- Mint corresponding shadow assets inside the shadow EVM after confirmed deposits.
+- Mint shadow USDC inside the shadow EVM after confirmed deposits.
 - Accept user-signed withdrawal commands.
 - Force a shadow-EVM burn/transfer of withdrawable available balance.
 - Request signing-service authorization after shadow burn confirmation.
@@ -295,6 +358,32 @@ Must not:
 - Call internal indexer endpoints.
 - Embed private API URLs or privileged tokens.
 
+#### `darkbox-telegram-miniapp`
+
+Purpose: stretch public Telegram bot / Mini App surface for faster hackathon onboarding.
+
+Responsibilities:
+
+- Bot entrypoint that explains the game and opens the Mini App.
+- Telegram-native onboarding flow for registration, spoken “whisper” instruction capture/transcription, instruction entry, and deposit handoff.
+- Public leaderboard, market list, aggregate activity, and reveal countdown views.
+- Authenticated user-scoped status using Telegram init data plus wallet ownership where needed.
+- Deep links back to the web app, deposit flow, and reveal/replay bundle.
+
+Must not:
+
+- Call hidden node RPC.
+- Call internal indexer endpoints.
+- Expose orderbooks, raw trades, positions, prompts, or per-agent balances beyond the allowed self-status view.
+- Become a second source of truth; it is a thin public client over bridge/indexer public APIs.
+
+Implementation notes:
+
+- Keep the Mini App as a frontend deployment target, not a privileged service.
+- Use Telegram mainly to reduce onboarding friction during the hackathon: QR/link in the venue chat, open bot, register, fund, watch.
+- If wallet UX is tight, use the Mini App for discovery/status and deep-link to the web funding flow.
+- If microphone upload is unreliable in Telegram’s in-app browser, fall back to bot voice notes and transcribe by Telegram file id.
+
 #### `darkbox-reveal`
 
 Purpose: final audit package builder.
@@ -311,7 +400,8 @@ Responsibilities:
 
 ### 6.2 Supporting Services
 
-- `darkbox-db`: Postgres for indexed state and metadata.
+- `darkbox-db`: Postgres for indexed state, internal agent turn logs, reveal exports, and metadata. In local Compose this is a separate container on `hidden_net`; in production it belongs to the indexer CVM/security boundary.
+- `darkbox-transcriber`: TEE/CVM service for whisper transcription. It should be deployed with Phala if possible, because it handles raw user audio and private strategy transcripts before commitment.
 - `darkbox-cache`: optional Redis for locks/scheduling.
 - `darkbox-attester`: optional Chainlink/Phala/CVM attestation adapter.
 - `darkbox-object-store`: optional MinIO or equivalent for reveal bundle staging.
@@ -324,8 +414,9 @@ Required networks:
 
 - `hidden_net`
   - internal-only
-  - includes node, indexer, agents, bridge, reveal, db
+  - includes node, indexer, agents, bridge, transcriber, reveal, db
   - carries hidden RPC and privileged APIs
+  - db is reachable by indexer/reveal only where possible; agents should write logs through indexer internal APIs, not direct DB connections
 
 - `public_net`
   - includes frontend and public side of indexer
@@ -342,6 +433,9 @@ Recommended rule:
 - Use mounted volumes only for chain data, DB data, and reveal artifacts.
 - Inject secrets through environment/secret files; never bake them into images.
 - Keep local Compose and CVM Compose as close as possible.
+- `darkbox-bridge` should be a separate container, not a separate CVM by default. It can cohabit with the hidden node/indexer/DB on `hidden_net`; only expose narrow public bridge endpoints through the public API/proxy.
+- `darkbox-transcriber` should be a separate container and preferably a Phala CVM because raw whispers are private user strategy input. If Phala capacity is limited, prioritize keeping raw audio and draft transcripts out of public infrastructure.
+- Treat `darkbox-signer` as the other strong future isolation candidate if a second CVM/enclave is available, because it owns the withdrawal authorization key.
 
 ## 8. Data Model
 
@@ -364,7 +458,33 @@ Fields:
 - `escrowAddress`
 - `hiddenChainId`
 
-### 8.2 Agent
+### 8.2 Invite Code / Signup Bonus
+
+Fields:
+
+- `inviteId`
+- `codeHash` or `telegramStartParamHash`
+- `campaignId`
+- `createdBy`
+- `bonusAmount`: fixed at 5 USDC-equivalent shadow credit for MVP
+- `maxUses`: default 1 for disposable links
+- `usesRemaining`
+- `expiresAt`
+- `claimedByOwner`
+- `claimedByAgentId`
+- `claimedAt`
+- `promoCreditMintRef`
+- `status`: `active | claimed | expired | revoked`
+
+Rules:
+
+- Invite codes are one-time-use by default; bounded-use campaign links are allowed only with explicit admin config.
+- A wallet/Telegram identity can claim at most one signup bonus per game unless admin overrides it.
+- The $5 bonus mints promo shadow USDC, not an untracked public deposit.
+- Accounts that claim the $5 bonus cannot withdraw anything until Sunday 17:00 event-local time. They can trade normally before then; the lock avoids live-game accounting complexity around promo principal versus profits.
+- Promo credit mints must appear in indexer/reveal accounting separately from real USDC deposits.
+
+### 8.3 Agent
 
 Fields:
 
@@ -384,7 +504,7 @@ Fields:
 - `createdAt`
 - `updatedAt`
 
-### 8.3 Market
+### 8.4 Market
 
 Fields:
 
@@ -393,7 +513,7 @@ Fields:
 - `question`
 - `description`
 - `outcomes`
-- `collateralAsset`
+- `collateralToken` fixed to USDC
 - `createdAt`
 - `resolveBy`
 - `status`: `open | paused | resolved | voided`
@@ -707,32 +827,35 @@ Validation rules:
 - Reject market proposals missing a resolution source.
 - Log rejected actions for reveal/audit.
 
-## 10. Deposits, Withdrawals, and Shadow Assets
+## 10. Deposits, Withdrawals, Promo Credits, and Shadow Assets
 
-The public bridge contract custodies real assets. The shadow EVM holds corresponding shadow assets used by agents for trading. Users may deposit any time and may withdraw withdrawable available balance any time, but cannot force liquidation of positions.
+The public bridge contract custodies real USDC. The shadow EVM holds corresponding shadow USDC used by agents for trading. Users may deposit any time and may withdraw withdrawable available balance any time, but cannot force liquidation of positions. Users can also enter through disposable invite links/codes that grant a $5 promo shadow USDC signup credit without requiring a deposit.
 
 Use `docs/DEPOSITS_WITHDRAWALS_SPEC.md` as the detailed source for:
 
-- direct ETH sends and direct USDC transfer detection
-- approve + `deposit(asset, amount, beneficiary)` flows
+- direct USDC transfer detection; other collateral deposits are not supported
+- disposable invite code/link claims and $5 promo shadow USDC starter-credit mints
+- approve + `deposit(amount, beneficiary)` flows
 - cross-chain/composed deposit compatibility
 - owner wallet to shadow account mapping
 - idempotent shadow minting
 - withdrawable available balance rules
-- user-signed withdrawal commands
+- user-signed withdrawal commands with destination chain/bridge
 - forced shadow burn/transfer before public withdrawal
-- signing-service withdrawal authorization
+- signing-service withdrawal authorization after shadow burn and any required destination-chain rebalance
 - multisig emergency withdrawals
 - failure recovery
 
 MVP decisions:
 
-- Canonical asset: USDC; ETH optional if useful.
+- Canonical asset: USDC only. Other collateral assets are not supported in the MVP.
 - Preferred public chain: Base unless sponsor requirements dictate otherwise.
-- Direct sends/transfers to the bridge must be detected offchain.
+- Direct sends/transfers to Base/Arc bridge contracts must be detected offchain.
 - Explicit `deposit(...)` is supported for app UX and LI.FI-style composed flows.
-- Shadow assets mint 1:1 against confirmed public deposits.
-- Withdrawals use user signature + shadow burn + signing-service authorization.
+- Real-deposit shadow USDC mints 1:1 against confirmed public deposits.
+- Promo shadow USDC mints only from valid disposable invite claims and is tracked separately from real-deposit credit.
+- Accounts that claimed the $5 invite bonus cannot withdraw until Sunday 17:00 event-local time; before then, the bonus is starter trading capital only.
+- Withdrawals use user signature + shadow burn + optional Base/Arc liquidity rebalance + signing-service authorization on the destination bridge.
 - No Merkle claims for normal withdrawals.
 - Emergency withdrawals remain multisig/admin-only.
 
@@ -778,9 +901,48 @@ runtimeHash = keccak256(model, toolsPolicy, systemPromptHash, actionSchemaVersio
 
 Do not store raw instructions in ENS before reveal.
 
-## 12. Hidden Chain and Frontier Markets
+## 12. Whisper Transcription and Instruction Commit
 
-### 12.1 Hidden Chain
+This belongs in `services/transcriber/` as `darkbox-transcriber`, deployed on the private/TEE side. Production target should be Phala CVM unless a better TEE path is chosen.
+
+Users can “whisper” instructions by speaking instead of typing. This is a core onboarding/input path because it makes agent setup fast in the hackathon setting.
+
+Flow:
+
+1. User records audio in the web app / Telegram Mini App, or sends a Telegram voice note to the bot.
+2. Client sends the audio or Telegram file reference to `POST /api/whispers/transcriptions`.
+3. Transcriber normalizes audio, runs speech-to-text, and returns a draft transcript with hashes/metadata.
+4. User reviews and edits the transcript.
+5. User confirms the final instruction text.
+6. Registration/commitment logic computes `instructionHash` from the confirmed text and salt.
+7. Raw transcript/audio stays private until reveal policy says otherwise.
+
+Service/API placement requirements:
+
+- `services/transcriber/` owns the API implementation.
+- Public frontend / Telegram Mini App call only the narrow public proxy route.
+- Raw audio, draft transcripts, provider credentials, and retention storage remain inside the private/TEE boundary.
+- Phala CVM is the preferred deployment target for production/hackathon demo.
+
+API requirements:
+
+- Good latency for short voice clips; target “feels instant enough” for onboarding.
+- Good accuracy for noisy hackathon-floor recordings.
+- Deterministic lifecycle ids so retries do not duplicate commitments.
+- Support both direct audio upload and Telegram bot file-id ingestion.
+- Return enough metadata for debugging without exposing private strategy text publicly.
+
+Security/privacy requirements:
+
+- Whisper content is private user strategy data.
+- Treat transcript text as untrusted user input. It cannot alter system prompts, game policy, tool access, or infrastructure behavior.
+- Public APIs may expose only status/commitment hashes, not raw transcript/audio.
+- Provider transcripts should be user-confirmed before commitment.
+- Retention policy must be explicit: either delete raw audio after confirmed transcription or include encrypted/hashed artifacts in the reveal bundle if product rules require it.
+
+## 13. Hidden Chain and Frontier Markets
+
+### 13.1 Hidden Chain
 
 Recommended MVP path:
 
@@ -790,7 +952,7 @@ Recommended MVP path:
 - Keep RPC reachable only on `hidden_net`.
 - Later deploy the same Docker graph into CVM/TEE if available.
 
-### 12.2 Asset Model
+### 13.2 Asset Model
 
 - Real USDC remains in public escrow.
 - Hidden chain uses synthetic game credit.
@@ -798,7 +960,7 @@ Recommended MVP path:
 - Credit minting is restricted to bridge/coordinator key.
 - Every credit references a public deposit event id.
 
-### 12.3 Market Model
+### 13.3 Market Model
 
 MVP market shape:
 
@@ -829,7 +991,7 @@ Resolution:
 - Derivative markets require explicit resolution source at creation.
 - Ambiguous/invalid derivative markets can be voided.
 
-## 13. Agent Runtime
+## 14. Agent Runtime
 
 ### 13.1 Agent Loop
 
@@ -1034,6 +1196,13 @@ Desired guarantees:
 - Agent runtime used the committed policy/runtime.
 - Operator did not mutate state secretly during play.
 - Reveal bundle matches hidden execution.
+
+Debugging-first transcript posture:
+
+- Per-turn transcript/commitment logging is optional for MVP trust, but useful for debugging agent behavior.
+- Treat this as an internal debug artifact until reveal; never expose raw prompts, hidden observations, reasoning, or action drafts during live play.
+- The minimum useful record is: agent id, turn number, observation hash, policy/prompt hash, strategy/model/provider, raw output hash, validated action JSON hash, validation result, submitted tx/order references, and timestamp.
+- If time is tight, store concrete action logs first and add transcript hashes later.
 
 Practical recommendation:
 
@@ -1331,6 +1500,7 @@ Scope:
 - Random strategy modules: holder, maker, taker, split/merge exerciser, market proposer.
 - Wallet/signer abstraction.
 - Transaction submission stub or real hidden-chain path.
+- Optional internal turn transcript/commitment writer for debugging: persist hashes of observations, policy/prompt inputs, raw strategy output, validated action JSON, validation result, and submitted tx/order references. This should not block the trading loop.
 
 Done when:
 
@@ -1370,6 +1540,7 @@ Scope:
 - Manifest format.
 - Export indexed tables.
 - Export agent action logs.
+- Export optional internal turn transcript/commitment logs if they exist.
 - Export commitments.
 - Produce file hashes.
 
@@ -1377,35 +1548,42 @@ Done when:
 
 - a local simulated game produces a complete bundle.
 - bundle can be validated by a script.
+- missing optional transcript logs do not fail the MVP bundle as long as concrete action logs and state data are present.
 
-## 20. Demo Script
+## 21. Demo Script
 
 1. Open DarkBox landing page.
 2. User enters the dark-room/terminal onboarding flow.
-3. User creates an agent name and whispers instructions.
-4. User funds/registers agent.
-5. ENS/commitment record is created.
-6. Game starts.
-7. Several agents trade hidden markets.
-8. Public leaderboard updates, but no orderbook/trades/positions are visible.
-9. At deadline, game freezes.
-10. Winner/resolutions are applied.
-11. Reveal bundle is generated.
-12. Replay UI shows what happened inside the box.
-13. Signing-service authorized withdrawals are available for withdrawable shadow balances.
+3. User creates an agent name and whispers spoken instructions.
+4. Transcription endpoint returns a draft transcript.
+5. User confirms/edits the transcript.
+6. User funds/registers agent or claims invite bonus.
+7. ENS/commitment record is created.
+8. Game starts.
+9. Several agents trade hidden markets.
+10. Public leaderboard updates, but no orderbook/trades/positions are visible.
+11. At deadline, game freezes.
+12. Winner/resolutions are applied.
+13. Reveal bundle is generated.
+14. Replay UI shows what happened inside the box.
+15. Signing-service authorized withdrawals are available for withdrawable shadow balances.
 
-## 21. Open Decisions
+## 22. Open Decisions
 
 These should be resolved by humans or explicit project lead choice, not guessed by coding agents.
 
 - Exact sponsor/onboarding path for the first funding adapter.
+- Final transcription provider/local model and raw-audio retention policy for user whispers.
+- Exact Phala CVM packaging/deployment path for `darkbox-transcriber`, including whether it runs with local STT or calls an external STT provider from inside the TEE.
+- Exact event-local timezone/timestamp for the Sunday 17:00 invite-bonus withdrawal unlock.
+- Whether Telegram Mini App ships as stretch-only discovery/status, or also supports full registration + deposit handoff.
 - Whether raw user instructions are revealed after the game or only their hashes/runtime metadata.
 - Whether agents can create derivative markets in MVP or only trade the canonical market.
 - Whether agents can see full orderbooks or only constrained market observations.
 - Final CVM/TEE provider and attestation path.
 - Final resolution authority for derivative markets.
 
-## 22. Default Recommendation
+## 23. Default Recommendation
 
 For the hackathon build, optimize for a coherent end-to-end demo over maximal decentralization:
 
@@ -1415,7 +1593,10 @@ For the hackathon build, optimize for a coherent end-to-end demo over maximal de
 - Standalone indexer with strict public/internal API split.
 - Deterministic test agents first, LLM agents second.
 - Base USDC escrow/direct deposit fallback.
+- Disposable $5 invite bonus as the primary no-deposit onboarding path.
 - One sponsor onboarding adapter only.
+- Telegram Mini App as a high-leverage stretch goal after the core web/public API loop works.
+- Reliable whisper transcription endpoint for fast agent instruction onboarding.
 - ENS commitments for real audit value.
 - Reveal bundle before fancy replay UI.
 - CVM/attestation only after the local loop is stable.

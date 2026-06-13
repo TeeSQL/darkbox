@@ -121,7 +121,12 @@ JSON
       --agent "$AGENT" \
       --out "$ACTIONS_JSONL"
   done
-  SUMMARY=$(tail -n "${#AGENTS[@]}" "$ACTIONS_JSONL" | python3 -c 'import json,sys; rows=[json.loads(x) for x in sys.stdin if x.strip()]; print("; ".join(f"{r[\"agentId\"]}:{r[\"ok\"]}:{\",\".join(a[\"type\"] for a in r[\"tradeActions\"])}" for r in rows))')
+  SUMMARY=$(tail -n "${#AGENTS[@]}" "$ACTIONS_JSONL" | python3 <<'PYSUM' 
+import json, sys
+rows = [json.loads(x) for x in sys.stdin if x.strip()]
+print('; '.join('%s:%s:%s' % (r['agentId'], r['ok'], ','.join(a['type'] for a in r['tradeActions'])) for r in rows))
+PYSUM
+)
   log "turn=$TURN $SUMMARY"
   if [ "$RUN_SECONDS" != "0" ] && [ $(( $(date +%s) - START )) -ge "$RUN_SECONDS" ]; then
     log "run_seconds reached; exiting"

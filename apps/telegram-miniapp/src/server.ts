@@ -136,13 +136,43 @@ function normalizeLeaderboard(raw: unknown) {
   });
 }
 
+function sumNumeric(items: unknown[], key: string): number {
+  return items.reduce<number>((total, item) => {
+    const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+    return total + getNumber(row[key], 0);
+  }, 0);
+}
+
+async function fetchOrderbooks(markets: unknown[]) {
+  const ids = markets
+    .map((market) => market && typeof market === 'object' ? firstString(market as Record<string, unknown>, ['marketId', 'market_id', 'id']) : '')
+    .filter(Boolean);
+  const settled = await Promise.allSettled(ids.map(async (marketId) => {
+    const orderbook = await fetchIndexerJson(`/internal/markets/${marketId}/orderbook`);
+    const raw = orderbook && typeof orderbook === 'object' ? orderbook as Record<string, unknown> : {};
+    const openOrders = Array.isArray(raw.openOrders) ? raw.openOrders : [];
+    return {
+      ...raw,
+      marketId,
+      openOrders,
+      postedLiquidity: String(sumNumeric(openOrders, 'liquidity')),
+    };
+  }));
+  return settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+}
+
 async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) {
   try {
-    const [gameResult, marketsResult, activityResult, leaderboardResult] = await Promise.allSettled([
+    const [gameResult, marketsResult, activityResult, leaderboardResult, internalGameResult, internalMarketsResult, internalAgentsResult, internalFillsResult, internalRawLeaderboardResult] = await Promise.allSettled([
       fetchIndexerJson('/public/game'),
       fetchIndexerJson('/public/markets'),
       fetchIndexerJson('/public/activity'),
       fetchIndexerJson('/public/leaderboard'),
+      fetchIndexerJson('/internal/game'),
+      fetchIndexerJson('/internal/markets'),
+      fetchIndexerJson('/internal/agents'),
+      fetchIndexerJson('/internal/fills'),
+      fetchIndexerJson('/internal/leaderboard/raw'),
     ]);
 
     const gameRaw = gameResult.status === 'fulfilled' && gameResult.value && typeof gameResult.value === 'object'
@@ -152,6 +182,12 @@ async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) 
       ? activityResult.value as Record<string, unknown>
       : null;
     const marketsRaw = marketsResult.status === 'fulfilled' && Array.isArray(marketsResult.value) ? marketsResult.value : [];
+    const internalMarketsRaw = internalMarketsResult.status === 'fulfilled' && Array.isArray(internalMarketsResult.value) ? internalMarketsResult.value : [];
+    const internalAgentsRaw = internalAgentsResult.status === 'fulfilled' && Array.isArray(internalAgentsResult.value) ? internalAgentsResult.value : [];
+    const orderbooksRaw = await fetchOrderbooks(internalMarketsRaw.length ? internalMarketsRaw : marketsRaw);
+    const internalOrdersRaw = orderbooksRaw.flatMap((book) => Array.isArray(book.openOrders) ? book.openOrders : []);
+    const internalFillsRaw = internalFillsResult.status === 'fulfilled' && Array.isArray(internalFillsResult.value) ? internalFillsResult.value : [];
+    const postedLiquidity = String(sumNumeric(orderbooksRaw, 'postedLiquidity'));
 
     const payload = {
       generatedAt: new Date().toISOString(),
@@ -165,11 +201,40 @@ async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) 
         activeMarkets: getNumber(activityRaw.activeMarkets ?? activityRaw.active_markets, marketsRaw.length),
         activeAgents: getNumber(activityRaw.activeAgents ?? activityRaw.active_agents, 0),
         totalTrades: getNumber(activityRaw.totalTrades ?? activityRaw.total_trades, 0),
-        totalVolume: String(activityRaw.totalVolume ?? activityRaw.total_volume ?? '0'),
+        totalVolume: String(activityRaw.totalVolume ?? activityRaw.total_volume ?? activityRaw.total_volume_usdc ?? '0'),
         totalDeposits: String(activityRaw.totalDeposits ?? activityRaw.total_deposits ?? '0'),
-      } : { activeMarkets: marketsRaw.length, activeAgents: 0, totalTrades: 0, totalVolume: '0', totalDeposits: '0' },
-      markets: marketsRaw.map(normalizeMarket),
+        postedLiquidity,
+        openOrders: internalOrdersRaw.length,
+      } : { activeMarkets: marketsRaw.length, activeAgents: 0, totalTrades: 0, totalVolume: '0', totalDeposits: '0', postedLiquidity, openOrders: internalOrdersRaw.length },
+      markets: marketsRaw.map((market) => {
+        const normalized = normalizeMarket(market);
+        const orderbook = orderbooksRaw.find((book) => getString(book.marketId) === normalized.marketId);
+        const openOrders = Array.isArray(orderbook?.openOrders) ? orderbook.openOrders : [];
+        return {
+          ...normalized,
+          openOrders: openOrders.length,
+          postedLiquidity: String(orderbook?.postedLiquidity ?? '0'),
+        };
+      }),
       leaderboard: leaderboardResult.status === 'fulfilled' ? normalizeLeaderboard(leaderboardResult.value) : [],
+      observer: {
+        mode: 'test-full-indexer',
+        warning: 'Test mode: includes internal indexer state. Do not use this shape for the production miniapp.',
+        counts: {
+          internalMarkets: internalMarketsRaw.length,
+          agents: internalAgentsRaw.length,
+          orders: internalOrdersRaw.length,
+          fills: internalFillsRaw.length,
+          postedLiquidity,
+        },
+        internalGame: internalGameResult.status === 'fulfilled' ? internalGameResult.value : null,
+        internalMarkets: internalMarketsRaw,
+        agents: internalAgentsRaw,
+        orderbooks: orderbooksRaw,
+        orders: internalOrdersRaw,
+        fills: internalFillsRaw,
+        rawLeaderboard: internalRawLeaderboardResult.status === 'fulfilled' ? internalRawLeaderboardResult.value : null,
+      },
     };
 
     res.writeHead(200, {
@@ -248,12 +313,46 @@ async function handleBlinkSigner(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+
+async function handlePublicProxy(req: IncomingMessage, res: ServerResponse, url: URL) {
+  if (!url.pathname.startsWith('/public/')) return send(res, 404, 'not found');
+  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');
+
+  const targetPath = `${url.pathname}${url.search}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const upstream = await fetch(`${indexerPublicUrl}${targetPath}`, {
+      method: req.method,
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    const body = req.method === 'HEAD' ? '' : await upstream.text();
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') ?? 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    });
+    res.end(body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    send(res, 502, JSON.stringify({ error: 'indexer_public_unavailable', message }), {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', appUrl);
   if (url.pathname === '/healthz') return send(res, 200, 'ok');
   if (url.pathname === '/telegram/webhook' && req.method === 'POST') return handleWebhook(req, res);
   if (url.pathname === '/api/blink/sign-payment' && req.method === 'POST') return handleBlinkSigner(req, res);
   if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
+  if (url.pathname.startsWith('/public/')) return handlePublicProxy(req, res, url);
 
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;
   const safePath = normalize(requested).replace(/^([/\\])+/, '');

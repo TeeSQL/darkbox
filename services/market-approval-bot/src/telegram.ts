@@ -58,15 +58,25 @@ export class TelegramApi {
     await this.call("answerCallbackQuery", { callback_query_id: callbackQueryId, text, show_alert: false });
   }
 
-  async editDecision(message: TelegramMessage, text: string): Promise<void> {
-    await this.call("editMessageReplyMarkup", { chat_id: message.chat.id, message_id: message.message_id, reply_markup: { inline_keyboard: [] } });
-    await this.call("sendMessage", {
+  async removeButtons(message: TelegramMessage): Promise<void> {
+    // Telegram removes an inline keyboard when editMessageReplyMarkup is called
+    // without reply_markup. Passing { inline_keyboard: [] } can leave stale
+    // client-side button UI on some Telegram clients.
+    await this.call("editMessageReplyMarkup", { chat_id: message.chat.id, message_id: message.message_id });
+  }
+
+  async editDecision(message: TelegramMessage, statusLine: string): Promise<void> {
+    const original = (message.text ?? "").trim();
+    const text = original ? `${original}
+
+${statusLine}` : statusLine;
+    await this.call("editMessageText", {
       chat_id: message.chat.id,
-      message_thread_id: message.message_thread_id,
-      reply_to_message_id: message.message_id,
+      message_id: message.message_id,
       text,
       disable_web_page_preview: true,
     });
+    await this.removeButtons(message);
   }
 
   async getUpdates(offset: number): Promise<Array<{ update_id: number; callback_query?: unknown }>> {

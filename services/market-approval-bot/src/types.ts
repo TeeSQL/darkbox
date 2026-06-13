@@ -16,6 +16,7 @@ export type TelegramMessage = {
   message_id: number;
   chat: { id: number | string };
   message_thread_id?: number;
+  text?: string;
 };
 
 export type TelegramUpdate = {

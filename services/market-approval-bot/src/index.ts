@@ -51,6 +51,11 @@ async function handleCallback(update: TelegramUpdate): Promise<void> {
     return;
   }
   const status = action === "approve" ? "approved" : "denied";
+  try {
+    await telegram.removeButtons(cb.message);
+  } catch (err) {
+    console.warn("[market-approval-bot] button removal failed before decision", err);
+  }
   await indexer.decide(proposalId, status, userId, String(cb.message.message_id));
   try {
     await telegram.answerCallback(cb.id, `${status}: ${proposalId}`);
@@ -60,7 +65,7 @@ async function handleCallback(update: TelegramUpdate): Promise<void> {
     console.warn("[market-approval-bot] callback acknowledgement failed", err);
   }
   const who = cb.from.username ? `@${cb.from.username}` : userId;
-  await telegram.editDecision(cb.message, `${action === "approve" ? "✅ Approved" : "❌ Denied"} market proposal ${proposalId} by ${who}.`);
+  await telegram.editDecision(cb.message, `${action === "approve" ? "✅ APPROVED" : "❌ DENIED"} by ${who}. Proposal ${proposalId}.`);
 }
 
 function startHttp(): void {

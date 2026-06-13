@@ -13,6 +13,13 @@ import {
   SigningService,
   SignWithdrawalRejection,
 } from "./signingService.js";
+import {
+  isFundedStatus,
+  NoopDestinationLiquidityManager,
+  type DestinationLiquidityManager,
+  type DestinationLiquidityResult,
+  type RebalanceStatus,
+} from "./liquidity.js";
 import type { BridgeStore } from "./store.js";
 import type { WithdrawalRecord } from "./types.js";
 import {
@@ -31,22 +38,53 @@ export interface WithdrawalResult {
   withdrawalId: Hex;
   status: WithdrawalState;
   shadowBurnRef?: Hex;
+  /** Set while a cross-chain rebalance is pending or has failed. */
+  rebalance?: DestinationLiquidityResult;
   authorization?: { payload: WithdrawalAuthorization; signature: Hex };
+}
+
+/** Maps a rebalance status to the withdrawal state machine (spec 7.1). */
+function rebalanceToWithdrawalState(status: RebalanceStatus): WithdrawalState {
+  switch (status) {
+    case "required":
+    case "route_selected":
+      return WithdrawalState.RebalanceRequired;
+    case "source_transfer_submitted":
+      return WithdrawalState.RebalanceSubmitted;
+    case "failed_needs_operator_reconcile":
+      return WithdrawalState.FailedNeedsReconcile;
+    case "destination_funded":
+      return WithdrawalState.DestinationFunded;
+    case "not_needed":
+      return WithdrawalState.ShadowBurned;
+  }
 }
 
 /**
  * Drives a user withdrawal command through the withdrawal state machine (spec
- * 7.1): validate -> forced shadow burn of available balance -> signing-service
+ * 7.1): validate -> forced shadow burn of available balance -> ensure
+ * destination liquidity (rebalance public escrow if needed) -> signing-service
  * authorization. The public `withdraw(...)` submission is performed by the
  * user/client, not here.
+ *
+ * The strict order matters for the double-spend invariant: the shadow burn
+ * always happens BEFORE any public rebalance, and the payout authorization is
+ * only issued AFTER the destination escrow is confirmed fundable. When a
+ * rebalance is still in flight, `submit` returns a pending result (no
+ * authorization) rather than failing — callers re-submit to advance it.
  */
 export class WithdrawalCoordinator {
+  private readonly liquidity: DestinationLiquidityManager;
+
   constructor(
     private readonly cfg: WithdrawalCoordinatorConfig,
     private readonly store: BridgeStore,
     private readonly burner: ShadowBurnSubmitter,
     private readonly signingService: SigningService,
-  ) {}
+    liquidity?: DestinationLiquidityManager,
+  ) {
+    this.liquidity = liquidity ?? new NoopDestinationLiquidityManager();
+  }
 
   /**
    * Submit (or resume) a withdrawal command.
@@ -99,6 +137,8 @@ export class WithdrawalCoordinator {
       shadowAccount: command.shadowAccount,
       amount: command.amount,
       recipient: command.recipient,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
       nonce: command.nonce,
       deadline: command.deadline,
       userSignature: signature,
@@ -107,7 +147,7 @@ export class WithdrawalCoordinator {
     };
     this.store.putWithdrawal(record);
 
-    // --- forced shadow burn of available balance (spec 7.3) ---
+    // --- forced shadow burn of available balance FIRST (spec 7.3) ---
     let shadowBurnRef: Hex;
     try {
       const prior = await this.burner.findExistingBurn(withdrawalId);
@@ -133,14 +173,35 @@ export class WithdrawalCoordinator {
       throw err;
     }
 
-    record = {
-      ...record,
-      shadowBurnRef,
-      state: WithdrawalState.ShadowBurned,
-    };
+    record = { ...record, shadowBurnRef, state: WithdrawalState.ShadowBurned };
     this.store.putWithdrawal(record);
 
-    // --- signing-service authorization (spec 7.4) ---
+    // --- ensure destination escrow liquidity (rebalance public funds only) ---
+    // Drives a provider route if the destination chain is short. Never mints
+    // shadow USDC and never touches game balances (spec section 7).
+    const liquidity = await this.liquidity.ensureDestinationLiquidity({
+      withdrawalId,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
+      amount: command.amount,
+    });
+    record = {
+      ...record,
+      rebalanceStatus: liquidity.status,
+      rebalanceRef: liquidity.rebalanceRef,
+    };
+    if (!isFundedStatus(liquidity.status)) {
+      // Destination not yet fundable: persist the pending/failed state and
+      // return WITHOUT signing. The caller re-submits to advance the rebalance.
+      const pendingState = rebalanceToWithdrawalState(liquidity.status);
+      record = this.set(record, pendingState);
+      return { withdrawalId, status: pendingState, shadowBurnRef, rebalance: liquidity };
+    }
+    if (liquidity.status === "destination_funded") {
+      record = this.set(record, WithdrawalState.DestinationFunded);
+    }
+
+    // --- signing-service authorization, only now that funds are payable (7.4) ---
     let authorization: { payload: WithdrawalAuthorization; signature: Hex };
     try {
       const issued = await this.signingService.signWithdrawal(
@@ -169,6 +230,7 @@ export class WithdrawalCoordinator {
       withdrawalId,
       status: WithdrawalState.ServiceSigned,
       shadowBurnRef,
+      rebalance: liquidity,
       authorization,
     };
   }
@@ -189,6 +251,8 @@ export class WithdrawalCoordinator {
         shadowAccount: record.shadowAccount,
         amount: record.amount,
         recipient: record.recipient,
+        destinationChainId: record.destinationChainId,
+        destinationBridge: record.destinationBridge,
         userCommandHash: record.withdrawalId,
         shadowBurnRef: record.shadowBurnRef!,
         nonce: record.nonce,

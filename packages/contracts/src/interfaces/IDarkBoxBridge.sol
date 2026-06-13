@@ -63,6 +63,8 @@ interface IDarkBoxBridge {
         bytes32 shadowAccount,
         uint256 amount,
         address recipient,
+        uint256 destinationChainId,
+        address destinationBridge,
         uint256 nonce,
         uint256 deadline,
         bytes32 userCommandHash,

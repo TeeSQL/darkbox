@@ -98,6 +98,8 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
             shadowAccount: SHADOW_ACCOUNT,
             amount: amount,
             recipient: recipient,
+            destinationChainId: block.chainid,
+            destinationBridge: address(bridge),
             userCommandHash: keccak256("cmd-1"),
             shadowBurnRef: keccak256("burn-1"),
             nonce: nonce,
@@ -112,6 +114,8 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
             a.shadowAccount,
             a.amount,
             a.recipient,
+            a.destinationChainId,
+            a.destinationBridge,
             a.nonce,
             a.deadline,
             a.userCommandHash,
@@ -184,6 +188,16 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         bytes memory sig = _sign(signerPk, _authDigest(bridge, a));
         a.amount = amount * 2; // tamper after signing
         vm.expectRevert(DarkBoxBridge.BadSigner.selector);
+        _submit(a, sig);
+    }
+
+    function test_WithdrawRevertsOnWrongDestination() public {
+        uint256 amount = 10e6;
+        _fundBridgeUSDC(amount);
+        Authorization memory a = _auth(amount, 1, block.timestamp + 1 hours);
+        bytes memory sig = _sign(signerPk, _authDigest(bridge, a));
+        a.destinationChainId = block.chainid + 1;
+        vm.expectRevert(abi.encodeWithSelector(DarkBoxBridge.WrongDestination.selector, a.destinationChainId, a.destinationBridge));
         _submit(a, sig);
     }
 

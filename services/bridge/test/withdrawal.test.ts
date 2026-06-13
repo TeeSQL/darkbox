@@ -16,6 +16,15 @@ import {
   InMemoryAuthorizationStore,
   SignWithdrawalRejection,
 } from "../src/signingService.js";
+import {
+  ProviderBackedLiquidityManager,
+  type DestinationEscrowReader,
+  type DestinationLiquidityManager,
+  type LiquidityRouteProvider,
+  type RebalanceStatus,
+  type RouteQuote,
+  type SubmittedRoute,
+} from "../src/liquidity.js";
 import { InMemoryBridgeStore } from "../src/store.js";
 import {
   WithdrawalCoordinator,
@@ -28,6 +37,7 @@ const GAME_ID: Hex = `0x${"11".repeat(32)}`;
 const USDC: Address = "0x00000000000000000000000000000000000000c0";
 const BRIDGE: Address = "0x00000000000000000000000000000000000000aa";
 const RECIPIENT: Address = "0x00000000000000000000000000000000000000d0";
+const ARC_BRIDGE: Address = "0x0000000000000000000000000000000000000a11";
 const SHADOW_CHAIN_ID = 1337n;
 const NOW = Math.floor(Date.UTC(2026, 0, 1) / 1000);
 
@@ -43,6 +53,8 @@ function buildCommand(overrides: Partial<WithdrawCommand> = {}): WithdrawCommand
     shadowAccount: deriveShadowAccount(GAME_ID, owner),
     amount: 40_000_000n,
     recipient: RECIPIENT,
+    destinationChainId: BigInt(domain.chainId),
+    destinationBridge: domain.verifyingContract,
     nonce: 1n,
     deadline: BigInt(NOW + 3600),
     shadowChainId: SHADOW_CHAIN_ID,
@@ -59,8 +71,13 @@ async function signCommand(command: WithdrawCommand): Promise<Hex> {
   });
 }
 
-function makeCoordinator(shadow: FakeShadowChain) {
+function makeCoordinator(
+  shadow: FakeShadowChain,
+  liquidity?: DestinationLiquidityManager,
+) {
   const store = new InMemoryBridgeStore();
+  // The coordinator drives the rebalance; the signing service uses the SAME
+  // manager as a read-only funding guard.
   const signingService = new SigningService(
     {
       domain,
@@ -71,6 +88,7 @@ function makeCoordinator(shadow: FakeShadowChain) {
       burnVerifier: shadow,
       nonceChecker: shadow,
       authStore: new InMemoryAuthorizationStore(),
+      liquidityManager: liquidity,
     },
   );
   const coord = new WithdrawalCoordinator(
@@ -78,8 +96,36 @@ function makeCoordinator(shadow: FakeShadowChain) {
     store,
     shadow,
     signingService,
+    liquidity,
   );
   return { store, coord, signingService };
+}
+
+/** A controllable cross-chain route provider for tests. */
+class MockRouteProvider implements LiquidityRouteProvider {
+  readonly name = "circle-cctp" as const;
+  statusValue: RebalanceStatus;
+  submitCount = 0;
+  constructor(statusValue: RebalanceStatus) {
+    this.statusValue = statusValue;
+  }
+  async quote(): Promise<RouteQuote | null> {
+    return { provider: this.name, fee: 0n, etaSeconds: 60 };
+  }
+  async submit(): Promise<SubmittedRoute> {
+    this.submitCount += 1;
+    return { provider: this.name, rebalanceRef: `0x${"ab".repeat(32)}` };
+  }
+  async status(): Promise<RebalanceStatus> {
+    return this.statusValue;
+  }
+}
+
+class StaticReader implements DestinationEscrowReader {
+  constructor(private readonly balance: bigint) {}
+  async balanceOf(): Promise<bigint> {
+    return this.balance;
+  }
 }
 
 // --- validator ---
@@ -209,6 +255,67 @@ test("resubmitting a completed command returns the existing authorization (idemp
   assert.equal(first.withdrawalId, second.withdrawalId);
   assert.equal(second.status, WithdrawalState.ServiceSigned);
   assert.equal(shadow.burns.size, 1); // burned exactly once
+});
+
+
+test("burns shadow funds first, then does NOT sign while a rebalance is pending", async () => {
+  const shadow = new FakeShadowChain();
+  const command = buildCommand({
+    destinationChainId: 504n, // Arc placeholder/test chain id
+    destinationBridge: ARC_BRIDGE,
+  });
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
+
+  // Destination escrow empty -> a provider rebalance is required and in flight.
+  const provider = new MockRouteProvider("source_transfer_submitted");
+  const liquidity = new ProviderBackedLiquidityManager(provider, new StaticReader(0n));
+  const { coord } = makeCoordinator(shadow, liquidity);
+  const sig = await signCommand(command);
+
+  const result = await coord.submit(command, sig, NOW);
+
+  // shadow burn/reserve happened BEFORE any rebalance, but NO authorization yet.
+  assert.equal(result.status, WithdrawalState.RebalanceSubmitted);
+  assert.equal(result.authorization, undefined);
+  assert.equal(result.rebalance?.status, "source_transfer_submitted");
+  assert.equal(result.rebalance?.provider, "circle-cctp");
+
+  const withdrawalId = hashWithdrawCommand(domain, command);
+  assert.equal(shadow.burns.size, 1); // shadow was burned/reserved first
+  assert.equal(shadow.burns.has(withdrawalId.toLowerCase()), true);
+});
+
+test("signs once the rebalance reports destination_funded (resume, no double burn)", async () => {
+  const shadow = new FakeShadowChain();
+  const command = buildCommand({
+    destinationChainId: 504n,
+    destinationBridge: ARC_BRIDGE,
+  });
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
+
+  const provider = new MockRouteProvider("source_transfer_submitted");
+  const liquidity = new ProviderBackedLiquidityManager(provider, new StaticReader(0n));
+  const { coord } = makeCoordinator(shadow, liquidity);
+  const sig = await signCommand(command);
+
+  // First submit: rebalance pending, no signature.
+  const pending = await coord.submit(command, sig, NOW);
+  assert.equal(pending.status, WithdrawalState.RebalanceSubmitted);
+  assert.equal(pending.authorization, undefined);
+
+  // Destination becomes funded; re-submit advances to a signed authorization.
+  provider.statusValue = "destination_funded";
+  const result = await coord.submit(command, sig, NOW + 5);
+
+  assert.equal(result.status, WithdrawalState.ServiceSigned);
+  assert.ok(result.authorization);
+  assert.equal(result.authorization?.payload.destinationChainId, 504n);
+  assert.equal(
+    result.authorization?.payload.destinationBridge.toLowerCase(),
+    ARC_BRIDGE.toLowerCase(),
+  );
+  assert.equal(shadow.burns.size, 1); // burned exactly once across resumes
+  assert.equal(provider.submitCount, 1); // route submitted exactly once
 });
 
 // --- signing service guards ---

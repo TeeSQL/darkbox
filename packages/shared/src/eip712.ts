@@ -44,6 +44,8 @@ export const WITHDRAW_COMMAND_TYPES = {
     { name: "shadowAccount", type: "bytes32" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
+    { name: "destinationChainId", type: "uint256" },
+    { name: "destinationBridge", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
     { name: "shadowChainId", type: "uint256" },
@@ -58,6 +60,8 @@ export const WITHDRAWAL_AUTHORIZATION_TYPES = {
     { name: "shadowAccount", type: "bytes32" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
+    { name: "destinationChainId", type: "uint256" },
+    { name: "destinationBridge", type: "address" },
     { name: "userCommandHash", type: "bytes32" },
     { name: "shadowBurnRef", type: "bytes32" },
     { name: "nonce", type: "uint256" },
@@ -71,6 +75,8 @@ export interface WithdrawCommand {
   shadowAccount: Hex;
   amount: bigint;
   recipient: Address;
+  destinationChainId: bigint;
+  destinationBridge: Address;
   nonce: bigint;
   deadline: bigint;
   shadowChainId: bigint;
@@ -82,6 +88,8 @@ export interface WithdrawalAuthorization {
   shadowAccount: Hex;
   amount: bigint;
   recipient: Address;
+  destinationChainId: bigint;
+  destinationBridge: Address;
   userCommandHash: Hex;
   shadowBurnRef: Hex;
   nonce: bigint;

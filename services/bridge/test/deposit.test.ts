@@ -160,3 +160,34 @@ test("an intent with too-small amount does not match", async () => {
   const record = await coord.process(obs, 1500);
   assert.equal(record.owner, ALICE);
 });
+
+// --- multichain (Base + Arc) ---
+
+test("Base and Arc deposits have distinct op ids but mint the same canonical shadow USDC", async () => {
+  const { shadow, coord } = setup();
+  const ARC_BRIDGE: Address = "0x0000000000000000000000000000000000000a11";
+  const baseCtx = { chainId: 8453, bridgeAddress: BRIDGE };
+  const arcCtx = { chainId: 504, bridgeAddress: ARC_BRIDGE };
+
+  // Same tx coordinates on two different chains must NOT collide (spec 6.4).
+  const raw = erc20Transfer();
+  const baseObs = normalizeDepositEvent(baseCtx, raw);
+  const arcObs = normalizeDepositEvent(arcCtx, raw);
+  assert.notEqual(baseObs.depositOpId, arcObs.depositOpId);
+
+  await coord.process(baseObs, 1000);
+  await coord.process(arcObs, 1000);
+
+  // Two distinct mints, both crediting the one canonical shadow account.
+  assert.equal(shadow.mints.size, 2);
+  const shadowAccount = deriveShadowAccount(GAME_ID, ALICE);
+  assert.equal(shadow.balances.get(shadowAccount.toLowerCase()), 200_000_000n);
+});
+
+test("the same deposit observed twice on one chain still mints once", async () => {
+  const { shadow, coord } = setup();
+  const obs = normalizeDepositEvent({ chainId: 8453, bridgeAddress: BRIDGE }, erc20Transfer());
+  await coord.process(obs, 1000);
+  await coord.process(obs, 1000);
+  assert.equal(shadow.mints.size, 1);
+});

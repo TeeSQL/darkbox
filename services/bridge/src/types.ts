@@ -65,6 +65,10 @@ export interface WithdrawalRecord {
   shadowAccount: Hex;
   amount: bigint;
   recipient: Address;
+  destinationChainId: bigint;
+  destinationBridge: Address;
+  rebalanceStatus?: "not_needed" | "required" | "route_selected" | "source_transfer_submitted" | "destination_funded" | "failed_needs_operator_reconcile";
+  rebalanceRef?: Hex;
   nonce: bigint;
   deadline: bigint;
   userSignature: Hex;

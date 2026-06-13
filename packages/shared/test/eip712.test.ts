@@ -23,6 +23,8 @@ const command: WithdrawCommand = {
   shadowAccount: `0x${"22".repeat(32)}`,
   amount: 1_000_000n,
   recipient: "0x00000000000000000000000000000000000000d0",
+  destinationChainId: 8453n,
+  destinationBridge: "0x00000000000000000000000000000000000000d1",
   nonce: 7n,
   deadline: 1_893_456_000n,
   shadowChainId: 1337n,
@@ -34,6 +36,8 @@ const auth: WithdrawalAuthorization = {
   shadowAccount: command.shadowAccount,
   amount: command.amount,
   recipient: command.recipient,
+  destinationChainId: command.destinationChainId,
+  destinationBridge: command.destinationBridge,
   userCommandHash: `0x${"33".repeat(32)}`,
   shadowBurnRef: `0x${"44".repeat(32)}`,
   nonce: command.nonce,
@@ -41,18 +45,18 @@ const auth: WithdrawalAuthorization = {
 };
 
 // These constants are also asserted in the Foundry EIP712Parity test, proving
-// the TS (viem) and Solidity encodings are byte-identical (USDC-only: no asset).
+// the TS (viem) and Solidity encodings are byte-identical (destination-bound).
 test("WithdrawCommand digest matches the cross-language reference", () => {
   assert.equal(
     hashWithdrawCommand(domain, command),
-    "0xfe50710d78078e6226bf9d45a1bdbd18fc2e58fd8afbc2d26b1425648a85f860",
+    "0x7f4b8e38242cccc74796f16a0086ef24cec752bd3ae4794839f973a6f6de522e",
   );
 });
 
 test("WithdrawalAuthorization digest matches the cross-language reference", () => {
   assert.equal(
     hashWithdrawalAuthorization(domain, auth),
-    "0x0f090d5e98ad8babae1e03d33e03cd92ae734309735ebd69dca89628887f38b1",
+    "0xb64dc6968a21faa236bf3fdb38f6a565b0193823039cd6b3b4b6309af9929520",
   );
 });
 

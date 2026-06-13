@@ -9,6 +9,10 @@ import {
 } from "@darkbox/shared";
 import { getAddress, type Address, type Hex } from "viem";
 import type { LocalAccount } from "viem/accounts";
+import {
+  NoopDestinationLiquidityManager,
+  type DestinationLiquidityManager,
+} from "./liquidity.js";
 
 /** Verifies a confirmed shadow burn on the shadow chain (spec 7.4 check 3). */
 export interface ShadowBurnVerifier {
@@ -60,6 +64,7 @@ export type SignWithdrawalError =
   | "mapping_mismatch"
   | "burn_not_confirmed"
   | "nonce_used"
+  | "destination_liquidity_unavailable"
   | "reissue_parameter_mismatch";
 
 export class SignWithdrawalRejection extends Error {
@@ -81,6 +86,7 @@ export interface SigningServiceDeps {
   burnVerifier: ShadowBurnVerifier;
   nonceChecker: NonceChecker;
   authStore: AuthorizationStore;
+  liquidityManager?: DestinationLiquidityManager;
 }
 
 /**
@@ -141,7 +147,19 @@ export class SigningService {
       throw new SignWithdrawalRejection("nonce_used");
     }
 
-    // (5) no prior authorization for this withdrawalId with different params.
+    // (5) destination escrow must be confirmed fundable before we sign.
+    //     Read-only guard (the coordinator drives any rebalance); defence in
+    //     depth so the signer never authorizes an unpayable destination.
+    const liquidityManager = this.deps.liquidityManager ?? new NoopDestinationLiquidityManager();
+    const funded = await liquidityManager.isDestinationFunded({
+      withdrawalId,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
+      amount: command.amount,
+    });
+    if (!funded) throw new SignWithdrawalRejection("destination_liquidity_unavailable");
+
+    // (6) no prior authorization for this withdrawalId with different params.
     //     Identical re-issue with a fresh deadline is allowed (spec 7.5).
     const prior = this.deps.authStore.get(withdrawalId);
     if (prior && !sameCoreParams(prior.payload, command, shadowBurnRef)) {
@@ -155,6 +173,8 @@ export class SigningService {
       shadowAccount: command.shadowAccount,
       amount: command.amount,
       recipient: command.recipient,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
       userCommandHash: withdrawalId,
       shadowBurnRef,
       nonce: command.nonce,
@@ -186,6 +206,8 @@ function sameCoreParams(
     prior.shadowAccount.toLowerCase() === command.shadowAccount.toLowerCase() &&
     prior.amount === command.amount &&
     getAddress(prior.recipient) === getAddress(command.recipient) &&
+    prior.destinationChainId === command.destinationChainId &&
+    getAddress(prior.destinationBridge) === getAddress(command.destinationBridge) &&
     prior.nonce === command.nonce &&
     prior.shadowBurnRef.toLowerCase() === shadowBurnRef.toLowerCase()
   );

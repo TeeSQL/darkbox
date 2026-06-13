@@ -4,7 +4,7 @@ import { parseAbi } from "viem";
 export const darkBoxBridgeAbi = parseAbi([
   "function usdc() view returns (address)",
   "function deposit(bytes32 gameId, uint256 amount, address beneficiary, bytes32 depositRef)",
-  "function withdraw(bytes32 gameId, address owner, bytes32 shadowAccount, uint256 amount, address recipient, uint256 nonce, uint256 deadline, bytes32 userCommandHash, bytes32 shadowBurnRef, bytes serviceSignature)",
+  "function withdraw(bytes32 gameId, address owner, bytes32 shadowAccount, uint256 amount, address recipient, uint256 destinationChainId, address destinationBridge, uint256 nonce, uint256 deadline, bytes32 userCommandHash, bytes32 shadowBurnRef, bytes serviceSignature)",
   "function emergencyWithdraw(bytes32 gameId, address owner, uint256 amount, address recipient, bytes32 reason)",
   "function usedNonces(address owner, uint256 nonce) view returns (bool)",
   "function signer() view returns (address)",

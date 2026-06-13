@@ -16,9 +16,9 @@ contract DarkBoxBridge is IDarkBoxBridge {
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    // WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)
+    // WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,uint256 destinationChainId,address destinationBridge,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)
     bytes32 public constant WITHDRAWAL_AUTHORIZATION_TYPEHASH = keccak256(
-        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
+        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,uint256 destinationChainId,address destinationBridge,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
     );
 
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -48,6 +48,7 @@ contract DarkBoxBridge is IDarkBoxBridge {
     error AuthorizationExpired();
     error BadSigner();
     error ZeroAmount();
+    error WrongDestination(uint256 destinationChainId, address destinationBridge);
 
     event SignerUpdated(address indexed previousSigner, address indexed newSigner);
     event AdminUpdated(address indexed previousAdmin, address indexed newAdmin);
@@ -122,6 +123,8 @@ contract DarkBoxBridge is IDarkBoxBridge {
         bytes32 shadowAccount,
         uint256 amount,
         address recipient,
+        uint256 destinationChainId,
+        address destinationBridge,
         uint256 nonce,
         uint256 deadline,
         bytes32 userCommandHash,
@@ -131,6 +134,9 @@ contract DarkBoxBridge is IDarkBoxBridge {
         if (withdrawalsPaused) revert WithdrawalsPaused();
         if (block.timestamp > deadline) revert AuthorizationExpired();
         if (usedNonces[owner][nonce]) revert NonceAlreadyUsed();
+        if (destinationChainId != block.chainid || destinationBridge != address(this)) {
+            revert WrongDestination(destinationChainId, destinationBridge);
+        }
 
         bytes32 structHash = keccak256(
             abi.encode(
@@ -140,6 +146,8 @@ contract DarkBoxBridge is IDarkBoxBridge {
                 shadowAccount,
                 amount,
                 recipient,
+                destinationChainId,
+                destinationBridge,
                 userCommandHash,
                 shadowBurnRef,
                 nonce,

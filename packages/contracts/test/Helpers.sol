@@ -7,7 +7,7 @@ import {DarkBoxBridge} from "../src/DarkBoxBridge.sol";
 /// @notice Shared EIP-712 signing helpers for bridge tests (USDC-only: no asset field).
 abstract contract BridgeEIP712Helper is Test {
     bytes32 internal constant WITHDRAWAL_AUTHORIZATION_TYPEHASH = keccak256(
-        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
+        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,uint256 destinationChainId,address destinationBridge,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
     );
 
     struct Authorization {
@@ -16,6 +16,8 @@ abstract contract BridgeEIP712Helper is Test {
         bytes32 shadowAccount;
         uint256 amount;
         address recipient;
+        uint256 destinationChainId;
+        address destinationBridge;
         bytes32 userCommandHash;
         bytes32 shadowBurnRef;
         uint256 nonce;
@@ -31,6 +33,8 @@ abstract contract BridgeEIP712Helper is Test {
                 a.shadowAccount,
                 a.amount,
                 a.recipient,
+                a.destinationChainId,
+                a.destinationBridge,
                 a.userCommandHash,
                 a.shadowBurnRef,
                 a.nonce,

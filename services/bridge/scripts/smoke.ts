@@ -274,6 +274,8 @@ async function main() {
     shadowAccount,
     amount: withdrawAmount,
     recipient,
+    destinationChainId: BigInt(publicChainId),
+    destinationBridge: bridge,
     nonce: BigInt(nowSec), // any unused nonce
     deadline: BigInt(nowSec + 3600),
     shadowChainId: BigInt(shadowChainId),
@@ -330,6 +332,8 @@ async function main() {
       a.shadowAccount,
       a.amount,
       a.recipient,
+      a.destinationChainId,
+      a.destinationBridge,
       a.nonce,
       a.deadline,
       a.userCommandHash,

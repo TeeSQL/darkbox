@@ -24,9 +24,10 @@
       button:disabled { opacity:.55; cursor:wait; }
       .stack { display:grid; gap:14px; } .pill-row{display:flex;flex-wrap:wrap;gap:8px}.pill{border:1px solid var(--line);border-radius:999px;padding:8px 10px;color:var(--muted);background:rgba(255,255,255,.045);font-size:.78rem}
       .status { min-height:52px; border:1px solid rgba(168,255,202,.25); color:var(--good); background:rgba(20,76,42,.16); border-radius:18px; padding:14px; line-height:1.4; } .status.error{border-color:rgba(255,154,169,.34); color:var(--bad); background:rgba(93,20,35,.18)}
+      .warning { border-color:rgba(244,215,123,.34); color:var(--gold); background:rgba(102,73,10,.16); }
       .steps { counter-reset:step; display:grid; gap:12px; margin:0; padding:0; list-style:none; } .steps li{counter-increment:step;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;color:var(--muted);line-height:1.4}.steps li::before{content:counter(step);width:26px;height:26px;border-radius:999px;display:grid;place-items:center;background:#21142e;border:1px solid var(--line);color:var(--text);font-size:.78rem;font-weight:900}
       pre { overflow:auto; max-height:360px; margin:0; padding:16px; border-radius:18px; border:1px solid rgba(255,255,255,.1); background:rgba(0,0,0,.38); color:#e8ddff; font-size:.78rem; line-height:1.45; }
-      .muted{color:var(--muted)} .small{font-size:.83rem;line-height:1.45}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:560px){.split{grid-template-columns:1fr}}
+      .muted{color:var(--muted)} .small{font-size:.83rem;line-height:1.45}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}.hidden{display:none}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}.paybox{border:1px solid rgba(244,215,123,.3);background:rgba(244,215,123,.08);border-radius:18px;padding:14px;line-height:1.45}@media(max-width:560px){.split{grid-template-columns:1fr}}
     </style>
   </head>
   <body>
@@ -34,8 +35,8 @@
       <section class="hero">
         <div class="eyebrow">Testmic bot · Dynamic Flow lab</div>
         <h1>Fund the sealed box</h1>
-        <p class="subtitle">A separate test app for Dynamic / Fireblocks Flow deposits. It creates a DarkBox deposit intent, prepares the Flow checkout payload, and shows exactly how settlement maps back to the bridge.</p>
-        <div class="pill-row"><span class="pill">Base USDC</span><span class="pill">DarkBoxBridge</span><span class="pill">memo = depositRef</span><span class="pill">test app only</span></div>
+        <p class="subtitle">A separate test app for Dynamic / Fireblocks Flow deposits. Important: this is not a raw “send to this address” page. Dynamic first creates a transaction, then you attach the paying wallet, get a quote, and sign the prepared wallet transaction.</p>
+        <div class="pill-row"><span class="pill">Base USDC settlement</span><span class="pill">Dynamic prepares payment tx</span><span class="pill">DarkBoxBridge destination</span><span class="pill">test app only</span></div>
       </section>
       <section class="grid">
         <form class="card stack" id="flow-form">
@@ -46,14 +47,26 @@
           <label>Beneficiary wallet / daemon owner <input id="beneficiary" name="beneficiary" value="0xF053A15C36f1FbCC2A281095e6f1507ea1EFc931" /></label>
           <label>Memo visible to our reconciler <textarea id="memo" name="memo">Dynamic Flow deposit into DarkBox test bridge</textarea></label>
           <button id="create" type="submit">Create Flow deposit intent</button>
-          <div id="status" class="status">Ready. This page is isolated from the main Daemon Hall miniapp.</div>
+          <div id="status" class="status">Ready. Step 1 creates a live Dynamic transaction. It does not move money yet.</div>
         </form>
         <aside class="card stack">
-          <div><div class="eyebrow">What this proves</div><ol class="steps"><li>DarkBox creates a short-lived deposit intent.</li><li>Dynamic Flow settles into Base USDC at our bridge address.</li><li>Memo carries depositIntentId, gameId, and depositRef.</li><li>Webhook/watcher credits the shadow account after settlement.</li></ol></div>
-          <p class="small muted">If Dynamic credentials are not configured yet, the backend returns a dry-run object with the exact checkout and transaction payloads we need to create in Dynamic.</p>
+          <div class="paybox"><strong>Where do I send money?</strong><br />Not manually to an address. Use Step 2 after creating an intent: enter the payer wallet, then Dynamic returns the exact approval/transaction payload to sign in that wallet.</div>
+          <div><div class="eyebrow">Actual payment flow</div><ol class="steps"><li>Create DarkBox/Dynamic deposit intent.</li><li>Attach the payer wallet and token.</li><li>Dynamic returns quote + signing payload.</li><li>User signs approval/payment in their wallet.</li><li>Dynamic watches settlement into the DarkBox bridge.</li></ol></div>
+          <p class="small muted">Manual Base USDC transfers to the bridge are a fallback contract/watcher flow, not this Dynamic Flow demo.</p>
         </aside>
       </section>
-      <section class="card stack" style="margin-top:18px"><div class="eyebrow">Result</div><pre id="output">No intent yet.</pre></section>
+      <section id="pay-step" class="card stack hidden" style="margin-top:18px">
+        <div class="eyebrow">Step 2 · get payment instructions</div>
+        <p class="small muted">This asks Dynamic what the payer wallet must sign. For Base USDC → Base USDC, expect either an ERC-20 approval plus a payment tx, or a direct transfer payload.</p>
+        <div class="split">
+          <label>Payer wallet address <input id="fromAddress" value="0xF053A15C36f1FbCC2A281095e6f1507ea1EFc931" /></label>
+          <label>Pay token <input id="fromTokenAddress" value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" /></label>
+        </div>
+        <button id="prepare" type="button">Attach wallet + get quote + prepare signing payload</button>
+        <div id="pay-status" class="status warning">Waiting for Step 1.</div>
+      </section>
+      </section>
+      <section class="card stack" style="margin-top:18px"><div class="eyebrow">Result / exact tx payload</div><pre id="output">No intent yet.</pre></section>
     </main>
     <script type="module" src="/src/dynamic-flow.ts"></script>
   </body>

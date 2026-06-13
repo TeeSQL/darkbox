@@ -77,6 +77,14 @@ function isEvmAddress(value: unknown): value is string {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value);
 }
 
+function isDynamicSessionToken(value: unknown): value is string {
+  return typeof value === 'string' && /^dct_[A-Za-z0-9_-]{16,}$/.test(value);
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 function bytes32From(value: string) {
   return `0x${createHash('sha256').update(value).digest('hex')}`;
 }
@@ -261,6 +269,84 @@ async function handleDynamicFlowIntent(req: IncomingMessage, res: ServerResponse
   }
 }
 
+async function handleDynamicFlowSource(req: IncomingMessage, res: ServerResponse) {
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    return sendJson(res, 400, { error: 'invalid_json' });
+  }
+
+  const transactionId = String(body.transactionId ?? '').trim();
+  const sessionToken = String(body.sessionToken ?? '').trim();
+  const fromAddress = String(body.fromAddress ?? '').trim();
+  const fromChainId = String(body.fromChainId ?? dynamicSettlementChainId).trim();
+  const fromChainName = String(body.fromChainName ?? 'EVM').trim();
+
+  if (!dynamicEnvironmentId) return sendJson(res, 503, { error: 'DYNAMIC_ENVIRONMENT_ID is not configured' });
+  if (!isUuid(transactionId)) return sendJson(res, 400, { error: 'transactionId must be a UUID' });
+  if (!isDynamicSessionToken(sessionToken)) return sendJson(res, 400, { error: 'sessionToken is invalid or missing' });
+  if (fromChainName === 'EVM' && !isEvmAddress(fromAddress)) return sendJson(res, 400, { error: 'fromAddress must be an EVM address' });
+
+  const response = await fetch(`${dynamicBaseUrl}/sdk/${dynamicEnvironmentId}/transactions/${transactionId}/source`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-dynamic-checkout-session-token': sessionToken },
+    body: JSON.stringify({ sourceType: 'wallet', fromAddress, fromChainId, fromChainName }),
+  });
+  const dynamicBody = await response.json().catch(async () => ({ raw: await response.text() }));
+  return sendJson(res, response.ok ? 200 : response.status, { mode: 'live', dynamic: dynamicBody });
+}
+
+async function handleDynamicFlowQuote(req: IncomingMessage, res: ServerResponse) {
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    return sendJson(res, 400, { error: 'invalid_json' });
+  }
+
+  const transactionId = String(body.transactionId ?? '').trim();
+  const sessionToken = String(body.sessionToken ?? '').trim();
+  const fromTokenAddress = String(body.fromTokenAddress ?? dynamicSettlementToken).trim();
+
+  if (!dynamicEnvironmentId) return sendJson(res, 503, { error: 'DYNAMIC_ENVIRONMENT_ID is not configured' });
+  if (!isUuid(transactionId)) return sendJson(res, 400, { error: 'transactionId must be a UUID' });
+  if (!isDynamicSessionToken(sessionToken)) return sendJson(res, 400, { error: 'sessionToken is invalid or missing' });
+  if (!isEvmAddress(fromTokenAddress)) return sendJson(res, 400, { error: 'fromTokenAddress must be an EVM token address' });
+
+  const response = await fetch(`${dynamicBaseUrl}/sdk/${dynamicEnvironmentId}/transactions/${transactionId}/quote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-dynamic-checkout-session-token': sessionToken },
+    body: JSON.stringify({ fromTokenAddress }),
+  });
+  const dynamicBody = await response.json().catch(async () => ({ raw: await response.text() }));
+  return sendJson(res, response.ok ? 200 : response.status, { mode: 'live', dynamic: dynamicBody });
+}
+
+async function handleDynamicFlowPrepare(req: IncomingMessage, res: ServerResponse) {
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    return sendJson(res, 400, { error: 'invalid_json' });
+  }
+
+  const transactionId = String(body.transactionId ?? '').trim();
+  const sessionToken = String(body.sessionToken ?? '').trim();
+
+  if (!dynamicEnvironmentId) return sendJson(res, 503, { error: 'DYNAMIC_ENVIRONMENT_ID is not configured' });
+  if (!isUuid(transactionId)) return sendJson(res, 400, { error: 'transactionId must be a UUID' });
+  if (!isDynamicSessionToken(sessionToken)) return sendJson(res, 400, { error: 'sessionToken is invalid or missing' });
+
+  const response = await fetch(`${dynamicBaseUrl}/sdk/${dynamicEnvironmentId}/transactions/${transactionId}/prepare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-dynamic-checkout-session-token': sessionToken },
+    body: JSON.stringify({ assertBalanceForGasCost: false, assertBalanceForTransferAmount: false }),
+  });
+  const dynamicBody = await response.json().catch(async () => ({ raw: await response.text() }));
+  return sendJson(res, response.ok ? 200 : response.status, { mode: 'live', dynamic: dynamicBody });
+}
+
 async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) {
   try {
     const [gameResult, marketsResult, activityResult, leaderboardResult] = await Promise.allSettled([
@@ -379,6 +465,9 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/telegram/webhook' && req.method === 'POST') return handleWebhook(req, res);
   if (url.pathname === '/api/blink/sign-payment' && req.method === 'POST') return handleBlinkSigner(req, res);
   if (url.pathname === '/api/dynamic-flow/intents' && req.method === 'POST') return handleDynamicFlowIntent(req, res);
+  if (url.pathname === '/api/dynamic-flow/source' && req.method === 'POST') return handleDynamicFlowSource(req, res);
+  if (url.pathname === '/api/dynamic-flow/quote' && req.method === 'POST') return handleDynamicFlowQuote(req, res);
+  if (url.pathname === '/api/dynamic-flow/prepare' && req.method === 'POST') return handleDynamicFlowPrepare(req, res);
   if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
 
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;

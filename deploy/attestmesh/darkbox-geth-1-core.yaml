@@ -52,7 +52,11 @@ services:
       # (ListPeers, matched by ${PEER_MEMBER_APPID}), and static-peers it.
       - GETH_NODEKEY=${GETH1_NODEKEY}
       - PEER_ENODE_PUBKEY=${GETH2_ENODE_PUBKEY}
-      - PEER_MEMBER_APPID=${GETH2_APP_ID}
+      # Peer/self mesh IPs injected whole-value by the overseer (deterministic
+      # from app_id). geth-1 gets geth-2's IP via the single core env-refresh
+      # after geth-2 lands; until then it mines solo (clique tolerates it).
+      - PEER_MESH_IP=${PEER_MESH_IP}
+      - SELF_MESH_IP=${SELF_MESH_IP}
       - CHAIN_ID=88813
       - NODE_ROLE=signer
 

@@ -40,7 +40,9 @@ services:
     environment:
       - GETH_NODEKEY=${GETH2_NODEKEY}
       - PEER_ENODE_PUBKEY=${GETH1_ENODE_PUBKEY}
-      - PEER_MEMBER_APPID=${GETH1_APP_ID}
+      # geth-2 deploys after core, so it gets geth-1's mesh IP injected at deploy.
+      - PEER_MESH_IP=${PEER_MESH_IP}
+      - SELF_MESH_IP=${SELF_MESH_IP}
       - CHAIN_ID=88813
       - NODE_ROLE=signer
 

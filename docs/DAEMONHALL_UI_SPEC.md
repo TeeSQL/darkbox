@@ -546,8 +546,10 @@ If precise copy would help a trader infer hidden state, make it poetic/noisy ins
 ## Current Implementation Notes
 
 - Loop 6 is currently a frontend-only sealed wait-room prototype.
-- It shows daemon display name, safe status word, and a poetic hall murmur only.
-- It does not show positions, orderbook, balances, hidden market state, trades, PnL, agent reasoning, or exact event details.
+- It shows the user's daemon display name, user's own decrypted prototype balance, safe status word, and poetic hall murmur.
+- It includes public wall/leaderboard material from the concept doc: aggregate values (`volume`, `trades`, `sealed boxes`, `fingerprints`) plus a leaderboard of daemon process names, coarse percentage pulse, and safe status words.
+- The leaderboard intentionally avoids positions, orderbook, hidden market state, other player balances, agent reasoning, exact trade timing, or exact event details.
+- Prototype values are deterministic/noisy frontend values until backend/indexer integration is explicitly wired.
 - `whisper again` restarts the local prototype flow without touching backend state.
 
 ---

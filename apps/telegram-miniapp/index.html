@@ -115,12 +115,28 @@
           <div class="wait-orbit" aria-hidden="true">
             <span></span><span></span><span></span>
           </div>
-          <div class="wait-card">
-            <p><span>daemon</span><strong id="wait-daemon-name">fomod</strong></p>
+          <div class="wait-card private-card">
+            <p><span>your daemon</span><strong id="wait-daemon-name">fomod</strong></p>
+            <p><span>your balance</span><strong id="private-balance">$5.00 decrypted</strong></p>
             <p><span>status</span><strong id="wait-status">listening</strong></p>
             <p><span>murmur</span><strong id="wait-murmur">▸ something moved behind the wall</strong></p>
           </div>
-          <p class="wait-note">positions, orders, and the dark stay sealed until the boxes open.</p>
+
+          <div class="hall-metrics" aria-label="Hall aggregate values">
+            <p><span>volume</span><strong id="metric-volume">$12.4k</strong></p>
+            <p><span>trades</span><strong id="metric-trades">317</strong></p>
+            <p><span>sealed boxes</span><strong id="metric-boxes">88</strong></p>
+            <p><span>fingerprints</span><strong id="metric-fingerprints">144</strong></p>
+          </div>
+
+          <div class="leaderboard" aria-label="Daemon leaderboard">
+            <div class="leaderboard-head">
+              <span>rank</span><span>daemon</span><span>pulse</span>
+            </div>
+            <div id="leaderboard-rows" class="leaderboard-rows"></div>
+          </div>
+
+          <p class="wait-note">leaderboard shows daemon names, coarse pulse, and aggregate movement only. positions, orders, balances, and the dark stay sealed until the boxes open.</p>
           <button id="restart-flow" class="ghost-ritual" type="button">whisper again</button>
         </div>
       </section>

@@ -23,6 +23,12 @@ const daemonOriginEl = document.querySelector('#daemon-origin');
 const waitDaemonNameEl = document.querySelector('#wait-daemon-name');
 const waitStatusEl = document.querySelector('#wait-status');
 const waitMurmurEl = document.querySelector('#wait-murmur');
+const privateBalanceEl = document.querySelector('#private-balance');
+const metricVolumeEl = document.querySelector('#metric-volume');
+const metricTradesEl = document.querySelector('#metric-trades');
+const metricBoxesEl = document.querySelector('#metric-boxes');
+const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
+const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const defaultStatus = 'only you hear this.';
@@ -47,6 +53,8 @@ const epithets = [
   'A LITTLE TOO BRAVE FOR THE SIZE OF ITS BAG',
 ];
 const statuses = ['running', 'listening', 'circling', 'hungry', 'quiet', 'committed', 'still believing', 'overclocked'];
+const leaderboardNames = ['fomod', 'hopiumd', 'greedd', 'panicd', 'rugd', 'copiumd', 'lateforkd', 'doubtd'];
+
 const murmurs = [
   '▸ something moved behind the wall',
   '▸ a daemon laughed without opening its mouth',
@@ -71,6 +79,42 @@ function tinyFingerprint(seed) {
   const h3 = hashNumber(`${seed}:key`).toString(16).padStart(8, '0');
   return `0x${h1}${h2}${h3}`;
 }
+
+function signedPercent(seed, offset = 0) {
+  const raw = hashNumber(`${seed}:pulse:${offset}`) % 4200;
+  const value = (raw - 1600) / 100;
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+function paintHallMetrics(seed) {
+  const h = hashNumber(seed || 'silence');
+  if (privateBalanceEl) privateBalanceEl.textContent = `$${(5 + (h % 900) / 100).toFixed(2)} decrypted`;
+  if (metricVolumeEl) metricVolumeEl.textContent = `$${(8.2 + (h % 9200) / 1000).toFixed(1)}k`;
+  if (metricTradesEl) metricTradesEl.textContent = String(180 + (h % 260));
+  if (metricBoxesEl) metricBoxesEl.textContent = String(64 + (h % 41));
+  if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(120 + (h % 90));
+}
+function paintLeaderboard(seed) {
+  if (!leaderboardRowsEl) return;
+  const ownName = currentDaemon?.name || pick(names, seed);
+  const rows = [ownName, ...leaderboardNames.filter((name) => name !== ownName)]
+    .slice(0, 6)
+    .map((name, index) => ({
+      name,
+      pulse: signedPercent(`${seed}:${name}`, index),
+      status: pick(statuses, `${seed}:${name}`, index),
+      score: hashNumber(`${seed}:${name}:rank`),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+  leaderboardRowsEl.innerHTML = rows.map((row) => `
+    <p class="${row.name === ownName ? 'is-user' : ''}">
+      <span>${row.rank}</span>
+      <strong>${row.name}</strong>
+      <em>${row.pulse} · ${row.status}</em>
+    </p>
+  `).join('');
+}
+
 function formatCountdown(ms) {
   if (ms <= 0) return 'boxes open now';
   const totalSeconds = Math.floor(ms / 1000);
@@ -127,6 +171,8 @@ function paintDaemon() {
   if (waitDaemonNameEl) waitDaemonNameEl.textContent = daemon.name;
   if (waitStatusEl) waitStatusEl.textContent = daemon.status;
   if (waitMurmurEl) waitMurmurEl.textContent = daemon.murmur;
+  paintHallMetrics(input.value.trim() || daemon.name);
+  paintLeaderboard(input.value.trim() || daemon.name);
 }
 function enterFlow() {
   if (flowEntered) return;

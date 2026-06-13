@@ -223,8 +223,9 @@ function setImage(image: string) {
 function resizeWaitPortrait() {
   if (!waitPortrait || !waitRenderer || !waitCamera || !waitMesh) return;
   const rect = waitPortrait.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(rect.width));
-  const height = Math.max(1, Math.floor(rect.height));
+  if (rect.width < 2 || rect.height < 2) return;
+  const width = Math.floor(rect.width);
+  const height = Math.floor(rect.height);
   waitRenderer.setSize(width, height, false);
   const aspect = width / height;
   waitCamera.left = -aspect;
@@ -240,6 +241,13 @@ function resizeWaitPortrait() {
     imageHeight = imageWidth / waitLoadedAspect;
   }
   waitMesh.scale.set(imageWidth, imageHeight, 1);
+}
+
+function scheduleWaitPortraitResize() {
+  requestAnimationFrame(() => {
+    resizeWaitPortrait();
+    requestAnimationFrame(resizeWaitPortrait);
+  });
 }
 
 function animateWaitPortrait(time = 0) {
@@ -276,8 +284,8 @@ function initWaitPortrait() {
       }),
     );
     waitScene.add(waitMesh);
-    resizeWaitPortrait();
-    window.addEventListener('resize', resizeWaitPortrait);
+    scheduleWaitPortraitResize();
+    window.addEventListener('resize', scheduleWaitPortraitResize);
     animateWaitPortrait();
     waitPortrait.classList.add('webgl-alive');
     return true;
@@ -300,7 +308,7 @@ function setWaitImage(image: string) {
     if (imageBitmap.width && imageBitmap.height) waitLoadedAspect = imageBitmap.width / imageBitmap.height;
     if (waitMesh) waitMesh.material.uniforms.uMap.value = texture;
     waitPortrait.classList.add('webgl-alive');
-    resizeWaitPortrait();
+    scheduleWaitPortraitResize();
   }, undefined, () => {
     waitPortrait.classList.add('css-alive');
   });
@@ -314,6 +322,13 @@ window.addEventListener('daemonhall:reveal', (event) => {
     setWaitImage(payload.image);
   }
 });
+
+const waitView = document.querySelector('#v-wait');
+if (waitView && waitPortrait) {
+  new MutationObserver(() => {
+    if (waitView.classList.contains('active')) scheduleWaitPortraitResize();
+  }).observe(waitView, { attributes: true, attributeFilter: ['class'] });
+}
 
 function hashCode(seed: string) {
   let h = 2166136261;

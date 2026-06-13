@@ -1,0 +1,6 @@
+# Foundry
+out/
+cache/
+broadcast/
+# Vendored dependency (fetched via `pnpm setup` / forge install)
+lib/

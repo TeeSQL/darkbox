@@ -7,7 +7,10 @@
     "build": "pnpm -r build",
     "dev": "docker compose up --build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm run test:ts && pnpm run test:contracts",
+    "test:ts": "pnpm --filter @darkbox/shared --filter @darkbox/bridge test",
+    "test:contracts": "pnpm --filter @darkbox/contracts run setup && pnpm --filter @darkbox/contracts run test"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

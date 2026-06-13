@@ -1,0 +1,196 @@
+import {
+  bridgeDomain,
+  hashWithdrawCommand,
+  recoverWithdrawCommandSigner,
+  WITHDRAWAL_AUTHORIZATION_TYPES,
+  type BridgeDomainParams,
+  type WithdrawalAuthorization,
+  type WithdrawCommand,
+} from "@darkbox/shared";
+import { getAddress, type Address, type Hex } from "viem";
+import type { LocalAccount } from "viem/accounts";
+
+/** Verifies a confirmed shadow burn on the shadow chain (spec 7.4 check 3). */
+export interface ShadowBurnVerifier {
+  /**
+   * Returns true iff a confirmed `ShadowBurned` (or sink
+   * `ShadowWithdrawalLocked`) event exists with this `withdrawalId`, matching
+   * asset and amount.
+   */
+  hasConfirmedBurn(params: {
+    withdrawalId: Hex;
+    shadowBurnRef: Hex;
+    asset: Address;
+    amount: bigint;
+  }): Promise<boolean>;
+}
+
+/** Reads used-nonce state from the public bridge contract (spec 7.4 check 4). */
+export interface NonceChecker {
+  isNonceUsed(owner: Address, nonce: bigint): Promise<boolean>;
+}
+
+/** Typed-data signer with exclusive access to the signer key (a viem LocalAccount). */
+export type TypedDataSigner = Pick<LocalAccount, "address" | "signTypedData">;
+
+/** Persists issued authorizations to enforce the re-issue invariant (7.5). */
+export interface AuthorizationStore {
+  get(withdrawalId: Hex): IssuedAuthorization | undefined;
+  put(record: IssuedAuthorization): void;
+}
+
+export interface IssuedAuthorization {
+  withdrawalId: Hex;
+  payload: WithdrawalAuthorization;
+  signature: Hex;
+}
+
+export class InMemoryAuthorizationStore implements AuthorizationStore {
+  private map = new Map<Hex, IssuedAuthorization>();
+  get(withdrawalId: Hex): IssuedAuthorization | undefined {
+    return this.map.get(withdrawalId);
+  }
+  put(record: IssuedAuthorization): void {
+    this.map.set(record.withdrawalId, record);
+  }
+}
+
+export type SignWithdrawalError =
+  | "bad_user_signature"
+  | "wrong_owner"
+  | "mapping_mismatch"
+  | "burn_not_confirmed"
+  | "nonce_used"
+  | "reissue_parameter_mismatch";
+
+export class SignWithdrawalRejection extends Error {
+  constructor(readonly reason: SignWithdrawalError) {
+    super(`signing service rejected: ${reason}`);
+    this.name = "SignWithdrawalRejection";
+  }
+}
+
+export interface SigningServiceConfig {
+  domain: BridgeDomainParams;
+  /** Authorization validity window in seconds (default 24h, spec 7.4). */
+  authTtlSeconds?: number;
+  resolveShadowAccount: (command: WithdrawCommand) => Hex;
+}
+
+export interface SigningServiceDeps {
+  signer: TypedDataSigner;
+  burnVerifier: ShadowBurnVerifier;
+  nonceChecker: NonceChecker;
+  authStore: AuthorizationStore;
+}
+
+/**
+ * Stateless verifier with exclusive access to the withdrawal signer key (spec
+ * 7.4 "Signing Service Contract"). It signs ONLY a `WithdrawalAuthorization`,
+ * and only after every mandatory check passes.
+ */
+export class SigningService {
+  constructor(
+    private readonly cfg: SigningServiceConfig,
+    private readonly deps: SigningServiceDeps,
+  ) {}
+
+  /**
+   * @param now unix seconds (for the authorization deadline).
+   * @returns the signed authorization payload and signature.
+   * @throws SignWithdrawalRejection when any mandatory check fails.
+   */
+  async signWithdrawal(
+    command: WithdrawCommand,
+    userSignature: Hex,
+    shadowBurnRef: Hex,
+    now: number,
+  ): Promise<IssuedAuthorization> {
+    // (1) user signature recovers to owner over the canonical digest
+    let recovered: Address;
+    try {
+      recovered = await recoverWithdrawCommandSigner(
+        this.cfg.domain,
+        command,
+        userSignature,
+      );
+    } catch {
+      throw new SignWithdrawalRejection("bad_user_signature");
+    }
+    if (getAddress(recovered) !== getAddress(command.owner)) {
+      throw new SignWithdrawalRejection("wrong_owner");
+    }
+
+    // (2) owner <-> shadowAccount mapping matches canonical derivation/registry
+    const expectedShadow = this.cfg.resolveShadowAccount(command);
+    if (expectedShadow.toLowerCase() !== command.shadowAccount.toLowerCase()) {
+      throw new SignWithdrawalRejection("mapping_mismatch");
+    }
+
+    const withdrawalId = hashWithdrawCommand(this.cfg.domain, command);
+
+    // (3) confirmed shadow burn with matching withdrawalId/asset/amount
+    const burnOk = await this.deps.burnVerifier.hasConfirmedBurn({
+      withdrawalId,
+      shadowBurnRef,
+      asset: command.asset,
+      amount: command.amount,
+    });
+    if (!burnOk) throw new SignWithdrawalRejection("burn_not_confirmed");
+
+    // (4) nonce unused on the public bridge contract
+    if (await this.deps.nonceChecker.isNonceUsed(command.owner, command.nonce)) {
+      throw new SignWithdrawalRejection("nonce_used");
+    }
+
+    // (5) no prior authorization for this withdrawalId with different params.
+    //     Identical re-issue with a fresh deadline is allowed (spec 7.5).
+    const prior = this.deps.authStore.get(withdrawalId);
+    if (prior && !sameCoreParams(prior.payload, command, shadowBurnRef)) {
+      throw new SignWithdrawalRejection("reissue_parameter_mismatch");
+    }
+
+    const ttl = this.cfg.authTtlSeconds ?? 24 * 60 * 60;
+    const payload: WithdrawalAuthorization = {
+      gameId: command.gameId,
+      owner: command.owner,
+      shadowAccount: command.shadowAccount,
+      asset: command.asset,
+      amount: command.amount,
+      recipient: command.recipient,
+      userCommandHash: withdrawalId,
+      shadowBurnRef,
+      nonce: command.nonce,
+      deadline: BigInt(now + ttl),
+    };
+
+    const signature = await this.deps.signer.signTypedData({
+      domain: bridgeDomain(this.cfg.domain),
+      types: WITHDRAWAL_AUTHORIZATION_TYPES,
+      primaryType: "WithdrawalAuthorization",
+      message: payload,
+    });
+
+    const issued: IssuedAuthorization = { withdrawalId, payload, signature };
+    this.deps.authStore.put(issued);
+    return issued;
+  }
+}
+
+/** Core params that must stay identical across a re-issue (deadline may change). */
+function sameCoreParams(
+  prior: WithdrawalAuthorization,
+  command: WithdrawCommand,
+  shadowBurnRef: Hex,
+): boolean {
+  return (
+    prior.gameId.toLowerCase() === command.gameId.toLowerCase() &&
+    getAddress(prior.owner) === getAddress(command.owner) &&
+    prior.shadowAccount.toLowerCase() === command.shadowAccount.toLowerCase() &&
+    getAddress(prior.asset) === getAddress(command.asset) &&
+    prior.amount === command.amount &&
+    getAddress(prior.recipient) === getAddress(command.recipient) &&
+    prior.nonce === command.nonce &&
+    prior.shadowBurnRef.toLowerCase() === shadowBurnRef.toLowerCase()
+  );
+}

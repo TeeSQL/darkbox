@@ -2,16 +2,17 @@
 
 ## 1. Decision
 
-DarkBox uses a public bridge/escrow contract for real assets and a shadow asset inside the local shadow EVM for in-game accounting.
+DarkBox uses a public bridge/escrow contract for USDC and shadow USDC inside the local shadow EVM for in-game accounting.
 
 Users may deposit into or withdraw from their agent at any time, with one constraint: withdrawals can only use withdrawable available balance. Users cannot force liquidation of open orders or positions.
 
 For the hackathon MVP:
 
-- Canonical public assets: USDC first, ETH optional if useful for demo/onboarding.
-- Canonical escrow chain: Base unless a sponsor flow requires another settlement chain.
-- Public contract: accepts direct sends/transfers and explicit deposit function calls.
-- Shadow EVM: mints/burns corresponding shadow USDC/shadow ETH for the user's mapped shadow account.
+- Canonical public asset: USDC only. Other collateral assets are out of scope.
+- Canonical escrow chains: Base and Arc for MVP. Both feed one canonical shadow USDC balance.
+- Public contract: accepts direct USDC ERC-20 transfers and explicit USDC deposit function calls only.
+- Shadow EVM: mints/burns shadow USDC for the user's mapped shadow account. It should not model arbitrary collateral assets.
+- Disposable invite links/codes: valid claims mint a $5 promo shadow USDC starter credit so users can play without depositing.
 - Ownership mapping: every shadow account maps to an onchain owner wallet.
 - Withdrawals: user signs a withdrawal command; the system forces the agent/shadow account to burn or transfer shadow funds in the shadow EVM; a signing service authorizes public escrow withdrawal.
 - Emergency withdrawal: retained through multisig/admin transaction path.
@@ -23,14 +24,15 @@ There are no Merkle claims in the normal withdrawal path. Withdrawals are online
 - Let users top up or withdraw available agent funds any time.
 - Keep real assets custodied in the public bridge/escrow contract.
 - Keep strategy risk intact: users can withdraw idle balance but cannot liquidate active positions through the bridge.
-- Make every shadow mint traceable to a public deposit operation.
+- Make every real-deposit shadow mint traceable to a public deposit operation.
+- Make every promo-credit shadow mint traceable to an admin-created invite claim.
 - Make every public withdrawal traceable to a user-signed command and a shadow-EVM burn/transfer.
 - Keep the public frontend away from hidden orderbook/trade/position APIs.
 - Keep the stack Docker/local-first so the same services can run locally and inside the CVM deployment.
 
 ## 3. Non-Goals
 
-- General-purpose bridge custody across many chains.
+- General-purpose bridge custody across arbitrary chains beyond the configured Base/Arc MVP set.
 - Forced liquidation of positions to satisfy withdrawals.
 - Public exposure of hidden orderbooks, trades, positions, or per-market PnL.
 - Supporting many onboarding providers in the MVP.
@@ -39,10 +41,10 @@ There are no Merkle claims in the normal withdrawal path. Withdrawals are online
 
 ## 4. Actors
 
-- User: owns an onchain wallet, maps to a shadow account, deposits/withdraws available funds.
+- User: owns an onchain wallet, maps to a shadow account, deposits/withdraws available funds, or joins through a disposable invite bonus without depositing.
 - Agent: trades inside the shadow EVM using the user's shadow balance and instructions.
 - Frontend: public app; talks only to public bridge/indexer APIs.
-- Public bridge contract: custodies real USDC/ETH, records deposits, verifies signing-service withdrawals, supports emergency multisig exits.
+- Public bridge contract: custodies real USDC, records deposits, verifies signing-service withdrawals, supports emergency multisig exits.
 - Bridge service: detects public deposits, mints shadow funds, processes user withdrawal commands, asks signing service for exit signatures.
 - Signing service: signs withdrawal authorizations after shadow burn/transfer is confirmed.
 - Shadow EVM: holds shadow accounts, owner mapping, shadow assets, Frontier markets, and bridge-controller contracts.
@@ -70,26 +72,26 @@ Rules:
 
 ### 5.2 Public Escrow Balance
 
-Real assets stay in the public bridge/escrow contract.
+Real USDC stays in public bridge/escrow contracts on configured source/destination chains.
 
 Escrow tracks:
 
-- asset address, or native ETH sentinel
 - onchain owner
 - optional beneficiary owner
 - total deposited
 - total withdrawn
+- chain id and bridge address
 - used withdrawal nonces
 - emergency status
 
 ### 5.3 Shadow Asset Balance
 
-The shadow EVM mints local shadow assets corresponding to public deposits.
+The shadow EVM mints local shadow USDC corresponding to public deposits.
 
 Rules:
 
-- Public USDC deposit mints shadow USDC.
-- Public ETH deposit mints shadow ETH, if ETH is supported.
+- Public USDC deposit mints real-deposit shadow USDC.
+- Valid disposable invite claim mints $5 promo shadow USDC.
 - Minting is performed only by the shadow bridge controller/coordinator.
 - Every mint references a public deposit operation id.
 - Duplicate public operations must not create duplicate shadow mints.
@@ -105,6 +107,7 @@ Withdrawable balance equals idle/free balance that is not:
 - reserved for pending internal transfers
 - required by unresolved market constraints
 - already committed to a pending withdrawal command
+- any balance in an account that claimed the $5 invite bonus before the Sunday 17:00 event-local unlock
 
 Users may withdraw only this available amount. If they want more, the agent must voluntarily cancel orders, close positions, or wait for fills/resolution according to normal market rules.
 
@@ -114,24 +117,18 @@ Users may withdraw only this available amount. If they want more, the agent must
 
 DarkBox supports both passive sends and explicit function calls.
 
-1. Direct ETH send:
-   - user sends ETH to the public bridge contract
-   - contract emits a receive/deposit event where possible
-   - offchain system also observes the transaction
-   - beneficiary defaults to `msg.sender`
-
-2. Direct USDC transfer:
+1. Direct ERC-20 transfer:
    - user transfers USDC to the public bridge contract
-   - offchain system detects the ERC-20 `Transfer(from, bridge, amount)` event
+   - offchain system detects the USDC `Transfer(from, bridge, amount)` event
    - beneficiary defaults to `from`, unless a prior deposit intent maps the transfer to another beneficiary
 
-3. Explicit deposit function:
+2. Explicit deposit function:
    - user approves USDC
-   - user calls `deposit(asset, amount, beneficiary)`
+   - user calls `deposit(amount, beneficiary)`
    - useful for normal app UX and composed flows such as LI.FI
 
-4. Cross-chain/onboarding adapter:
-   - provider flow ultimately sends assets to the bridge or calls `deposit(...)`
+3. Cross-chain/onboarding adapter:
+   - provider flow ultimately sends USDC to the bridge or calls `deposit(...)`
    - offchain normalizer maps the operation to the beneficiary owner
 
 ### 6.2 Deposit State Machine
@@ -145,12 +142,12 @@ Deposits are allowed any time unless the game or bridge is paused.
 
 ### 6.3 Deposit Happy Path
 
-1. User sends USDC/ETH to bridge or calls `deposit(asset, amount, beneficiary)`.
+1. User sends USDC to bridge or calls `deposit(amount, beneficiary)`.
 2. Bridge watcher detects the operation.
 3. Bridge waits for the required confirmation threshold.
 4. Bridge resolves beneficiary owner and shadow account mapping.
 5. If needed, bridge creates/updates the shadow account mapping in the shadow EVM.
-6. Bridge submits `mintShadow(asset, shadowAccount, amount, depositOpId)` to the shadow bridge controller.
+6. Bridge submits `mintShadow(shadowAccount, amount, depositOpId)` to the shadow bridge controller.
 7. Shadow EVM emits `ShadowMinted`.
 8. Indexer sees the mint and updates available balance.
 9. UI shows the deposit as credited.
@@ -160,7 +157,7 @@ Deposits are allowed any time unless the game or bridge is paused.
 Deposit operation id:
 
 ```text
-chainId:bridgeAddress:asset:txHash:logIndex:from:beneficiary:amount
+sourceChainId:bridgeAddress:usdc:txHash:logIndex:from:beneficiary:amount
 ```
 
 Rules:
@@ -170,9 +167,50 @@ Rules:
 - Direct USDC transfers without explicit beneficiary credit the sender by default.
 - Deposit intents can override beneficiary only when the observed transfer matches the intent constraints.
 
-## 7. Withdrawal Lifecycle
+### 6.5 Multichain Deposit Normalization
 
-### 7.1 Withdrawal State Machine
+DarkBox may deploy one public bridge contract per configured escrow chain, initially Base and Arc. Deposits on either chain mint the same canonical shadow USDC. The shadow EVM must not track separate Base-USDC and Arc-USDC user balances.
+
+Rules:
+
+- Each bridge watcher is configured with `(sourceChainId, bridgeAddress, usdcAddress, confirmationsRequired)`.
+- Deposit operation ids include source chain and bridge address, so identical-looking transfers on different chains cannot collide.
+- Confirmed deposits from Base and Arc both call the same shadow mint path.
+- Public escrow solvency is tracked per chain, but user game balance is global.
+- Unsupported chains and unsupported tokens do not mint shadow balance.
+
+## 7. Disposable Invite Signup Bonus Lifecycle
+
+Disposable invites are a core MVP onboarding path, not a stretch goal. They let a hackathon participant start playing without first sending USDC.
+
+### 7.1 Invite Rules
+
+- Admin or operator creates an invite code/link with a hashed secret/start parameter.
+- Default bonus amount is 5 USDC-equivalent shadow credit.
+- Default usage is one claim per invite link. Campaign links may allow bounded multi-use only with explicit admin config.
+- Invite links can expire or be revoked.
+- A wallet/Telegram identity can claim at most one signup bonus per game unless admin overrides it.
+- Claims require registration/mapping to an owner wallet and shadow account before minting.
+
+### 7.2 Promo Credit Mint
+
+Invite operation id:
+
+```text
+gameId:inviteId:claimantOwner:shadowAccount:bonusAmount
+```
+
+Rules:
+
+- Valid invite claim mints promo shadow USDC to the mapped shadow account.
+- Promo mints are emitted/indexed separately from real USDC deposit mints.
+- Accounts that claim the $5 invite bonus cannot withdraw anything until Sunday 17:00 event-local time. They can trade normally before the unlock.
+- After the unlock, withdrawals follow normal withdrawable-balance rules.
+- Every promo mint must appear in reveal accounting so observers can distinguish real deposits from signup bonuses.
+
+## 8. Withdrawal Lifecycle
+
+### 8.1 Withdrawal State Machine
 
 ```text
 requested -> user_signed -> shadow_burn_submitted -> shadow_burned -> service_signed -> submitted_public_withdrawal -> withdrawn
@@ -180,13 +218,13 @@ requested -> user_signed -> shadow_burn_submitted -> shadow_burned -> service_si
           \-> failed_needs_reconcile
 ```
 
-### 7.2 User-Signed Withdrawal Command
+### 8.2 User-Signed Withdrawal Command
 
 When a user wants to withdraw:
 
 1. User connects their owner wallet.
 2. UI fetches withdrawable available balance from the public-safe bridge/indexer API.
-3. User chooses asset, amount, recipient, and shadow account.
+3. User chooses amount, recipient, and shadow account.
 4. User signs an EIP-712 withdrawal command.
 5. Bridge treats this signature as a command to the user's agent/shadow account.
 
@@ -199,7 +237,6 @@ WithdrawCommand {
   gameId
   owner
   shadowAccount
-  asset
   amount
   recipient
   nonce
@@ -209,12 +246,12 @@ WithdrawCommand {
 }
 ```
 
-### 7.3 Forced Shadow Burn / Transfer
+### 8.3 Forced Shadow Burn / Transfer
 
 After validating the user signature, the bridge submits a shadow-EVM transaction that forces one of:
 
-- burn shadow asset from the user's shadow account, or
-- transfer shadow asset from the user's shadow account to a bridge sink account
+- burn shadow USDC from the user's shadow account, or
+- transfer shadow USDC from the user's shadow account to a bridge sink account
 
 Rules:
 
@@ -223,7 +260,7 @@ Rules:
 - It reserves the amount immediately to prevent double-withdrawal.
 - It emits `ShadowWithdrawalLocked` or `ShadowBurned` with the withdrawal id.
 
-### 7.4 Signing-Service Public Withdrawal
+### 8.4 Signing-Service Public Withdrawal
 
 Once the shadow burn/transfer is confirmed:
 
@@ -233,15 +270,64 @@ Once the shadow burn/transfer is confirmed:
    - owner-to-shadow mapping
    - shadow burn/transfer event
    - nonce unused
-   - asset/amount/recipient match
+   - amount/recipient match
 3. Signing service returns a signature over the public withdrawal payload.
 4. UI receives the signing-service signature.
 5. User submits `withdraw(...)` to the public bridge contract.
-6. Public bridge verifies signer authorization, marks nonce used, transfers real asset.
+6. Public bridge verifies signer authorization, marks nonce used, transfers USDC.
 
-This makes withdrawal user-initiated while preserving the invariant that public escrow only releases assets after the corresponding shadow funds are removed from circulation.
+This makes withdrawal user-initiated while preserving the invariant that public escrow only releases USDC after the corresponding shadow funds are removed from circulation.
 
-### 7.5 Public Withdrawal Payload
+### 8.5 Multichain Withdrawal and Liquidity Routing
+
+Users may request withdrawal to any configured payout chain, initially Base or Arc. The game balance remains a single shadow USDC balance; it is not split by deposit chain.
+
+Withdrawal command additions:
+
+```text
+WithdrawCommand {
+  ...
+  destinationChainId
+  destinationBridge
+  recipient
+}
+```
+
+Rules:
+
+- The user first signs a withdrawal command for amount, recipient, destination chain, and destination bridge.
+- The bridge service validates the command and burns/reserves shadow USDC before any public-chain payout signature is issued.
+- After the shadow burn is confirmed, the withdrawal is globally owed exactly once.
+- If the destination bridge has enough available USDC, the signing service signs a withdrawal authorization for that destination bridge.
+- If the destination bridge lacks enough USDC, the bridge service starts a rebalance from another configured escrow chain before signing the public payout.
+- Rebalancing changes public escrow distribution only; it must not mint or burn shadow USDC.
+- A withdrawal authorization is bound to `(withdrawalId, destinationChainId, destinationBridge, amount, recipient, nonce, deadline)` so it cannot be replayed on another chain or bridge.
+
+Recommended rebalance priority for USDC:
+
+1. Circle CCTP, if both chains support native USDC burn/mint for the route.
+2. Chainlink CCIP, if the route is supported and operationally simpler for the demo.
+3. LI.FI, as the aggregator fallback when the preferred canonical route is unavailable.
+
+The rebalance state machine is separate from the withdrawal state machine:
+
+```text
+not_needed | required -> route_selected -> source_transfer_submitted -> destination_funded -> ready_to_sign
+                     \-> failed_needs_operator_reconcile
+```
+
+Double-spend prevention depends on order, not on destination-chain liquidity:
+
+1. User signs command.
+2. Shadow USDC is burned/reserved using a unique withdrawal id.
+3. Optional public escrow rebalance completes.
+4. Signing service signs exactly one destination-chain withdrawal authorization.
+5. User or relayer submits payout on the destination bridge.
+
+If rebalancing fails after the shadow burn, the withdrawal stays pending/retriable; it must not recreate shadow balance automatically unless an explicit admin/user-cancel recovery path burns the pending withdrawal record and restores the shadow balance with an auditable event.
+
+
+### 7.6 Public Withdrawal Payload
 
 Suggested payload signed by service:
 
@@ -250,9 +336,10 @@ WithdrawalAuthorization {
   gameId
   owner
   shadowAccount
-  asset
   amount
   recipient
+  destinationChainId
+  destinationBridge
   userCommandHash
   shadowBurnTxHash
   nonce
@@ -262,7 +349,7 @@ WithdrawalAuthorization {
 }
 ```
 
-### 7.6 Emergency Withdrawal
+### 7.7 Emergency Withdrawal
 
 Emergency withdrawal remains available through multisig/admin transaction.
 
@@ -298,7 +385,7 @@ Required registration commitment fields:
 
 Registration freeze, if used, freezes new agents or instruction updates. It should not freeze deposits or withdrawals unless the bridge is paused.
 
-## 9. Public Bridge Contract Interface
+## 10. Public Bridge Contract Interface
 
 Candidate Solidity interface:
 
@@ -318,7 +405,6 @@ interface IDarkBoxBridge {
     event DepositReceived(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
         uint256 amount,
         address beneficiary,
         bytes32 depositRef
@@ -327,7 +413,6 @@ interface IDarkBoxBridge {
     event WithdrawalExecuted(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
         uint256 amount,
         address recipient,
         uint256 nonce,
@@ -338,13 +423,10 @@ interface IDarkBoxBridge {
     event EmergencyWithdrawal(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
         uint256 amount,
         address recipient,
         bytes32 reason
     );
-
-    receive() external payable;
 
     function registerAgent(
         bytes32 gameId,
@@ -358,17 +440,15 @@ interface IDarkBoxBridge {
 
     function deposit(
         bytes32 gameId,
-        address asset,
         uint256 amount,
         address beneficiary,
         bytes32 depositRef
-    ) external payable;
+    ) external;
 
     function withdraw(
         bytes32 gameId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount,
         address recipient,
         uint256 nonce,
@@ -381,7 +461,6 @@ interface IDarkBoxBridge {
     function emergencyWithdraw(
         bytes32 gameId,
         address owner,
-        address asset,
         uint256 amount,
         address recipient,
         bytes32 reason
@@ -391,20 +470,20 @@ interface IDarkBoxBridge {
 
 Notes:
 
-- Native ETH uses `asset = address(0)` or an agreed sentinel.
-- Direct ERC-20 transfers do not call `deposit(...)`; the offchain watcher must detect them from token `Transfer` events.
+- Non-USDC balances are not supported. The bridge, shadow chain, and indexer must not model multiple collateral assets for the MVP.
+- Direct ERC-20 transfers do not call `deposit(...)`; the offchain watcher must detect allowlisted tokens from token `Transfer` events and ignore all other token contracts.
 - `deposit(...)` exists for approve + deposit UX and composed flows such as LI.FI.
 
-## 10. Shadow EVM Bridge Controller Interface
+## 11. Shadow EVM Bridge Controller Interface
 
 Candidate shadow-side interface:
 
 ```solidity
 interface IShadowBridgeController {
     event ShadowAccountMapped(address indexed owner, bytes32 indexed shadowAccount);
-    event ShadowMinted(bytes32 indexed depositOpId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
-    event ShadowWithdrawalLocked(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
-    event ShadowBurned(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
+    event ShadowMinted(bytes32 indexed depositOpId, bytes32 indexed shadowAccount, uint256 amount);
+    event ShadowWithdrawalLocked(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, uint256 amount);
+    event ShadowBurned(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, uint256 amount);
 
     function mapShadowAccount(address owner, bytes32 shadowAccount) external;
 
@@ -412,7 +491,6 @@ interface IShadowBridgeController {
         bytes32 depositOpId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount
     ) external;
 
@@ -420,16 +498,15 @@ interface IShadowBridgeController {
         bytes32 withdrawalId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount,
         bytes32 userCommandHash
     ) external;
 
-    function withdrawableBalance(bytes32 shadowAccount, address asset) external view returns (uint256);
+    function withdrawableBalance(bytes32 shadowAccount) external view returns (uint256);
 }
 ```
 
-## 11. Bridge Service API
+## 12. Bridge Service API
 
 Public endpoints exposed by `darkbox-bridge`:
 
@@ -459,11 +536,11 @@ Internal endpoints, not public:
 
 The public frontend must never receive internal reconciliation data that reveals hidden trades, positions, or per-market PnL before reveal.
 
-## 12. Bridge Worker Responsibilities
+## 13. Bridge Worker Responsibilities
 
 Workers:
 
-- public chain watcher for ETH receives, explicit deposits, and ERC-20 transfers
+- public chain watcher for USDC ERC-20 transfers and explicit deposits
 - provider/webhook normalizer, if sponsor UX is used
 - shadow account mapper
 - shadow mint submitter
@@ -486,11 +563,13 @@ Required persistence:
 
 Local-first storage can be Postgres or SQLite for MVP. If using SQLite locally, keep the schema compatible with Postgres for CVM deployment.
 
-## 13. Docker / CVM Deployment
+## 14. Docker / CVM Deployment
 
-`darkbox-bridge` runs as its own container.
+`darkbox-bridge` runs as its own container, but it does not need a dedicated CVM for the MVP. It should cohabit with the hidden stack inside the private CVM/security boundary because it needs internal access to the shadow node/controller and indexer state, plus egress to Base RPC.
 
-`darkbox-signer` may be a separate container or an internal module for MVP. Prefer a separate container if time allows, because it has a distinct key boundary.
+Do not run `darkbox-bridge` in the public frontend container. Public routes may proxy a narrow bridge API, but the bridge process itself belongs on the private side.
+
+`darkbox-signer` may be a separate container or an internal module for MVP. Prefer a separate container if time allows, because it has a distinct key boundary. If a second CVM/enclave is available later, the signer is the component most worth isolating; the bridge container can remain co-located with the hidden node/indexer.
 
 Required networks:
 
@@ -523,36 +602,42 @@ FUNDING_PROVIDER=direct|blink|privy|dynamic|lifi
 DATABASE_URL=
 ```
 
-## 14. Security Invariants
+## 15. Security Invariants
 
 - Public withdrawals require both user command signature and signing-service authorization.
 - Signing-service authorization requires confirmed shadow burn/transfer first.
 - Withdrawals can only consume withdrawable available balance; they must never liquidate or cancel positions implicitly.
-- Public deposits can mint shadow assets only once.
-- Direct ERC-20 transfers must be reconciled from canonical token events, not trusted client reports.
+- Public deposits across Base and Arc can mint shadow USDC only once.
+- Direct ERC-20 transfers must be reconciled from canonical token events on the configured source chain, not trusted client reports.
 - Provider webhooks are advisory until reconciled against canonical public-chain/provider state.
 - Owner-to-shadow mapping must be enforced consistently on deposits, withdrawals, and agent control.
 - Public APIs must not expose hidden balances beyond user-owned available balance and allowed leaderboard aggregates.
+- Accounts flagged as invite-bonus recipients must be rejected for withdrawals until Sunday 17:00 event-local time.
 - Emergency withdrawal is multisig/admin-only and must be auditable.
 - Coordinator and signer keys must be injected as Docker secrets or CVM-sealed secrets, never baked into images.
+- Destination-chain withdrawal signing must happen only after shadow burn/reservation and any required destination liquidity rebalance are confirmed.
 
-## 15. MVP Implementation Plan
+## 16. MVP Implementation Plan
 
-1. Implement public bridge contract with `receive()`, `deposit(asset, amount, beneficiary)`, signer-authorized `withdraw(...)`, and multisig `emergencyWithdraw(...)`.
+1. Implement public bridge contract with `deposit(amount, beneficiary)`, signer-authorized `withdraw(...)`, and multisig `emergencyWithdraw(...)`. USDC is the only supported asset; no secondary asset path.
 2. Implement shadow bridge controller with owner mapping, idempotent shadow mint, withdrawable-balance check, and burn/lock for withdrawal.
-3. Implement bridge watcher for direct ETH sends, direct USDC `Transfer` events, and explicit deposit calls.
-4. Implement shadow account mapping and immediate minting after confirmed public deposits.
+3. Implement bridge watchers for Base and Arc direct USDC `Transfer` events and explicit deposit calls.
+4. Implement disposable invite code/link claims with $5 promo shadow USDC mints, one-claim guards, expiry/revocation, promo-vs-real accounting, and a Sunday 17:00 event-local withdrawal unlock for bonus recipients.
+5. Implement per-chain escrow accounting and withdrawal destination-chain selection.
+6. Implement rebalance worker for destination-chain liquidity shortfalls using Circle CCTP first when available, then Chainlink CCIP or LI.FI fallback.
+7. Implement shadow account mapping and immediate minting after confirmed public deposits or invite claims.
 5. Implement user EIP-712 withdrawal command flow.
 6. Implement shadow burn/transfer worker.
 7. Implement signing service authorization after burn confirmation.
 8. Implement frontend deposit and available-balance withdrawal UX.
 9. Add one sponsor/composed deposit adapter only if it improves demo/bounty fit.
 
-## 16. Demo Script
+## 17. Demo Script
 
-- User connects wallet.
+- User opens a disposable invite link or connects wallet directly.
 - User registers an agent and receives/creates a shadow account mapping.
-- User sends USDC directly to bridge or uses approve + `deposit(amount, beneficiary)`.
+- If using an invite, the system mints $5 promo shadow USDC so the agent can play immediately.
+- Otherwise, user sends USDC directly to bridge or uses approve + `deposit(amount, beneficiary)`.
 - Bridge detects the operation and mints shadow USDC to the mapped shadow account.
 - Agent trades with shadow USDC inside the shadow EVM.
 - User sees withdrawable available balance.

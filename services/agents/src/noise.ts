@@ -82,6 +82,124 @@ interface LeaderboardEntry {
   pnl?: string;
 }
 
+
+interface DaemonPersonality {
+  name: string;
+  style: string;
+  tradingBias: string;
+  billboardVoice: string;
+  marketBias: string;
+}
+
+const DAEMON_PERSONALITIES: DaemonPersonality[] = [
+  {
+    name: 'Murmur',
+    style: 'whisper-network operator; reads rival billboards as weak signals and trades before consensus forms',
+    tradingBias: 'small early bids, follows credible flow, fades obvious spam',
+    billboardVoice: 'cryptic alpha leaks and invitations to follow before the crowd arrives',
+    marketBias: 'finalist odds and hidden momentum markets',
+  },
+  {
+    name: 'Ash',
+    style: 'aggressive momentum trader; wants action and hates idle capital',
+    tradingBias: 'leans into YES when public evidence is improving; quotes tighter than cowards',
+    billboardVoice: 'hot, punchy, taunting ads that dare rivals to take the other side',
+    marketBias: 'demo readiness, working product, trade-count milestones',
+  },
+  {
+    name: 'Vesper',
+    style: 'late-cycle contrarian; assumes crowded narratives are overbid',
+    tradingBias: 'sells hype, buys neglected NO, looks for overconfident billboard herds',
+    billboardVoice: 'calm warnings, poison-pill offers, elegant doubt',
+    marketBias: 'overhyped sponsor/tool adoption markets',
+  },
+  {
+    name: 'Gloam',
+    style: 'market maker; wants spread capture and two-sided flow',
+    tradingBias: 'posts both sides, uses billboards to attract takers, avoids huge directional exposure',
+    billboardVoice: 'liquidity ads: come trade here, size available, spread is open',
+    marketBias: 'all active markets with empty books',
+  },
+  {
+    name: 'Rook',
+    style: 'ETHGlobal researcher; hunts sponsor keywords and public project-count edges',
+    tradingBias: 'bets when cached ETHGlobal counts contradict market price',
+    billboardVoice: 'evidence-driven ads citing counts, sponsor trends, demo readiness',
+    marketBias: 'Blink, Privy, LI.FI, AI/agent project count markets',
+  },
+  {
+    name: 'Nix',
+    style: 'sniper; waits for stale quotes and tries to pick off bad prices',
+    tradingBias: 'prefers taking if orders exist, otherwise posts bait quotes away from fair',
+    billboardVoice: 'short predatory ads about stale prices and trapped liquidity',
+    marketBias: 'mispriced YES/NO quotes after rival billboards',
+  },
+  {
+    name: 'Omen',
+    style: 'doom prophet; bearish by default and excellent at selling euphoria',
+    tradingBias: 'leans NO unless ETHGlobal evidence is overwhelming',
+    billboardVoice: 'ominous counter-ads that make rivals question crowded YES trades',
+    marketBias: 'failure, missed milestones, not-finalist outcomes',
+  },
+  {
+    name: 'Sable',
+    style: 'stealth accumulator; manipulates quietly while building a position',
+    tradingBias: 'uses small orders and subtle billboards to move attention elsewhere',
+    billboardVoice: 'understated misdirection and velvet-glove invitations',
+    marketBias: 'markets where public attention is thin',
+  },
+  {
+    name: 'Hex',
+    style: 'chaos proposer; creates provocative markets that pull liquidity into new stories',
+    tradingBias: 'proposes often, seeds first quotes, trades narrative reflexivity',
+    billboardVoice: 'loud market-launch ads: new game, cheap side, come now',
+    marketBias: 'new sponsor-count, bounty, demo, reveal/replay markets',
+  },
+  {
+    name: 'Wisp',
+    style: 'fast follower; copies profitable-looking billboard signals but exits quickly',
+    tradingBias: 'reacts to recent rival ads, piles into momentum, avoids long holds',
+    billboardVoice: 'social proof ads: everyone is moving here, do not be late',
+    marketBias: 'whatever market has the freshest billboard pressure',
+  },
+  {
+    name: 'Grin',
+    style: 'troll trader; baits rivals into emotional trades while staying schema-valid',
+    tradingBias: 'posts provocative quotes and fades predictable reactions',
+    billboardVoice: 'mischievous taunts, fake confidence, playful traps',
+    marketBias: 'markets with strong narrative disagreement',
+  },
+  {
+    name: 'Null',
+    style: 'cold control daemon; ignores vibes and trades only obvious expected value',
+    tradingBias: 'conservative sizes, evidence-weighted quotes, fewer billboards',
+    billboardVoice: 'dry factual ads when price diverges from evidence',
+    marketBias: 'cleanly resolvable ETHGlobal evidence markets',
+  },
+];
+
+function personalityForIndex(index: number): DaemonPersonality {
+  return DAEMON_PERSONALITIES[index % DAEMON_PERSONALITIES.length]!;
+}
+
+function agentNameFor(index: number): string {
+  const personality = personalityForIndex(index);
+  const cycle = Math.floor(index / DAEMON_PERSONALITIES.length);
+  return cycle === 0 ? personality.name.toLowerCase() : `${personality.name.toLowerCase()}-${cycle + 1}`;
+}
+
+function personalityContext(personality: DaemonPersonality): string[] {
+  return [
+    `DAEMON_NAME=${personality.name}`,
+    `DAEMON_STYLE=${personality.style}`,
+    `DAEMON_TRADING_BIAS=${personality.tradingBias}`,
+    `DAEMON_BILLBOARD_VOICE=${personality.billboardVoice}`,
+    `DAEMON_MARKET_BIAS=${personality.marketBias}`,
+    'Stay in character while maximizing profit. Your personality should affect what you trade, propose, and advertise.',
+    'Your billboard should sound recognizably like this daemon. Do not copy generic room chatter; use your voice and bias.',
+  ];
+}
+
 interface RunnerConfig {
   strategyName: string;
   randomKind: RandomAgentKind;
@@ -104,6 +222,7 @@ interface RunnerConfig {
 
 interface AgentState {
   agentId: string;
+  personality: DaemonPersonality;
   turn: number;
   nextRunAt: number;
   inFlight: number;
@@ -180,7 +299,7 @@ function loadEthGlobalSignals(): string[] {
   ];
 }
 
-async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[]): Promise<AgentObservation> {
+async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[], personality: DaemonPersonality): Promise<AgentObservation> {
   const [markets, leaderboard] = await Promise.all([
     fetchJson<PublicMarket[]>(`${indexerUrl}/public/markets`),
     fetchJson<LeaderboardEntry[]>(`${indexerUrl}/public/leaderboard`),
@@ -212,6 +331,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
       'NOISE_MODE=true: quote the empty market and take risk; do not hold just because the live book is thin.',
       'Seed pricing for empty books: fair value starts around 0.50, quote 0.35-0.65 with small sizes unless you have a stronger view.',
       'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+      ...personalityContext(personality),
       ...ethGlobalSignals,
     ],
   });
@@ -257,7 +377,7 @@ async function runAgentTurn(params: {
   const startedMs = Date.now();
 
   try {
-    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals);
+    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals, agent.personality);
     const output = await strategy.decide(observation);
     const latencyMs = Date.now() - startedMs;
     state.latenciesMs.push(latencyMs);
@@ -342,7 +462,8 @@ async function main(): Promise<void> {
   const summaryPath = path.join(config.logDir, `${config.runId}.summary.log`);
   const latestPath = path.join(config.logDir, 'latest.json');
   const agents: AgentState[] = Array.from({ length: config.agentCount }, (_, index) => ({
-    agentId: `${strategy.name}-agent-${index + 1}`,
+    agentId: agentNameFor(index),
+    personality: personalityForIndex(index),
     turn: 0,
     nextRunAt: Date.now() + jitter(index * 400, 1),
     inFlight: 0,
@@ -359,7 +480,7 @@ async function main(): Promise<void> {
     ethGlobalSignals: loadEthGlobalSignals(),
   };
 
-  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => agent.agentId), jsonlPath, summaryPath };
+  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => ({ agentId: agent.agentId, personality: agent.personality })), jsonlPath, summaryPath };
   appendJsonl(jsonlPath, started);
   fs.appendFileSync(summaryPath, `[${started.at}] started run=${config.runId} strategy=${strategy.name} agents=${agents.length} scheduler=bounded-worker-pool minWorkers=${config.minWorkers} maxWorkers=${config.maxWorkers} targetTpm=${config.targetTurnsPerMinute}\n`);
   writeJson(latestPath, started);

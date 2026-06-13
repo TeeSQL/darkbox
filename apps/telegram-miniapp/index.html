@@ -15,6 +15,9 @@
   <body>
     <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
     <div class="vignette" aria-hidden="true"></div>
+    <button id="sealed-terminal-button" class="sealed-terminal-button" type="button" aria-label="Open sealed whisper terminal">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+    </button>
 
     <main class="app-shell" aria-label="Daemon Hall Telegram flow">
       <section class="view active" id="v-landing">
@@ -152,7 +155,20 @@
       </section>
     </main>
 
+    <div id="sealed-terminal-modal" class="sealed-terminal-modal" role="dialog" aria-modal="true" aria-labelledby="sealed-terminal-title" hidden>
+      <button class="sealed-terminal-scrim" type="button" data-close-terminal aria-label="Close sealed terminal"></button>
+      <section class="sealed-terminal-panel">
+        <div class="sealed-terminal-head">
+          <span class="terminal-kicker">PRIVATE TERMINAL</span>
+          <button class="terminal-close" type="button" data-close-terminal aria-label="Close sealed terminal">×</button>
+        </div>
+        <h2 id="sealed-terminal-title">sealed whispers</h2>
+        <p>Receipts only. The terminal never repeats what you sealed.</p>
+        <div id="sealed-terminal-log" class="sealed-terminal-log" aria-live="polite"></div>
+      </section>
+    </div>
+
     <script src="/src/daemon-reveal.ts" type="module"></script>
-    <script src="/flow.js?v=20260613-mic-session-gate" type="module"></script>
+    <script src="/flow.js?v=20260613-sealed-terminal" type="module"></script>
   </body>
 </html>

@@ -32,8 +32,13 @@ const metricSealedEl = document.querySelector('#metric-sealed');
 const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
 const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
 const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
+const terminalButton = document.querySelector('#sealed-terminal-button');
+const terminalModal = document.querySelector('#sealed-terminal-modal');
+const terminalLogEl = document.querySelector('#sealed-terminal-log');
+const terminalCloseButtons = [...document.querySelectorAll('[data-close-terminal]')];
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
+const SEALED_LOG_KEY = 'daemonhall:sealed-receipts:v1';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
@@ -84,6 +89,77 @@ function signedPercent(seed, offset) {
   const raw = hashNumber(`${seed}:pulse:${offset}`) % 3800;
   const value = (raw - 1200) / 100;
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  }[ch]));
+}
+
+function readSealedReceipts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SEALED_LOG_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeSealedReceipts(receipts) {
+  try { localStorage.setItem(SEALED_LOG_KEY, JSON.stringify(receipts.slice(0, 18))); }
+  catch (_) {}
+}
+
+function rememberSealedReceipt() {
+  const text = input?.value.trim();
+  if (!text) return;
+  const seed = currentSeed();
+  const fp = fingerprint(seed);
+  const receipts = readSealedReceipts().filter((row) => row.fingerprint !== fp);
+  receipts.unshift({
+    fingerprint: fp,
+    daemon: selectedDaemon.name,
+    stake: selectedStake,
+    sealedAt: new Date().toISOString(),
+  });
+  writeSealedReceipts(receipts);
+}
+
+function renderSealedTerminal() {
+  if (!terminalLogEl) return;
+  const receipts = readSealedReceipts();
+  if (!receipts.length) {
+    terminalLogEl.innerHTML = '<div class="terminal-empty">&gt; no sealed receipts yet. whisper once, then come back.</div>';
+    return;
+  }
+  terminalLogEl.innerHTML = receipts.map((row, index) => {
+    const when = row.sealedAt ? new Date(row.sealedAt).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'time sealed';
+    return `
+      <div class="terminal-line">
+        <span class="terminal-prompt">${String(index + 1).padStart(2, '0')}&gt;</span>
+        <span class="terminal-main">
+          ${escapeHtml(row.fingerprint || '0xsealed')} · ${escapeHtml(row.daemon || 'daemon')} · $${escapeHtml(row.stake || 5)}
+          <span class="terminal-meta">${escapeHtml(when)} · <span class="terminal-redacted">message redacted forever</span></span>
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSealedTerminal() {
+  renderSealedTerminal();
+  terminalModal?.removeAttribute('hidden');
+  document.body.classList.add('terminal-open');
+}
+
+function closeSealedTerminal() {
+  terminalModal?.setAttribute('hidden', '');
+  document.body.classList.remove('terminal-open');
 }
 
 function currentSeed() {
@@ -277,6 +353,7 @@ navButtons.forEach((button) => {
       return;
     }
     if (!next) return;
+    if (next === 'v-seal') rememberSealedReceipt();
     showView(next);
     if (button.dataset.openMic === 'true' && next === 'v-whisper') {
       try { await startVoice({ preventDefault() {} }); }
@@ -295,6 +372,11 @@ input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
 voiceButton?.addEventListener('click', startVoice);
+terminalButton?.addEventListener('click', openSealedTerminal);
+terminalCloseButtons.forEach((button) => button.addEventListener('click', closeSealedTerminal));
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !terminalModal?.hasAttribute('hidden')) closeSealedTerminal();
+});
 window.visualViewport?.addEventListener('resize', syncKeyboardState);
 window.addEventListener('pagehide', () => recognition?.stop?.());
 

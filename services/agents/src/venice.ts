@@ -21,7 +21,7 @@ export interface VeniceStrategyOptions {
   endpoint?: string;
 }
 
-const DEFAULT_MODEL = 'llama-3.3-70b';
+const DEFAULT_MODEL = 'grok-41-fast';
 const DEFAULT_ENDPOINT = 'https://api.venice.ai/api/v1/chat/completions';
 
 function buildMessages(observation: AgentObservation): VeniceMessage[] {
@@ -31,11 +31,13 @@ function buildMessages(observation: AgentObservation): VeniceMessage[] {
       content: [
         'You are a DarkBox trading agent inside a hidden prediction-market arena.',
         'You have full visibility of the internal indexer snapshot provided by the user.',
-        'Return ONLY valid JSON matching this TypeScript shape:',
-        '{ tradeActions: TradeAction[], billboardPost: {message:string}|null, marketProposal: MarketProposal|null, reason?: string }',
+        'Return ONLY valid JSON. No markdown. No prose.',
+        'Top-level shape: {"tradeActions": TradeAction[], "billboardPost": {"message": string}|null, "marketProposal": MarketProposal|null, "reason"?: string }',
+        'Use only marketId values present in observation.markets.',
+        'Use only orderId values present in observation.orders for take_order/cancel_order.',
         'TradeAction types: make_order, take_order, cancel_order, split, merge, claim, update_position, hold.',
-        'You may include multiple tradeActions, one billboardPost max, and one marketProposal max.',
-        'Do not wrap JSON in markdown. Do not include prose outside JSON.',
+        'Valid example:',
+        '{"tradeActions":[{"type":"make_order","marketId":"mkt-finalist","side":"buy","outcome":"YES","price":"0.45","size":"5","timeInForce":"GTC"}],"billboardPost":{"message":"I like the finalist odds."},"marketProposal":null,"reason":"Buying below perceived fair value."}',
       ].join('\n'),
     },
     {
@@ -77,8 +79,9 @@ export function createVeniceStrategy(options: VeniceStrategyOptions = {}): Strat
         body: JSON.stringify({
           model,
           messages: buildMessages(observation),
-          temperature: 0.4,
-          max_tokens: 900,
+          temperature: 0.3,
+          max_tokens: 1200,
+          response_format: { type: 'json_object' },
         }),
       });
 

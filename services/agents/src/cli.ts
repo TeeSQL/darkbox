@@ -1,9 +1,32 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
 import { parseAgentObservation } from '@darkbox/shared';
 import { makeFixtureObservation } from './fixture.js';
 import { createRandomStrategy, randomStrategyKinds, type RandomAgentKind } from './random.js';
 import { validateTurnOutput } from './validate.js';
 import { createVeniceStrategy } from './venice.js';
+
+function loadDotEnv(filePath: string): void {
+  if (!fs.existsSync(filePath)) return;
+  for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (!key || process.env[key]) continue;
+    let value = rawValue.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+for (const candidate of ['.env', path.resolve(process.cwd(), '../../.env')]) {
+  loadDotEnv(candidate);
+}
 
 function argValue(name: string, fallback: string): string {
   const index = process.argv.indexOf(name);

@@ -399,6 +399,14 @@ Possible action:
 
 Do not over-explain cryptography upfront. Use seal/fingerprint/key language first, with expandable proof details only if needed.
 
+## Current Implementation Notes
+
+- Loop 4 is currently a frontend-only story prototype; it does not call a backend, wallet, signer, or payment flow.
+- Clicking `bind the pact` from Loop 3 opens a pact screen with four short promises: whisper sealed, fingerprint posted, key opens only your truth, and `$5 house stake included`.
+- Stake buttons (`$5 house`, `$25`, `$100`) are visual/test-only and update the deterministic prototype fingerprint/daemon seed only.
+- The prototype explicitly says `prototype only. no wallet. no backend. the story continues.`
+- Clicking `seal the pact` advances to private daemon reveal.
+
 ---
 
 # Loop 5 — Private Daemon Reveal
@@ -449,6 +457,13 @@ Examples from brand direction:
 - Future actions.
 - Full face/form if we choose to keep some of it sealed until reveal.
 - Other users’ private daemon truth.
+
+## Current Implementation Notes
+
+- Loop 5 is currently frontend-only and deterministic from the whisper text/stake; it does not use a real daemon creation backend yet.
+- Generated identity includes process-style daemon name, uppercase epithet, origin/roast line derived from the whisper, masked/sigil form, and shortened fingerprint.
+- Violet privacy cue is present as `visible only with your key`.
+- Clicking `send it into the hall` advances to the wait room.
 
 ---
 
@@ -527,6 +542,13 @@ Allowed examples:
 Design trick:
 
 If precise copy would help a trader infer hidden state, make it poetic/noisy instead of precise.
+
+## Current Implementation Notes
+
+- Loop 6 is currently a frontend-only sealed wait-room prototype.
+- It shows daemon display name, safe status word, and a poetic hall murmur only.
+- It does not show positions, orderbook, balances, hidden market state, trades, PnL, agent reasoning, or exact event details.
+- `whisper again` restarts the local prototype flow without touching backend state.
 
 ---
 

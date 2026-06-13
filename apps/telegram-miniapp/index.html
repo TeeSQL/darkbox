@@ -66,7 +66,62 @@
             <strong id="sealed-name">██████</strong>
           </div>
           <p class="answer-note">bind the pact to take the key. until then, it stays behind the glass.</p>
-          <button class="bind-preview" type="button">bind comes next</button>
+          <button id="open-pact" class="bind-preview" type="button">bind the pact</button>
+        </div>
+
+        <div class="pact ritual-screen" aria-label="Seal the pact" aria-hidden="true">
+          <p class="ritual-kicker">the pact waits.</p>
+          <h2>seal the whisper.</h2>
+          <div class="pact-promises" aria-label="Pact promises">
+            <p><span>01</span> your whisper is sealed</p>
+            <p><span>02</span> a fingerprint is posted</p>
+            <p><span>03</span> your key opens only your truth</p>
+            <p><span>04</span> $5 house stake included</p>
+          </div>
+          <div class="stake-row" aria-label="Stake selection">
+            <button class="stake-choice active" type="button" data-stake="5">$5 house</button>
+            <button class="stake-choice" type="button" data-stake="25">$25</button>
+            <button class="stake-choice" type="button" data-stake="100">$100</button>
+          </div>
+          <div class="fingerprint-card">
+            <span>fingerprint</span>
+            <strong id="fingerprint">0x••••••••••••</strong>
+          </div>
+          <p class="pact-note">prototype only. no wallet. no backend. the story continues.</p>
+          <button id="seal-pact" class="primary-ritual" type="button">seal the pact</button>
+        </div>
+
+        <div class="daemon-reveal ritual-screen" aria-label="Private daemon reveal" aria-hidden="true">
+          <p class="privacy-cue">visible only with your key</p>
+          <div class="daemon-form" aria-hidden="true">
+            <span class="horn left"></span>
+            <span class="horn right"></span>
+            <span class="eye"></span>
+            <span class="mouth"></span>
+          </div>
+          <p class="daemon-name" id="daemon-name">fomod</p>
+          <p class="daemon-epithet" id="daemon-epithet">THE LATECOMER, FIRST OF ITS PANIC</p>
+          <p class="daemon-origin" id="daemon-origin">born from a whisper that arrived late and still demanded priority.</p>
+          <div class="daemon-proof">
+            <span>sealed fingerprint</span>
+            <strong id="reveal-fingerprint">0x••••••••••••</strong>
+          </div>
+          <button id="send-daemon" class="primary-ritual" type="button">send it into the hall</button>
+        </div>
+
+        <div class="wait-room ritual-screen" aria-label="Wait room" aria-hidden="true">
+          <p class="ritual-kicker">the hall is closed.</p>
+          <h2>your daemon is inside.</h2>
+          <div class="wait-orbit" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="wait-card">
+            <p><span>daemon</span><strong id="wait-daemon-name">fomod</strong></p>
+            <p><span>status</span><strong id="wait-status">listening</strong></p>
+            <p><span>murmur</span><strong id="wait-murmur">▸ something moved behind the wall</strong></p>
+          </div>
+          <p class="wait-note">positions, orders, and the dark stay sealed until the boxes open.</p>
+          <button id="restart-flow" class="ghost-ritual" type="button">whisper again</button>
         </div>
       </section>
     </main>

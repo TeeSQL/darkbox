@@ -10,6 +10,19 @@ const continueButton = document.querySelector('#continue');
 const countdownEl = document.querySelector('#results-countdown');
 const sealedNameEl = document.querySelector('#sealed-name');
 const presenceSigilEl = document.querySelector('#presence-sigil');
+const openPactButton = document.querySelector('#open-pact');
+const sealPactButton = document.querySelector('#seal-pact');
+const sendDaemonButton = document.querySelector('#send-daemon');
+const restartButton = document.querySelector('#restart-flow');
+const stakeButtons = [...document.querySelectorAll('.stake-choice')];
+const fingerprintEl = document.querySelector('#fingerprint');
+const revealFingerprintEl = document.querySelector('#reveal-fingerprint');
+const daemonNameEl = document.querySelector('#daemon-name');
+const daemonEpithetEl = document.querySelector('#daemon-epithet');
+const daemonOriginEl = document.querySelector('#daemon-origin');
+const waitDaemonNameEl = document.querySelector('#wait-daemon-name');
+const waitStatusEl = document.querySelector('#wait-status');
+const waitMurmurEl = document.querySelector('#wait-murmur');
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const defaultStatus = 'only you hear this.';
@@ -19,7 +32,45 @@ let listening = false;
 let flowEntered = false;
 let terminalEntered = false;
 let darkAnswered = false;
+let selectedStake = 5;
+let currentDaemon = null;
 
+const names = ['fomod', 'hopiumd', 'rugd', 'panicd', 'greedd', 'lateforkd', 'copex', 'whisprd', 'doubtd', 'moonwaitd'];
+const epithets = [
+  'THE LATECOMER, FIRST OF ITS PANIC',
+  'STILL BELIEVING AFTER THE LIGHTS WENT OUT',
+  'TRUSTED THE WRONG GATE AND CALLED IT ALPHA',
+  'SWEETEST MOUTH IN THE WRONG MARKET',
+  'BORN SHORT, PRAYING LONG',
+  'THE ONE WHO READ THE ROOM TOO LATE',
+  'WALKS IN CIRCLES UNTIL PROFIT LOOKS LIKE FATE',
+  'A LITTLE TOO BRAVE FOR THE SIZE OF ITS BAG',
+];
+const statuses = ['running', 'listening', 'circling', 'hungry', 'quiet', 'committed', 'still believing', 'overclocked'];
+const murmurs = [
+  '▸ something moved behind the wall',
+  '▸ a daemon laughed without opening its mouth',
+  '▸ the hall counted wrong, then counted again',
+  '▸ a sealed order learned patience',
+  '▸ box 88 made a sound like teeth',
+  '▸ no one outside saw what changed',
+];
+
+function hashNumber(seed) {
+  let h = 2166136261;
+  for (const ch of seed) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function pick(list, seed, offset = 0) { return list[(hashNumber(`${seed}:${offset}`)) % list.length]; }
+function tinyFingerprint(seed) {
+  const h1 = hashNumber(seed).toString(16).padStart(8, '0');
+  const h2 = hashNumber(`${seed}:seal`).toString(16).padStart(8, '0');
+  const h3 = hashNumber(`${seed}:key`).toString(16).padStart(8, '0');
+  return `0x${h1}${h2}${h3}`;
+}
 function formatCountdown(ms) {
   if (ms <= 0) return 'boxes open now';
   const totalSeconds = Math.floor(ms / 1000);
@@ -40,39 +91,89 @@ function autosize() {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, window.innerHeight * 0.28)}px`;
 }
+function answerGlyph(seed) {
+  const glyphs = ['∴', '◇', '◌', '⌁', '✦', '☉', '⟡', '◍'];
+  return pick(glyphs, seed);
+}
+function sealedMask(seed) {
+  return pick(['██████', '███•██', '██•███', '████•█'], seed, 1);
+}
+function buildDaemon() {
+  const whisper = input.value.trim() || 'silence';
+  const fp = tinyFingerprint(`${whisper}:${selectedStake}`);
+  const name = pick(names, whisper);
+  const epithet = pick(epithets, whisper, 2);
+  const phrase = whisper.toLowerCase().replace(/\s+/g, ' ').slice(0, 64);
+  const origin = phrase.length > 12
+    ? `born from “${phrase}${whisper.length > 64 ? '…' : ''}” and already pretending it was a plan.`
+    : 'born from a whisper too small to admit what it wanted.';
+  currentDaemon = {
+    name,
+    epithet,
+    origin,
+    fingerprint: fp,
+    status: pick(statuses, whisper, 3),
+    murmur: pick(murmurs, whisper, 4),
+  };
+  return currentDaemon;
+}
+function paintDaemon() {
+  const daemon = currentDaemon || buildDaemon();
+  if (fingerprintEl) fingerprintEl.textContent = `${daemon.fingerprint.slice(0, 8)}…${daemon.fingerprint.slice(-6)}`;
+  if (revealFingerprintEl) revealFingerprintEl.textContent = `${daemon.fingerprint.slice(0, 10)}…${daemon.fingerprint.slice(-8)}`;
+  if (daemonNameEl) daemonNameEl.textContent = daemon.name;
+  if (daemonEpithetEl) daemonEpithetEl.textContent = daemon.epithet;
+  if (daemonOriginEl) daemonOriginEl.textContent = daemon.origin;
+  if (waitDaemonNameEl) waitDaemonNameEl.textContent = daemon.name;
+  if (waitStatusEl) waitStatusEl.textContent = daemon.status;
+  if (waitMurmurEl) waitMurmurEl.textContent = daemon.murmur;
+}
 function enterFlow() {
   if (flowEntered) return;
   flowEntered = true;
   stage.dataset.loop = 'threshold-copy';
   window.setTimeout(enterTerminal, 2600);
 }
-
-function answerGlyph(seed) {
-  const glyphs = ['∴', '◇', '◌', '⌁', '✦', '☉', '⟡', '◍'];
-  let sum = 0;
-  for (const ch of seed) sum = (sum + ch.charCodeAt(0)) % 997;
-  return glyphs[sum % glyphs.length];
-}
-function sealedMask(seed) {
-  let sum = 0;
-  for (const ch of seed) sum = (sum * 31 + ch.charCodeAt(0)) >>> 0;
-  return ['██████', '███•██', '██•███', '████•█'][sum % 4];
+function enterTerminal() {
+  if (terminalEntered) return;
+  terminalEntered = true;
+  stage.dataset.loop = 'terminal';
+  window.setTimeout(() => input.focus({ preventScroll: true }), 980);
 }
 function enterDarkAnswer() {
   if (darkAnswered) return;
   darkAnswered = true;
   stopListening();
   const whisper = input.value.trim();
+  currentDaemon = null;
+  buildDaemon();
+  paintDaemon();
   if (presenceSigilEl) presenceSigilEl.textContent = answerGlyph(whisper);
   if (sealedNameEl) sealedNameEl.textContent = sealedMask(whisper);
   stage.dataset.loop = 'dark-answer';
 }
-
-function enterTerminal() {
-  if (terminalEntered) return;
-  terminalEntered = true;
+function enterPact() {
+  buildDaemon();
+  paintDaemon();
+  stage.dataset.loop = 'pact';
+}
+function enterReveal() {
+  paintDaemon();
+  stage.dataset.loop = 'daemon-reveal';
+}
+function enterWaitRoom() {
+  paintDaemon();
+  stage.dataset.loop = 'wait-room';
+}
+function restartFlow(event) {
+  event?.stopPropagation?.();
+  stopListening();
+  input.value = '';
+  currentDaemon = null;
+  darkAnswered = false;
+  handleInput();
   stage.dataset.loop = 'terminal';
-  window.setTimeout(() => input.focus({ preventScroll: true }), 980);
+  window.setTimeout(() => input.focus({ preventScroll: true }), 260);
 }
 async function requestMicFallback() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -129,6 +230,8 @@ async function startVoice(event) {
 }
 function handleInput() {
   autosize();
+  darkAnswered = false;
+  currentDaemon = null;
   const hasText = input.value.trim().length > 0;
   continueButton.classList.toggle('ready', hasText);
   setStatus(hasText ? 'review the text before the dark answers.' : defaultStatus);
@@ -152,6 +255,17 @@ input.addEventListener('click', (event) => event.stopPropagation());
 input.addEventListener('input', handleInput);
 mic.addEventListener('click', startVoice);
 continueButton.addEventListener('click', handleContinue);
+openPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterPact(); });
+sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterReveal(); });
+sendDaemonButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
+restartButton?.addEventListener('click', restartFlow);
+stakeButtons.forEach((button) => button.addEventListener('click', (event) => {
+  event.stopPropagation();
+  selectedStake = Number(button.dataset.stake || 5);
+  stakeButtons.forEach((choice) => choice.classList.toggle('active', choice === button));
+  buildDaemon();
+  paintDaemon();
+}));
 window.addEventListener('pagehide', stopListening);
 tickCountdown();
 window.setInterval(tickCountdown, 1000);

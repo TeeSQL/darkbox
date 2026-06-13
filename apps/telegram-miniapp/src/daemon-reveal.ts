@@ -2,6 +2,14 @@ import * as THREE from 'three';
 
 type RevealPayload = { image?: string; name?: string; seed?: string };
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+    __daemonhallWaitMicLevel?: number;
+    __daemonhallSetWaitMicLevelForTest?: (level: number) => void;
+  }
+}
+
 const stage = document.querySelector<HTMLElement>('#daemon-reveal-stage');
 const fallback = document.querySelector<HTMLImageElement>('#daemon-reveal-fallback');
 const waitPortrait = document.querySelector<HTMLElement>('.daemon-wait-portrait');
@@ -25,6 +33,13 @@ let waitLoader: THREE.TextureLoader | null = null;
 let waitRaf = 0;
 let waitStarted = false;
 let waitLoadedAspect = 1024 / 1536;
+let waitMicStream: MediaStream | null = null;
+let waitMicAudioContext: AudioContext | null = null;
+let waitMicRaf = 0;
+let waitMicLevel = 0;
+let waitMicTarget = 0;
+let waitMicProbeStarted = false;
+let waitMicMode: 'idle' | 'listening' | 'test' = 'idle';
 
 const vertexShader = `
   varying vec2 vUv;
@@ -107,7 +122,8 @@ const waitFragmentShader = `
   void main() {
     vec2 uv = vUv;
     float breathe = 0.5 + 0.5 * sin(uTime * 1.05);
-    float drift = sin((uv.y * 9.0) + uTime * 0.92) * 0.0045;
+    float mic = clamp(uWake, 0.0, 1.0);
+    float drift = sin((uv.y * 9.0) + uTime * 0.92) * (0.0045 + mic * 0.007);
     float edgeMask =
       smoothstep(0.10, 0.0, uv.x) +
       smoothstep(0.90, 1.0, uv.x) +
@@ -115,24 +131,34 @@ const waitFragmentShader = `
       smoothstep(0.92, 1.0, uv.y);
 
     vec4 base = texture2D(uMap, uv + vec2(drift, 0.0));
-    vec4 red = texture2D(uMap, uv + vec2(0.003 + uWake * 0.003, 0.0));
-    vec4 blue = texture2D(uMap, uv - vec2(0.003 + uWake * 0.003, 0.0));
+    vec4 red = texture2D(uMap, uv + vec2(0.003 + mic * 0.010, 0.0));
+    vec4 blue = texture2D(uMap, uv - vec2(0.003 + mic * 0.009, 0.0));
     float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
     float presence = smoothstep(0.08, 0.55, luma);
-    float scan = smoothstep(0.965, 1.0, sin((uv.y + uTime * 0.018) * 720.0) * 0.5 + 0.5);
+    float scan = smoothstep(0.955 - mic * 0.045, 1.0, sin((uv.y + uTime * (0.018 + mic * 0.035)) * 720.0) * 0.5 + 0.5);
     float grain = hash(floor(uv * vec2(220.0, 360.0)) + floor(uTime * 10.0)) - 0.5;
-    float pulse = 0.18 + breathe * (0.26 + uWake * 0.10);
+    float pulse = 0.18 + breathe * 0.26 + mic * 0.54;
+    float glitchGate = step(0.992 - mic * 0.09, hash(vec2(floor(uTime * 14.0), floor(uv.y * 52.0))));
 
     vec3 chroma = vec3(red.r, base.g, blue.b) - base.rgb;
     vec3 livingGlow = vec3(0.56, 0.42, 1.0) * presence * pulse;
-    vec3 edgeColor = vec3(1.0, 0.24, 0.58) * edgeMask * (0.18 + breathe * 0.28);
-    vec3 scanColor = vec3(0.78, 0.84, 1.0) * scan * presence * 0.11;
-    vec3 color = chroma * (0.82 + edgeMask * 1.4) + livingGlow + edgeColor + scanColor + grain * 0.018;
+    vec3 edgeColor = vec3(1.0, 0.24, 0.58) * edgeMask * (0.18 + breathe * 0.28 + mic * 0.42);
+    vec3 scanColor = vec3(0.78, 0.84, 1.0) * scan * presence * (0.11 + mic * 0.22);
+    vec3 color = chroma * (0.82 + edgeMask * 1.4 + mic * 1.2) + livingGlow + edgeColor + scanColor + grain * (0.018 + mic * 0.035);
+    color += glitchGate * presence * vec3(0.18, 0.08, 0.30) * mic;
 
-    float alpha = clamp(0.10 + presence * (0.20 + breathe * 0.18) + edgeMask * 0.24 + scan * 0.12, 0.0, 0.58);
+    float alpha = clamp(0.10 + presence * (0.20 + breathe * 0.18 + mic * 0.22) + edgeMask * (0.24 + mic * 0.20) + scan * (0.12 + mic * 0.18), 0.0, 0.72);
     gl_FragColor = vec4(color, alpha);
   }
 `;
+
+function setWaitMicLevel(level: number, mode: typeof waitMicMode = waitMicMode) {
+  waitMicMode = mode;
+  waitMicTarget = Math.max(0, Math.min(1, level || 0));
+  window.__daemonhallWaitMicLevel = waitMicTarget;
+  waitPortrait?.style.setProperty('--wait-mic', waitMicTarget.toFixed(3));
+  waitPortrait?.classList.toggle('mic-reactive', waitMicMode !== 'idle' && waitMicTarget > 0.02);
+}
 
 function resize() {
   if (!stage || !renderer || !camera || !mesh) return;
@@ -253,9 +279,66 @@ function scheduleWaitPortraitResize() {
 function animateWaitPortrait(time = 0) {
   waitRaf = requestAnimationFrame(animateWaitPortrait);
   if (!waitRenderer || !waitScene || !waitCamera || !waitMesh) return;
+  waitMicLevel += (waitMicTarget - waitMicLevel) * 0.16;
   waitMesh.material.uniforms.uTime.value = time * 0.001;
-  waitMesh.material.uniforms.uWake.value += (targetWake - waitMesh.material.uniforms.uWake.value) * 0.035;
+  const autonomousWake = targetWake * (0.72 + Math.sin(time * 0.00105) * 0.12);
+  const wakeTarget = waitMicMode === 'idle' ? autonomousWake : Math.max(autonomousWake, waitMicLevel);
+  waitMesh.material.uniforms.uWake.value += (wakeTarget - waitMesh.material.uniforms.uWake.value) * 0.07;
   waitRenderer.render(waitScene, waitCamera);
+}
+
+function stopWaitMic() {
+  if (waitMicRaf) cancelAnimationFrame(waitMicRaf);
+  waitMicRaf = 0;
+  waitMicStream?.getTracks().forEach((track) => track.stop());
+  waitMicStream = null;
+  void waitMicAudioContext?.close?.();
+  waitMicAudioContext = null;
+  setWaitMicLevel(0, 'idle');
+}
+
+async function maybeStartWaitMic() {
+  if (waitMicProbeStarted || waitMicStream || !waitPortrait) return;
+  waitMicProbeStarted = true;
+  if (!navigator.mediaDevices?.getUserMedia) return;
+
+  try {
+    const permissions = navigator.permissions;
+    if (!permissions?.query) return;
+    const status = await permissions.query({ name: 'microphone' as PermissionName });
+    if (status.state !== 'granted') {
+      waitMicProbeStarted = false;
+      return;
+    }
+
+    waitMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      stopWaitMic();
+      return;
+    }
+    waitMicAudioContext = new AudioContextCtor();
+    const source = waitMicAudioContext.createMediaStreamSource(waitMicStream);
+    const analyser = waitMicAudioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    waitPortrait.dataset.mic = 'listening';
+    const tick = () => {
+      if (!waitMicStream) return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (const value of data) {
+        const normalized = (value - 128) / 128;
+        sum += normalized * normalized;
+      }
+      setWaitMicLevel(Math.min(1, Math.sqrt(sum / data.length) * 8), 'listening');
+      waitMicRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (_) {
+    stopWaitMic();
+  }
 }
 
 function initWaitPortrait() {
@@ -287,6 +370,7 @@ function initWaitPortrait() {
     scheduleWaitPortraitResize();
     window.addEventListener('resize', scheduleWaitPortraitResize);
     animateWaitPortrait();
+    void maybeStartWaitMic();
     waitPortrait.classList.add('webgl-alive');
     return true;
   } catch (error) {
@@ -326,9 +410,17 @@ window.addEventListener('daemonhall:reveal', (event) => {
 const waitView = document.querySelector('#v-wait');
 if (waitView && waitPortrait) {
   new MutationObserver(() => {
-    if (waitView.classList.contains('active')) scheduleWaitPortraitResize();
+    if (waitView.classList.contains('active')) {
+      scheduleWaitPortraitResize();
+      void maybeStartWaitMic();
+    }
   }).observe(waitView, { attributes: true, attributeFilter: ['class'] });
 }
+
+window.__daemonhallSetWaitMicLevelForTest = (level: number) => setWaitMicLevel(level, 'test');
+window.addEventListener('daemonhall:wait-mic-level', (event) => {
+  setWaitMicLevel((event as CustomEvent<number>).detail, 'test');
+});
 
 function hashCode(seed: string) {
   let h = 2166136261;
@@ -342,6 +434,7 @@ function hashCode(seed: string) {
 window.addEventListener('pagehide', () => {
   if (raf) cancelAnimationFrame(raf);
   if (waitRaf) cancelAnimationFrame(waitRaf);
+  stopWaitMic();
 });
 
 if (fallback?.src) setImage(fallback.getAttribute('src') || fallback.src);

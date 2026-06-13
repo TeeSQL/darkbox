@@ -79,8 +79,13 @@
   .brow .pulse{color:var(--mut);text-align:right;white-space:nowrap}
   .brow .pulse .pct{color:var(--silver)}
   .board-note{margin-top:18px;font-size:11px;color:var(--mut);line-height:1.7;text-align:center}
-  .daemon-wait-portrait{position:relative;width:min(100%,360px);aspect-ratio:2/3;margin:24px auto 22px;border:1px solid var(--hair);background:#101016;overflow:hidden;isolation:isolate;box-shadow:0 18px 46px rgba(0,0,0,.32);animation:daemonWaitBreath 3.8s ease-in-out infinite}
+  .daemon-wait-portrait{--wait-mic:0;position:relative;width:min(100%,360px);aspect-ratio:2/3;margin:24px auto 22px;border:1px solid var(--hair);background:#101016;overflow:hidden;isolation:isolate;box-shadow:0 18px 46px rgba(0,0,0,.32);animation:daemonWaitBreath 3.8s ease-in-out infinite}
   .daemon-wait-portrait img{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;background:#101016;filter:contrast(1.08) brightness(1.08) saturate(1.12);animation:daemonWaitPhotoPulse 3.8s ease-in-out infinite}
+  .daemon-wait-shader{position:absolute;inset:0;z-index:2;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen;opacity:1}
+  .daemon-wait-portrait.mic-reactive{box-shadow:0 18px 50px rgba(0,0,0,.40),0 0 calc(22px + (52px * var(--wait-mic))) rgba(139,123,255,calc(.28 + (.30 * var(--wait-mic)))),0 0 calc(14px + (42px * var(--wait-mic))) rgba(255,74,126,calc(.18 + (.24 * var(--wait-mic))))}
+  .daemon-wait-portrait.mic-reactive img{filter:contrast(calc(1.10 + (.10 * var(--wait-mic)))) brightness(calc(1.08 + (.14 * var(--wait-mic)))) saturate(calc(1.14 + (.28 * var(--wait-mic))))}
+  .daemon-wait-portrait.mic-reactive:before{opacity:calc(.62 + (.28 * var(--wait-mic)))}
+  .daemon-wait-portrait.mic-reactive:after{opacity:calc(.70 + (.28 * var(--wait-mic)))}
   .daemon-wait-portrait:before{content:"";position:absolute;inset:-18%;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 38%,rgba(146,118,255,.34) 56%,transparent 71%),conic-gradient(from 0deg at 50% 50%,rgba(255,74,126,0),rgba(255,74,126,.34),rgba(93,94,255,.36),rgba(255,74,126,0)),repeating-linear-gradient(180deg,rgba(255,255,255,.055) 0 1px,transparent 1px 7px);opacity:.62;mix-blend-mode:screen;animation:daemonWaitScan 4.6s linear infinite,daemonWaitHalo 3.8s ease-in-out infinite}
   .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.22);background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.18) 48%,transparent 62%);background-size:260% 100%;box-shadow:inset 0 0 46px rgba(0,0,0,.28),inset 0 0 44px rgba(139,123,255,.24),0 0 34px rgba(255,74,126,.22);animation:daemonWaitAura 3.8s ease-in-out infinite,daemonWaitSweep 4.2s ease-in-out infinite}
   @keyframes daemonWaitPhotoPulse{0%,100%{filter:contrast(1.07) brightness(1.03) saturate(1.08);transform:scale(1)}50%{filter:contrast(1.14) brightness(1.18) saturate(1.28);transform:scale(1.012)}}
@@ -242,5 +247,6 @@
     });
   });
 </script>
+<script src="/src/daemon-reveal.ts" type="module"></script>
 </body>
 </html>

@@ -292,8 +292,8 @@ function handleContinue(event) {
     input.focus();
     return;
   }
-  setStatus('something answered. its true name is sealed.');
-  enterDarkAnswer();
+  setStatus('seal the whisper.');
+  enterPact();
 }
 
 window.addEventListener('click', () => { if (!flowEntered) enterFlow(); });
@@ -305,7 +305,7 @@ input.addEventListener('input', handleInput);
 mic.addEventListener('click', startVoice);
 continueButton.addEventListener('click', handleContinue);
 openPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterPact(); });
-sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterReveal(); });
+sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
 sendDaemonButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
 restartButton?.addEventListener('click', restartFlow);
 openHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); paintDaemon(); stage.classList.add('hall-open'); });

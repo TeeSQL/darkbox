@@ -1928,3 +1928,43 @@ textarea::-webkit-scrollbar { display: none; }
     top: 64% !important;
   }
 }
+
+/* Flow parity guard: inactive ritual screens must never intercept taps. */
+.stage .ritual-screen {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  z-index: 4 !important;
+}
+.stage[data-loop="pact"] .pact,
+.stage[data-loop="daemon-reveal"] .daemon-reveal,
+.stage[data-loop="wait-room"] .wait-room {
+  visibility: visible !important;
+  pointer-events: auto !important;
+  z-index: 8 !important;
+}
+.stage[data-loop="terminal"] .pact,
+.stage[data-loop="terminal"] .daemon-reveal,
+.stage[data-loop="terminal"] .wait-room,
+.stage[data-loop="pact"] .daemon-reveal,
+.stage[data-loop="pact"] .wait-room,
+.stage[data-loop="wait-room"] .pact,
+.stage[data-loop="wait-room"] .daemon-reveal {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Old dark-answer layer is no longer in the active TG/web flow; keep it hidden unless explicitly addressed. */
+.stage .dark-answer {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.stage[data-loop="dark-answer"] .dark-answer {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+.stage[data-loop="pact"] .dark-answer,
+.stage[data-loop="wait-room"] .dark-answer,
+.stage[data-loop="terminal"] .dark-answer {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

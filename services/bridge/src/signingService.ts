@@ -9,18 +9,21 @@ import {
 } from "@darkbox/shared";
 import { getAddress, type Address, type Hex } from "viem";
 import type { LocalAccount } from "viem/accounts";
+import {
+  NoopDestinationLiquidityManager,
+  type DestinationLiquidityManager,
+} from "./liquidity.js";
 
 /** Verifies a confirmed shadow burn on the shadow chain (spec 7.4 check 3). */
 export interface ShadowBurnVerifier {
   /**
    * Returns true iff a confirmed `ShadowBurned` (or sink
    * `ShadowWithdrawalLocked`) event exists with this `withdrawalId`, matching
-   * asset and amount.
+   * the amount (USDC-only: asset is implicit).
    */
   hasConfirmedBurn(params: {
     withdrawalId: Hex;
     shadowBurnRef: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<boolean>;
 }
@@ -61,6 +64,7 @@ export type SignWithdrawalError =
   | "mapping_mismatch"
   | "burn_not_confirmed"
   | "nonce_used"
+  | "destination_liquidity_unavailable"
   | "reissue_parameter_mismatch";
 
 export class SignWithdrawalRejection extends Error {
@@ -82,6 +86,7 @@ export interface SigningServiceDeps {
   burnVerifier: ShadowBurnVerifier;
   nonceChecker: NonceChecker;
   authStore: AuthorizationStore;
+  liquidityManager?: DestinationLiquidityManager;
 }
 
 /**
@@ -129,11 +134,10 @@ export class SigningService {
 
     const withdrawalId = hashWithdrawCommand(this.cfg.domain, command);
 
-    // (3) confirmed shadow burn with matching withdrawalId/asset/amount
+    // (3) confirmed shadow burn with matching withdrawalId/amount
     const burnOk = await this.deps.burnVerifier.hasConfirmedBurn({
       withdrawalId,
       shadowBurnRef,
-      asset: command.asset,
       amount: command.amount,
     });
     if (!burnOk) throw new SignWithdrawalRejection("burn_not_confirmed");
@@ -143,7 +147,19 @@ export class SigningService {
       throw new SignWithdrawalRejection("nonce_used");
     }
 
-    // (5) no prior authorization for this withdrawalId with different params.
+    // (5) destination escrow must be confirmed fundable before we sign.
+    //     Read-only guard (the coordinator drives any rebalance); defence in
+    //     depth so the signer never authorizes an unpayable destination.
+    const liquidityManager = this.deps.liquidityManager ?? new NoopDestinationLiquidityManager();
+    const funded = await liquidityManager.isDestinationFunded({
+      withdrawalId,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
+      amount: command.amount,
+    });
+    if (!funded) throw new SignWithdrawalRejection("destination_liquidity_unavailable");
+
+    // (6) no prior authorization for this withdrawalId with different params.
     //     Identical re-issue with a fresh deadline is allowed (spec 7.5).
     const prior = this.deps.authStore.get(withdrawalId);
     if (prior && !sameCoreParams(prior.payload, command, shadowBurnRef)) {
@@ -155,9 +171,10 @@ export class SigningService {
       gameId: command.gameId,
       owner: command.owner,
       shadowAccount: command.shadowAccount,
-      asset: command.asset,
       amount: command.amount,
       recipient: command.recipient,
+      destinationChainId: command.destinationChainId,
+      destinationBridge: command.destinationBridge,
       userCommandHash: withdrawalId,
       shadowBurnRef,
       nonce: command.nonce,
@@ -187,9 +204,10 @@ function sameCoreParams(
     prior.gameId.toLowerCase() === command.gameId.toLowerCase() &&
     getAddress(prior.owner) === getAddress(command.owner) &&
     prior.shadowAccount.toLowerCase() === command.shadowAccount.toLowerCase() &&
-    getAddress(prior.asset) === getAddress(command.asset) &&
     prior.amount === command.amount &&
     getAddress(prior.recipient) === getAddress(command.recipient) &&
+    prior.destinationChainId === command.destinationChainId &&
+    getAddress(prior.destinationBridge) === getAddress(command.destinationBridge) &&
     prior.nonce === command.nonce &&
     prior.shadowBurnRef.toLowerCase() === shadowBurnRef.toLowerCase()
   );

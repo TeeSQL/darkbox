@@ -5,13 +5,18 @@ import {
   type ShadowMintSubmitter,
 } from "../shadow.js";
 import type { NonceChecker, ShadowBurnVerifier } from "../signingService.js";
-import { darkBoxBridgeAbi, shadowBridgeControllerAbi } from "./abis.js";
+import {
+  darkBoxBridgeAbi,
+  shadowBridgeControllerAbi,
+  shadowBurnedEvent,
+  shadowMintedEvent,
+} from "./abis.js";
 
 /**
  * Viem-backed implementations of the shadow-side and public-side interfaces the
  * bridge service depends on. These talk to the real `ShadowBridgeController` and
  * `DarkBoxBridge` contracts; the in-memory `FakeShadowChain` mirrors them for
- * unit tests.
+ * unit tests. USDC-only: a single asset, so no asset parameters.
  */
 
 export interface ShadowClientConfig {
@@ -31,7 +36,6 @@ export class ViemShadowMintSubmitter implements ShadowMintSubmitter {
     depositOpId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<{ txHash: Hex }> {
     const account = this.cfg.walletClient.account!;
@@ -40,7 +44,7 @@ export class ViemShadowMintSubmitter implements ShadowMintSubmitter {
       address: this.cfg.controller,
       abi: shadowBridgeControllerAbi,
       functionName: "mintShadow",
-      args: [p.depositOpId, p.owner, p.shadowAccount, p.asset, p.amount],
+      args: [p.depositOpId, p.owner, p.shadowAccount, p.amount],
     });
     const txHash = await this.cfg.walletClient.writeContract(request);
     await this.cfg.publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -50,7 +54,7 @@ export class ViemShadowMintSubmitter implements ShadowMintSubmitter {
   async findExistingMint(depositOpId: Hex): Promise<Hex | null> {
     const logs = await this.cfg.publicClient.getLogs({
       address: this.cfg.controller,
-      event: shadowBridgeControllerAbi[7], // ShadowMinted
+      event: shadowMintedEvent,
       args: { depositOpId },
       fromBlock: this.cfg.fromBlock ?? 0n,
       toBlock: "latest",
@@ -64,12 +68,12 @@ export class ViemShadowBurnSubmitter
 {
   constructor(private readonly cfg: ShadowClientConfig) {}
 
-  async withdrawableBalance(shadowAccount: Hex, asset: Address): Promise<bigint> {
+  async withdrawableBalance(shadowAccount: Hex): Promise<bigint> {
     return this.cfg.publicClient.readContract({
       address: this.cfg.controller,
       abi: shadowBridgeControllerAbi,
       functionName: "withdrawableBalance",
-      args: [shadowAccount, asset],
+      args: [shadowAccount],
     });
   }
 
@@ -77,20 +81,14 @@ export class ViemShadowBurnSubmitter
     withdrawalId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
     userCommandHash: Hex;
   }): Promise<{ shadowBurnRef: Hex }> {
     // Surface insufficient-available as a typed rejection (not a raw revert) so
     // the coordinator rejects the command instead of retrying.
-    const available = await this.withdrawableBalance(p.shadowAccount, p.asset);
+    const available = await this.withdrawableBalance(p.shadowAccount);
     if (available < p.amount) {
-      throw new InsufficientAvailableError(
-        p.shadowAccount,
-        p.asset,
-        p.amount,
-        available,
-      );
+      throw new InsufficientAvailableError(p.shadowAccount, p.amount, available);
     }
 
     const account = this.cfg.walletClient.account!;
@@ -99,14 +97,7 @@ export class ViemShadowBurnSubmitter
       address: this.cfg.controller,
       abi: shadowBridgeControllerAbi,
       functionName: "burnForWithdrawal",
-      args: [
-        p.withdrawalId,
-        p.owner,
-        p.shadowAccount,
-        p.asset,
-        p.amount,
-        p.userCommandHash,
-      ],
+      args: [p.withdrawalId, p.owner, p.shadowAccount, p.amount, p.userCommandHash],
     });
     const txHash = await this.cfg.walletClient.writeContract(request);
     await this.cfg.publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -121,12 +112,10 @@ export class ViemShadowBurnSubmitter
   async hasConfirmedBurn(p: {
     withdrawalId: Hex;
     shadowBurnRef: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<boolean> {
     const log = await this.findBurnLog(p.withdrawalId);
     if (!log) return false;
-    if (log.args.asset?.toLowerCase() !== p.asset.toLowerCase()) return false;
     if (log.args.amount !== p.amount) return false;
 
     const required = BigInt(this.cfg.confirmations ?? 1);
@@ -137,7 +126,7 @@ export class ViemShadowBurnSubmitter
   private async findBurnLog(withdrawalId: Hex) {
     const logs = await this.cfg.publicClient.getLogs({
       address: this.cfg.controller,
-      event: shadowBridgeControllerAbi[8], // ShadowBurned
+      event: shadowBurnedEvent,
       args: { withdrawalId },
       fromBlock: this.cfg.fromBlock ?? 0n,
       toBlock: "latest",

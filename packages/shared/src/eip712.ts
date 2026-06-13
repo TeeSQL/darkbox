@@ -32,15 +32,20 @@ export function bridgeDomain(params: BridgeDomainParams): TypedDataDomain {
   };
 }
 
-/** Canonical typed struct signed by the user (spec section 7.2). */
+/**
+ * Canonical typed struct signed by the user (spec section 7.2).
+ * USDC-only MVP: the settlement asset is fixed by the bridge, so there is no
+ * `asset` field — the amount is denominated in the configured USDC.
+ */
 export const WITHDRAW_COMMAND_TYPES = {
   WithdrawCommand: [
     { name: "gameId", type: "bytes32" },
     { name: "owner", type: "address" },
     { name: "shadowAccount", type: "bytes32" },
-    { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
+    { name: "destinationChainId", type: "uint256" },
+    { name: "destinationBridge", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
     { name: "shadowChainId", type: "uint256" },
@@ -53,9 +58,10 @@ export const WITHDRAWAL_AUTHORIZATION_TYPES = {
     { name: "gameId", type: "bytes32" },
     { name: "owner", type: "address" },
     { name: "shadowAccount", type: "bytes32" },
-    { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
+    { name: "destinationChainId", type: "uint256" },
+    { name: "destinationBridge", type: "address" },
     { name: "userCommandHash", type: "bytes32" },
     { name: "shadowBurnRef", type: "bytes32" },
     { name: "nonce", type: "uint256" },
@@ -67,9 +73,10 @@ export interface WithdrawCommand {
   gameId: Hex;
   owner: Address;
   shadowAccount: Hex;
-  asset: Address;
   amount: bigint;
   recipient: Address;
+  destinationChainId: bigint;
+  destinationBridge: Address;
   nonce: bigint;
   deadline: bigint;
   shadowChainId: bigint;
@@ -79,9 +86,10 @@ export interface WithdrawalAuthorization {
   gameId: Hex;
   owner: Address;
   shadowAccount: Hex;
-  asset: Address;
   amount: bigint;
   recipient: Address;
+  destinationChainId: bigint;
+  destinationBridge: Address;
   userCommandHash: Hex;
   shadowBurnRef: Hex;
   nonce: bigint;

@@ -22,6 +22,8 @@ export * from "./eip712.js";
 export * from "./states.js";
 export * from "./idempotency.js";
 export * from "./schemas.js";
+export * from "./signing.js";
+export * from "./marketPolicy.js";
 
 /** Decode a wire `WithdrawCommand` (decimal strings) into bigint form. */
 export function decodeWithdrawCommand(w: WithdrawCommandWire): WithdrawCommand {
@@ -29,9 +31,10 @@ export function decodeWithdrawCommand(w: WithdrawCommandWire): WithdrawCommand {
     gameId: w.gameId as Hex,
     owner: w.owner as `0x${string}`,
     shadowAccount: w.shadowAccount as Hex,
-    asset: w.asset as `0x${string}`,
     amount: BigInt(w.amount),
     recipient: w.recipient as `0x${string}`,
+    destinationChainId: BigInt(w.destinationChainId),
+    destinationBridge: w.destinationBridge as `0x${string}`,
     nonce: BigInt(w.nonce),
     deadline: BigInt(w.deadline),
     shadowChainId: BigInt(w.shadowChainId),
@@ -44,9 +47,10 @@ export function encodeWithdrawCommand(c: WithdrawCommand): WithdrawCommandWire {
     gameId: c.gameId,
     owner: c.owner,
     shadowAccount: c.shadowAccount,
-    asset: c.asset,
     amount: c.amount.toString(),
     recipient: c.recipient,
+    destinationChainId: c.destinationChainId.toString(),
+    destinationBridge: c.destinationBridge,
     nonce: c.nonce.toString(),
     deadline: c.deadline.toString(),
     shadowChainId: c.shadowChainId.toString(),
@@ -60,9 +64,10 @@ export function decodeWithdrawalAuthorization(
     gameId: w.gameId as Hex,
     owner: w.owner as `0x${string}`,
     shadowAccount: w.shadowAccount as Hex,
-    asset: w.asset as `0x${string}`,
     amount: BigInt(w.amount),
     recipient: w.recipient as `0x${string}`,
+    destinationChainId: BigInt(w.destinationChainId),
+    destinationBridge: w.destinationBridge as `0x${string}`,
     userCommandHash: w.userCommandHash as Hex,
     shadowBurnRef: w.shadowBurnRef as Hex,
     nonce: BigInt(w.nonce),
@@ -77,9 +82,10 @@ export function encodeWithdrawalAuthorization(
     gameId: a.gameId,
     owner: a.owner,
     shadowAccount: a.shadowAccount,
-    asset: a.asset,
     amount: a.amount.toString(),
     recipient: a.recipient,
+    destinationChainId: a.destinationChainId.toString(),
+    destinationBridge: a.destinationBridge,
     userCommandHash: a.userCommandHash,
     shadowBurnRef: a.shadowBurnRef,
     nonce: a.nonce.toString(),

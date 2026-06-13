@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Address, Hex } from "viem";
+import type { Hex } from "viem";
 import {
   checkCrossReferences,
-  reconcileAsset,
-  type AssetAccounting,
+  reconcileUsdc,
+  type UsdcAccounting,
 } from "../src/reconciliation.js";
 
-const USDC: Address = "0x00000000000000000000000000000000000000c0";
-
-const balanced: AssetAccounting = {
-  asset: USDC,
+const balanced: UsdcAccounting = {
   confirmedDeposits: 1_000_000n,
   shadowMinted: 1_000_000n,
   confirmedShadowBurned: 400_000n,
@@ -20,30 +17,30 @@ const balanced: AssetAccounting = {
 };
 
 test("a balanced ledger passes all invariants", () => {
-  const report = reconcileAsset(balanced);
+  const report = reconcileUsdc(balanced);
   assert.equal(report.ok, true);
   assert.equal(report.freeze, null);
 });
 
 test("pending mints (deposits exceed mints) are allowed", () => {
-  const report = reconcileAsset({ ...balanced, shadowMinted: 800_000n });
+  const report = reconcileUsdc({ ...balanced, shadowMinted: 800_000n });
   assert.equal(report.ok, true);
 });
 
 test("mints exceeding confirmed deposits freezes deposits", () => {
-  const report = reconcileAsset({ ...balanced, shadowMinted: 1_200_000n });
+  const report = reconcileUsdc({ ...balanced, shadowMinted: 1_200_000n });
   assert.equal(report.ok, false);
   assert.equal(report.freeze, "deposits");
 });
 
 test("withdrawals exceeding confirmed burns freezes withdrawals", () => {
-  const report = reconcileAsset({ ...balanced, withdrawalsExecuted: 500_000n });
+  const report = reconcileUsdc({ ...balanced, withdrawalsExecuted: 500_000n });
   assert.equal(report.ok, false);
   assert.equal(report.freeze, "withdrawals");
 });
 
 test("escrow insolvency freezes withdrawals", () => {
-  const report = reconcileAsset({ ...balanced, escrowBalance: 100_000n });
+  const report = reconcileUsdc({ ...balanced, escrowBalance: 100_000n });
   assert.equal(report.ok, false);
   assert.equal(report.freeze, "withdrawals");
 });

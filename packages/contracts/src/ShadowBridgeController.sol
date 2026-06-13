@@ -4,13 +4,13 @@ pragma solidity ^0.8.24;
 import {IShadowBridgeController} from "./interfaces/IShadowBridgeController.sol";
 
 /// @title ShadowBridgeController
-/// @notice Canonical owner <-> shadow-account registry and the shadow-asset
+/// @notice Canonical owner <-> shadow-account registry and the shadow-USDC
 ///         ledger for bridged funds. Only the bridge coordinator may map,
 ///         mint, or burn (spec section 5.1).
-/// @dev Shadow accounts are identified by `bytes32` (per the deterministic
-///      `keccak256(abi.encode(gameId, owner))` derivation), so balances are an
-///      internal ledger keyed by (shadowAccount, asset) rather than an
-///      address-based ERC20.
+/// @dev USDC-only MVP. Shadow accounts are identified by `bytes32` (per the
+///      deterministic `keccak256(abi.encode(gameId, owner))` derivation), so
+///      balances are an internal ledger keyed by shadowAccount rather than an
+///      address-based ERC20. A single asset (shadow USDC) is tracked.
 contract ShadowBridgeController is IShadowBridgeController {
     /// @notice The bridge coordinator key (only authorized caller).
     address public coordinator;
@@ -19,18 +19,18 @@ contract ShadowBridgeController is IShadowBridgeController {
     mapping(address => bytes32) public shadowOf; // owner => shadowAccount
     mapping(bytes32 => address) public ownerOf; // shadowAccount => owner
 
-    // --- shadow asset ledger ---
-    mapping(bytes32 => mapping(address => uint256)) internal _balance; // shadowAccount => asset => amount
+    // --- shadow USDC ledger ---
+    mapping(bytes32 => uint256) internal _balance; // shadowAccount => amount
     /// @notice Amount locked in open orders / collateral / pending transfers.
     ///         Set by the market/coordinator layer; excluded from withdrawable.
-    mapping(bytes32 => mapping(address => uint256)) public locked;
+    mapping(bytes32 => uint256) public locked;
 
     // --- idempotency / replay guards ---
     mapping(bytes32 => bool) public mintProcessed; // depositOpId => done
     mapping(bytes32 => bool) public withdrawalProcessed; // withdrawalId => done
 
     event CoordinatorUpdated(address indexed previousCoordinator, address indexed newCoordinator);
-    event LockedUpdated(bytes32 indexed shadowAccount, address indexed asset, uint256 newLocked);
+    event LockedUpdated(bytes32 indexed shadowAccount, uint256 newLocked);
 
     error NotCoordinator();
     error MappingExists();
@@ -90,7 +90,7 @@ contract ShadowBridgeController is IShadowBridgeController {
     /// @inheritdoc IShadowBridgeController
     /// @dev Idempotent per `depositOpId`; a second call with the same id reverts.
     ///      Auto-creates the owner<->shadow mapping on first deposit (spec 1.1).
-    function mintShadow(bytes32 depositOpId, address owner, bytes32 shadowAccount, address asset, uint256 amount)
+    function mintShadow(bytes32 depositOpId, address owner, bytes32 shadowAccount, uint256 amount)
         external
         onlyCoordinator
     {
@@ -98,9 +98,9 @@ contract ShadowBridgeController is IShadowBridgeController {
         mintProcessed[depositOpId] = true;
 
         _ensureMapping(owner, shadowAccount);
-        _balance[shadowAccount][asset] += amount;
+        _balance[shadowAccount] += amount;
 
-        emit ShadowMinted(depositOpId, shadowAccount, asset, amount);
+        emit ShadowMinted(depositOpId, shadowAccount, amount);
     }
 
     // ---------------------------------------------------------------------
@@ -114,7 +114,6 @@ contract ShadowBridgeController is IShadowBridgeController {
         bytes32 withdrawalId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount,
         bytes32 userCommandHash
     ) external onlyCoordinator {
@@ -123,12 +122,12 @@ contract ShadowBridgeController is IShadowBridgeController {
         // Mapping must already exist and match.
         if (shadowOf[owner] != shadowAccount || ownerOf[shadowAccount] != owner) revert MappingMismatch();
 
-        if (_withdrawable(shadowAccount, asset) < amount) revert InsufficientAvailable();
+        if (_withdrawable(shadowAccount) < amount) revert InsufficientAvailable();
 
         withdrawalProcessed[withdrawalId] = true;
-        _balance[shadowAccount][asset] -= amount;
+        _balance[shadowAccount] -= amount;
 
-        emit ShadowBurned(withdrawalId, shadowAccount, asset, amount);
+        emit ShadowBurned(withdrawalId, shadowAccount, amount);
         // `userCommandHash` is bound to `withdrawalId` (== userCommandHash) by the
         // caller; carried for off-chain traceability.
         userCommandHash;
@@ -141,27 +140,27 @@ contract ShadowBridgeController is IShadowBridgeController {
     /// @notice Set the locked (non-withdrawable) amount for a shadow account.
     /// @dev In production this is driven by the market/orderbook layer; exposed
     ///      to the coordinator so tests and the indexer can model open orders.
-    function setLocked(bytes32 shadowAccount, address asset, uint256 newLocked) external onlyCoordinator {
-        locked[shadowAccount][asset] = newLocked;
-        emit LockedUpdated(shadowAccount, asset, newLocked);
+    function setLocked(bytes32 shadowAccount, uint256 newLocked) external onlyCoordinator {
+        locked[shadowAccount] = newLocked;
+        emit LockedUpdated(shadowAccount, newLocked);
     }
 
     // ---------------------------------------------------------------------
     // Views
     // ---------------------------------------------------------------------
 
-    function balanceOf(bytes32 shadowAccount, address asset) external view returns (uint256) {
-        return _balance[shadowAccount][asset];
+    function balanceOf(bytes32 shadowAccount) external view returns (uint256) {
+        return _balance[shadowAccount];
     }
 
     /// @inheritdoc IShadowBridgeController
-    function withdrawableBalance(bytes32 shadowAccount, address asset) external view returns (uint256) {
-        return _withdrawable(shadowAccount, asset);
+    function withdrawableBalance(bytes32 shadowAccount) external view returns (uint256) {
+        return _withdrawable(shadowAccount);
     }
 
-    function _withdrawable(bytes32 shadowAccount, address asset) internal view returns (uint256) {
-        uint256 bal = _balance[shadowAccount][asset];
-        uint256 lk = locked[shadowAccount][asset];
+    function _withdrawable(bytes32 shadowAccount) internal view returns (uint256) {
+        uint256 bal = _balance[shadowAccount];
+        uint256 lk = locked[shadowAccount];
         return bal > lk ? bal - lk : 0;
     }
 }

@@ -74,7 +74,6 @@ export class DepositCoordinator {
         depositOpId: observation.depositOpId,
         owner,
         shadowAccount,
-        asset: observation.asset,
         amount: observation.amount,
       });
       txHash = res.txHash;
@@ -127,7 +126,6 @@ export class DepositCoordinator {
     const record: DepositRecord = {
       depositOpId: observation.depositOpId,
       operationString: observation.operationString,
-      asset: observation.asset,
       amount: observation.amount,
       from: observation.from,
       beneficiary: patch.beneficiary ?? observation.beneficiary,

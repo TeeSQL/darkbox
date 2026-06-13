@@ -4,6 +4,7 @@ export * from "./store.js";
 export * from "./watcher.js";
 export * from "./intents.js";
 export * from "./shadow.js";
+export * from "./liquidity.js";
 export * from "./withdrawalValidator.js";
 export * from "./signingService.js";
 export * from "./depositCoordinator.js";

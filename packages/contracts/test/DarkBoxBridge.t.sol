@@ -23,63 +23,52 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
 
     function setUp() public {
         signer = vm.addr(signerPk);
-        bridge = new DarkBoxBridge(admin, signer);
         usdc = new MockERC20("USD Coin", "USDC", 6);
+        bridge = new DarkBoxBridge(admin, signer, address(usdc));
         usdc.mint(user, 1_000_000e6);
+    }
+
+    function test_UsdcIsConfigured() public view {
+        assertEq(bridge.usdc(), address(usdc));
+    }
+
+    function test_ConstructorRejectsZeroUsdc() public {
+        vm.expectRevert(bytes("usdc=0"));
+        new DarkBoxBridge(admin, signer, address(0));
     }
 
     // --- Deposits ---
 
-    function test_DepositERC20EmitsEvent() public {
+    function test_DepositEmitsEvent() public {
         uint256 amount = 100e6;
         bytes32 ref = keccak256("ref-1");
         vm.startPrank(user);
         usdc.approve(address(bridge), amount);
         vm.expectEmit(true, true, true, true);
-        emit IDarkBoxBridge.DepositReceived(GAME_ID, user, address(usdc), amount, user, ref);
-        bridge.deposit(GAME_ID, address(usdc), amount, address(0), ref);
+        emit IDarkBoxBridge.DepositReceived(GAME_ID, user, user, amount, ref);
+        bridge.deposit(GAME_ID, amount, address(0), ref);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(address(bridge)), amount);
-        assertEq(bridge.totalDeposited(user, address(usdc)), amount);
+        assertEq(bridge.totalDeposited(user), amount);
     }
 
-    function test_DepositERC20WithExplicitBeneficiary() public {
+    function test_DepositWithExplicitBeneficiary() public {
         uint256 amount = 50e6;
         address bene = makeAddr("bene");
         vm.startPrank(user);
         usdc.approve(address(bridge), amount);
         vm.expectEmit(true, true, true, true);
-        emit IDarkBoxBridge.DepositReceived(GAME_ID, user, address(usdc), amount, bene, bytes32(0));
-        bridge.deposit(GAME_ID, address(usdc), amount, bene, bytes32(0));
+        emit IDarkBoxBridge.DepositReceived(GAME_ID, user, bene, amount, bytes32(0));
+        bridge.deposit(GAME_ID, amount, bene, bytes32(0));
         vm.stopPrank();
-        assertEq(bridge.totalDeposited(bene, address(usdc)), amount);
+        assertEq(bridge.totalDeposited(bene), amount);
     }
 
-    function test_DirectEthReceiveEmitsNativeDeposit() public {
-        vm.deal(user, 1 ether);
-        vm.expectEmit(true, true, true, true);
-        emit IDarkBoxBridge.DepositReceived(bytes32(0), user, address(0), 1 ether, user, bytes32(0));
+    function test_DepositRejectsZeroAmount() public {
         vm.prank(user);
-        (bool ok,) = address(bridge).call{value: 1 ether}("");
-        assertTrue(ok);
-        assertEq(address(bridge).balance, 1 ether);
-    }
-
-    function test_DepositNativeViaFunction() public {
-        vm.deal(user, 2 ether);
-        vm.prank(user);
-        vm.expectEmit(true, true, true, true);
-        emit IDarkBoxBridge.DepositReceived(GAME_ID, user, address(0), 2 ether, user, bytes32(0));
-        bridge.deposit{value: 2 ether}(GAME_ID, address(0), 2 ether, address(0), bytes32(0));
-        assertEq(address(bridge).balance, 2 ether);
-    }
-
-    function test_DepositNativeWrongMsgValueReverts() public {
-        vm.deal(user, 2 ether);
-        vm.prank(user);
-        vm.expectRevert(DarkBoxBridge.WrongMsgValue.selector);
-        bridge.deposit{value: 1 ether}(GAME_ID, address(0), 2 ether, address(0), bytes32(0));
+        vm.expectRevert(DarkBoxBridge.ZeroAmount.selector);
+        bridge.deposit(GAME_ID, 0, address(0), bytes32(0));
     }
 
     function test_DepositRevertsWhenPaused() public {
@@ -88,7 +77,7 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         vm.startPrank(user);
         usdc.approve(address(bridge), 1e6);
         vm.expectRevert(DarkBoxBridge.DepositsPaused.selector);
-        bridge.deposit(GAME_ID, address(usdc), 1e6, address(0), bytes32(0));
+        bridge.deposit(GAME_ID, 1e6, address(0), bytes32(0));
         vm.stopPrank();
     }
 
@@ -107,9 +96,10 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
             gameId: GAME_ID,
             owner: user,
             shadowAccount: SHADOW_ACCOUNT,
-            asset: address(usdc),
             amount: amount,
             recipient: recipient,
+            destinationChainId: block.chainid,
+            destinationBridge: address(bridge),
             userCommandHash: keccak256("cmd-1"),
             shadowBurnRef: keccak256("burn-1"),
             nonce: nonce,
@@ -122,9 +112,10 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
             a.gameId,
             a.owner,
             a.shadowAccount,
-            a.asset,
             a.amount,
             a.recipient,
+            a.destinationChainId,
+            a.destinationBridge,
             a.nonce,
             a.deadline,
             a.userCommandHash,
@@ -141,11 +132,12 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
 
         vm.expectEmit(true, true, true, true);
         emit IDarkBoxBridge.WithdrawalExecuted(
-            GAME_ID, user, address(usdc), amount, recipient, 1, a.userCommandHash, a.shadowBurnRef
+            GAME_ID, user, recipient, amount, 1, a.userCommandHash, a.shadowBurnRef
         );
         _submit(a, sig);
 
         assertEq(usdc.balanceOf(recipient), amount);
+        assertEq(bridge.totalWithdrawn(user), amount);
         assertTrue(bridge.usedNonces(user, 1));
     }
 
@@ -199,6 +191,16 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         _submit(a, sig);
     }
 
+    function test_WithdrawRevertsOnWrongDestination() public {
+        uint256 amount = 10e6;
+        _fundBridgeUSDC(amount);
+        Authorization memory a = _auth(amount, 1, block.timestamp + 1 hours);
+        bytes memory sig = _sign(signerPk, _authDigest(bridge, a));
+        a.destinationChainId = block.chainid + 1;
+        vm.expectRevert(abi.encodeWithSelector(DarkBoxBridge.WrongDestination.selector, a.destinationChainId, a.destinationBridge));
+        _submit(a, sig);
+    }
+
     function test_WithdrawRevertsOnTamperedRecipient() public {
         uint256 amount = 10e6;
         _fundBridgeUSDC(amount);
@@ -220,16 +222,6 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         _submit(a, sig);
     }
 
-    function test_WithdrawNative() public {
-        uint256 amount = 1 ether;
-        vm.deal(address(bridge), amount);
-        Authorization memory a = _auth(amount, 1, block.timestamp + 1 hours);
-        a.asset = address(0);
-        bytes memory sig = _sign(signerPk, _authDigest(bridge, a));
-        _submit(a, sig);
-        assertEq(recipient.balance, amount);
-    }
-
     // --- Emergency ---
 
     function test_EmergencyWithdrawAdminOnly() public {
@@ -238,9 +230,9 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         bytes32 reason = keccak256("outage");
 
         vm.expectEmit(true, true, true, true);
-        emit IDarkBoxBridge.EmergencyWithdrawal(GAME_ID, user, address(usdc), amount, recipient, reason);
+        emit IDarkBoxBridge.EmergencyWithdrawal(GAME_ID, user, recipient, amount, reason);
         vm.prank(admin);
-        bridge.emergencyWithdraw(GAME_ID, user, address(usdc), amount, recipient, reason);
+        bridge.emergencyWithdraw(GAME_ID, user, amount, recipient, reason);
         assertEq(usdc.balanceOf(recipient), amount);
     }
 
@@ -248,7 +240,7 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         _fundBridgeUSDC(100e6);
         vm.prank(user);
         vm.expectRevert(DarkBoxBridge.NotAdmin.selector);
-        bridge.emergencyWithdraw(GAME_ID, user, address(usdc), 100e6, recipient, bytes32(0));
+        bridge.emergencyWithdraw(GAME_ID, user, 100e6, recipient, bytes32(0));
     }
 
     // --- Admin gating ---

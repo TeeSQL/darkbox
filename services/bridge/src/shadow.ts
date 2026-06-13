@@ -4,7 +4,7 @@ import type { Address, Hex } from "viem";
  * Submits idempotent shadow mints to the shadow bridge controller after a
  * confirmed public deposit (spec section 6.3 step 6). Implementations wrap a
  * viem wallet client calling `mintShadow(depositOpId, owner, shadowAccount,
- * asset, amount)`.
+ * amount)`. USDC-only: the asset is implicit (shadow USDC).
  */
 export interface ShadowMintSubmitter {
   /**
@@ -16,7 +16,6 @@ export interface ShadowMintSubmitter {
     depositOpId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<{ txHash: Hex }>;
 
@@ -27,7 +26,7 @@ export interface ShadowMintSubmitter {
 /**
  * Forces a shadow-EVM burn of withdrawable available balance for a withdrawal
  * (spec section 7.3). Implementations call `burnForWithdrawal(withdrawalId,
- * owner, shadowAccount, asset, amount, userCommandHash)`.
+ * owner, shadowAccount, amount, userCommandHash)`.
  */
 export interface ShadowBurnSubmitter {
   /**
@@ -39,7 +38,6 @@ export interface ShadowBurnSubmitter {
     withdrawalId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
     userCommandHash: Hex;
   }): Promise<{ shadowBurnRef: Hex }>;
@@ -47,15 +45,14 @@ export interface ShadowBurnSubmitter {
   /** Returns the burn tx hash if `withdrawalId` was already burned, else null. */
   findExistingBurn(withdrawalId: Hex): Promise<Hex | null>;
 
-  /** Current withdrawable available balance for a shadow account/asset. */
-  withdrawableBalance(shadowAccount: Hex, asset: Address): Promise<bigint>;
+  /** Current withdrawable available balance for a shadow account. */
+  withdrawableBalance(shadowAccount: Hex): Promise<bigint>;
 }
 
 /** Thrown by a {@link ShadowBurnSubmitter} when available balance < amount. */
 export class InsufficientAvailableError extends Error {
   constructor(
     readonly shadowAccount: Hex,
-    readonly asset: Address,
     readonly requested: bigint,
     readonly available: bigint,
   ) {

@@ -24,17 +24,22 @@ contract DeployPublic is Script {
 
         vm.startBroadcast(pk);
 
-        DarkBoxBridge bridge = new DarkBoxBridge(admin, signer);
+        address usdc;
+        if (deployMock) {
+            MockERC20 mockUsdc = new MockERC20("DarkBox Test USDC", "tUSDC", 6);
+            mockUsdc.mint(deployer, 1_000_000e6);
+            usdc = address(mockUsdc);
+            console2.log("MockUSDC:", usdc);
+            console2.log("  minted 1,000,000 tUSDC to:", deployer);
+        } else {
+            usdc = vm.envAddress("USDC_ADDRESS");
+        }
+
+        DarkBoxBridge bridge = new DarkBoxBridge(admin, signer, usdc);
         console2.log("DarkBoxBridge:", address(bridge));
         console2.log("  admin:", admin);
         console2.log("  signer:", signer);
-
-        if (deployMock) {
-            MockERC20 usdc = new MockERC20("DarkBox Test USDC", "tUSDC", 6);
-            usdc.mint(deployer, 1_000_000e6);
-            console2.log("MockUSDC:", address(usdc));
-            console2.log("  minted 1,000,000 tUSDC to:", deployer);
-        }
+        console2.log("  usdc:", usdc);
 
         vm.stopBroadcast();
     }

@@ -40,12 +40,14 @@ done
 cast chain-id --rpc-url "$RPC" | tee "$LOG_DIR/chain-id.txt" >/dev/null
 log "anvil ready chain_id=$(cat "$LOG_DIR/chain-id.txt") pid=$ANVIL_PID"
 
+DEPLOY_REL="deployments/${RUN_ID}.json"
 DEPLOY_OUT="$LOG_DIR/darkbox-deploy.json"
 log "deploying Frontier + DarkBox stack"
 (
   cd packages/contracts
-  DEPLOY_OUT="$DEPLOY_OUT" forge script script/DeployDarkBox.s.sol:DeployDarkBox --rpc-url "$RPC" --broadcast --slow --non-interactive
+  DEPLOY_OUT="$DEPLOY_REL" forge script script/DeployDarkBox.s.sol:DeployDarkBox --rpc-url "$RPC" --broadcast --slow --non-interactive
 ) >"$LOG_DIR/deploy.log" 2>&1 || { log "deploy failed; tail follows"; tail -80 "$LOG_DIR/deploy.log"; exit 1; }
+cp "packages/contracts/$DEPLOY_REL" "$DEPLOY_OUT"
 log "deploy complete: $DEPLOY_OUT"
 
 MARKET_ID="$(json_get "$DEPLOY_OUT" "d['canonicalMarket']['marketId']")"

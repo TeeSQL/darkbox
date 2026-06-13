@@ -2823,11 +2823,11 @@ textarea,
     left: 0 !important;
     right: 0 !important;
     top: 0 !important;
-    bottom: auto !important;
+    bottom: 0 !important;
     width: 100vw !important;
     max-width: none !important;
-    min-height: 100svh !important;
-    height: 100svh !important;
+    min-height: 100vh !important;
+    height: 100vh !important;
     border-radius: 0 !important;
     border-left: 0 !important;
     border-right: 0 !important;
@@ -2837,7 +2837,7 @@ textarea,
     justify-content: center !important;
     padding: max(22px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)) !important;
     overflow-y: auto !important;
-    background: var(--dh-panel) !important;
+    background: #101016 !important;
   }
   .stage.keyboard-open[data-loop="terminal"] .whisper,
   .stage.keyboard-open[data-loop="threshold-copy"] .whisper,
@@ -2858,5 +2858,12 @@ textarea,
   .stage:focus-within[data-loop="terminal"] .action-dock,
   .stage:focus-within[data-loop="threshold-copy"] .action-dock {
     margin-top: 22px !important;
+  }
+  .stage.keyboard-open[data-loop="terminal"] .terminal-frame,
+  .stage.keyboard-open[data-loop="threshold-copy"] .terminal-frame,
+  .stage:focus-within[data-loop="terminal"] .terminal-frame,
+  .stage:focus-within[data-loop="threshold-copy"] .terminal-frame {
+    background: #101016 !important;
+    backdrop-filter: none !important;
   }
 }

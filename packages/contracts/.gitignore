@@ -2,5 +2,8 @@
 out/
 cache/
 broadcast/
-# Vendored dependency (fetched via `pnpm setup` / forge install)
-lib/
+# Vendored dependency (fetched via `pnpm setup` / forge install).
+# Anchored to the contracts root so it ignores packages/contracts/lib/ only —
+# an unanchored `lib/` also swallowed src/lib/ (e.g. ECDSA.sol), which is the
+# bug that left this branch un-compilable.
+/lib/

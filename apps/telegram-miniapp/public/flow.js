@@ -40,6 +40,8 @@ const terminalCloseButtons = [...document.querySelectorAll('[data-close-terminal
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const SEALED_LOG_KEY = 'daemonhall:sealed-receipts:v1';
+const VISUAL_SEED_KEY = 'daemonhall:visual-seed:v1';
+const PUBLIC_MARKET_SEED = 'daemonhall:public-markets:v1';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
@@ -182,6 +184,19 @@ function currentSeed() {
   return `${input?.value.trim() || 'silence'}:${selectedStake}`;
 }
 
+function stableVisualSeed() {
+  try {
+    let seed = sessionStorage.getItem(VISUAL_SEED_KEY);
+    if (!seed) {
+      seed = `visual:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(VISUAL_SEED_KEY, seed);
+    }
+    return `${seed}:${selectedStake}`;
+  } catch (_) {
+    return `visual:fallback:${selectedStake}`;
+  }
+}
+
 function setSelectedDaemon({ image, name, seed }) {
   selectedDaemon.image = image;
   selectedDaemon.name = name;
@@ -198,18 +213,19 @@ function setSelectedDaemon({ image, name, seed }) {
 }
 
 function renderPrivateState() {
-  const seed = currentSeed();
-  const h = hashNumber(seed);
-  const ownName = pick(names, seed);
-  const status = pick(statuses, seed, 2);
-  if (fingerprintEl) fingerprintEl.textContent = fingerprint(seed);
-  const daemonImage = pick(daemonImages, seed, 5);
+  const instructionSeed = currentSeed();
+  const visualSeed = stableVisualSeed();
+  const h = hashNumber(visualSeed);
+  const ownName = pick(names, visualSeed);
+  const status = pick(statuses, visualSeed, 2);
+  if (fingerprintEl) fingerprintEl.textContent = fingerprint(instructionSeed);
+  const daemonImage = pick(daemonImages, visualSeed, 5);
   if (daemonNameEl) daemonNameEl.textContent = ownName;
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
-  if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(seed)}`;
-  setSelectedDaemon({ image: daemonImage, name: ownName, seed });
+  if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(instructionSeed)}`;
+  setSelectedDaemon({ image: daemonImage, name: ownName, seed: visualSeed });
   const balance = selectedStake + (h % 900) / 100;
-  const pnl = ((hashNumber(`${seed}:pnl`) % 520) - 140) / 100;
+  const pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
   if (daemonBalanceEl) daemonBalanceEl.textContent = `$${balance.toFixed(2)}`;
   if (daemonPnlEl) {
     daemonPnlEl.textContent = `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)}`;
@@ -217,13 +233,13 @@ function renderPrivateState() {
   }
   if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (daemonStatusEl) daemonStatusEl.textContent = status;
-  if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, seed, 3);
+  if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, visualSeed, 3);
   if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
   if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
   if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
   if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
-  renderMarkets(seed);
-  renderLeaderboard(seed, ownName);
+  renderMarkets(PUBLIC_MARKET_SEED);
+  renderLeaderboard(visualSeed, ownName);
 }
 
 function renderMarkets(seed) {

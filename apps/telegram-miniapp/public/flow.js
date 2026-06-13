@@ -267,14 +267,19 @@ function syncKeyboardState() {
 }
 
 navButtons.forEach((button) => {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     const next = button.getAttribute('data-go');
     if (next === 'v-seal' && !input?.value.trim()) {
       input?.focus({ preventScroll: true });
       if (whisperStatus) whisperStatus.textContent = 'the hall heard almost nothing. whisper first.';
       return;
     }
-    if (next) showView(next);
+    if (!next) return;
+    showView(next);
+    if (button.dataset.openMic === 'true' && next === 'v-whisper') {
+      try { await startVoice({ preventDefault() {} }); }
+      catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
+    }
   });
 });
 stakeButtons.forEach((button) => {

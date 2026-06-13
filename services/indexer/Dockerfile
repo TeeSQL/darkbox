@@ -32,6 +32,7 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/services/indexer/dist ./services/indexer/dist
 COPY services/indexer/migrations ./services/indexer/migrations
+COPY services/indexer/migrations ./services/indexer/dist/services/indexer/migrations
 
 RUN adduser -D -u 10001 darkbox
 USER darkbox

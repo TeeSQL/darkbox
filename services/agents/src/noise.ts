@@ -532,6 +532,33 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
   });
 }
 
+
+async function submitAgentTurn(indexerUrl: string, event: Record<string, unknown>, identity: AgentIdentity | undefined): Promise<{ ok: boolean; status?: number; body?: unknown; error?: string }> {
+  const body = {
+    runId: event['runId'],
+    strategy: event['strategy'],
+    agentId: event['agentId'],
+    turn: event['turn'],
+    ok: event['ok'],
+    latencyMs: event['latencyMs'],
+    observationSummary: event['observationSummary'],
+    output: event['output'],
+    identity: identity ? { address: identity.address, shadowAccount: identity.shadowAccount } : undefined,
+  };
+  try {
+    const response = await fetch(`${indexerUrl}/internal/v0/agent-turns`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let parsed: unknown = null;
+    try { parsed = await response.json(); } catch { parsed = await response.text(); }
+    return { ok: response.ok, status: response.status, body: parsed };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 function summarizeOutput(output: AgentTurnOutput): string {
   const actions = output.tradeActions.map((action) => action.type).join(', ') || 'none';
   const billboard = output.billboardPost?.message ? ` billboard="${output.billboardPost.message.slice(0, 140)}"` : '';
@@ -595,9 +622,18 @@ async function runAgentTurn(params: {
       observationSummary: { markets: observation.markets.length, orders: observation.orders.length, sharedContext: observation.sharedContext },
       output: eventOutput,
     };
+    let submitResult: Awaited<ReturnType<typeof submitAgentTurn>> | null = null;
+    if (validation.ok) {
+      submitResult = await submitAgentTurn(config.indexerUrl, event, agent.identity);
+      (event as Record<string, unknown>)['submitResult'] = submitResult;
+      if (!submitResult.ok) state.errors += 1;
+    }
+
     appendJsonl(jsonlPath, event);
     writeJson(latestPath, event);
-    const line = `[${at}] turn=${turn} agent=${agent.agentId} ok=${validation.ok} latencyMs=${latencyMs} workers=${state.activeWorkers}/${state.desiredWorkers} ${summarizeOutput(eventOutput)}${validation.ok ? '' : ` errors=${validation.errors.join('; ')}`}\n`;
+    const submitSuffix = submitResult ? ` submit=${submitResult.ok ? 'ok' : `failed:${submitResult.status ?? submitResult.error ?? 'unknown'}`}` : '';
+    const line = `[${at}] turn=${turn} agent=${agent.agentId} ok=${validation.ok} latencyMs=${latencyMs} workers=${state.activeWorkers}/${state.desiredWorkers} ${summarizeOutput(eventOutput)}${validation.ok ? submitSuffix : ` errors=${validation.errors.join('; ')}`}
+`;
     fs.appendFileSync(summaryPath, line);
     console.log(line.trim());
 

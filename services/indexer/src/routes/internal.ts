@@ -1,5 +1,71 @@
 import type { FastifyInstance } from "fastify";
-import { query } from "../db.js";
+import { randomUUID } from "node:crypto";
+import { query, withTransaction } from "../db.js";
+
+
+
+type AgentTurnBody = {
+  runId?: string;
+  strategy?: string;
+  agentId?: string;
+  turn?: number;
+  ok?: boolean;
+  latencyMs?: number;
+  identity?: { address?: string; shadowAccount?: string };
+  observationSummary?: unknown;
+  output?: {
+    tradeActions?: Array<Record<string, unknown>>;
+    billboardPost?: { message?: string } | null;
+    marketProposal?: Record<string, unknown> | null;
+    reason?: string;
+  };
+};
+
+function asText(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function decimalLike(value: unknown, fallback = "0"): string {
+  const text = asText(value, fallback);
+  return /^\d+(?:\.\d+)?$/.test(text) ? text : fallback;
+}
+
+function agentShadowAccount(agentId: string, identity?: AgentTurnBody["identity"]): string {
+  if (identity?.shadowAccount) return identity.shadowAccount.toLowerCase();
+  return `v0:${agentId.toLowerCase()}`;
+}
+
+function agentOwnerAddress(agentId: string, identity?: AgentTurnBody["identity"]): string {
+  if (identity?.address) return identity.address.toLowerCase();
+  return `v0:${agentId.toLowerCase()}`;
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+async function ensureV0Market(client: import("pg").PoolClient, marketId: string): Promise<void> {
+  const normalized = marketId.toLowerCase();
+  const ts = nowSeconds();
+  await client.query(
+    `INSERT INTO markets (
+       market_id, game_id, creator_address, market_address, question, metadata_uri,
+       close_time, resolve_by, resolver_type, status, yes_book, no_book,
+       created_at_block, created_at_ts
+     ) VALUES ($1, $2, $3, $4, $5, '', 0, 0, 'AdminManual', 'Active', $6, $7, 0, $8)
+     ON CONFLICT (market_id) DO NOTHING`,
+    [
+      normalized,
+      "v0-agent-runtime",
+      "v0:system",
+      `v0:market:${normalized}`,
+      `V0 market ${normalized}`,
+      `v0:book:${normalized}:yes`,
+      `v0:book:${normalized}:no`,
+      ts,
+    ],
+  );
+}
 
 export async function internalRoutes(app: FastifyInstance): Promise<void> {
   app.get("/internal/health", async () => {
@@ -8,6 +74,147 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
       service: "darkbox-indexer",
       endpoint: "internal",
     };
+  });
+
+
+  app.post<{ Body: AgentTurnBody }>("/internal/v0/agent-turns", async (req, reply) => {
+    const body = req.body ?? {};
+    const agentId = asText(body.agentId).toLowerCase();
+    if (!agentId) return reply.status(400).send({ error: "agentId is required" });
+
+    const runId = asText(body.runId, "v0");
+    const turn = Number.isInteger(body.turn) ? Number(body.turn) : 0;
+    const strategy = asText(body.strategy, "unknown");
+    const ok = body.ok !== false;
+    const latencyMs = Number.isFinite(body.latencyMs) ? Number(body.latencyMs) : 0;
+    const output = body.output ?? {};
+    const actions = Array.isArray(output.tradeActions) ? output.tradeActions : [];
+    const ownerAddress = agentOwnerAddress(agentId, body.identity);
+    const shadowAccount = agentShadowAccount(agentId, body.identity);
+    const ts = nowSeconds();
+
+    const result = await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO agents (
+           agent_id, game_id, owner_address, shadow_account, ens_name,
+           instruction_hash, runtime_hash, reveal_salt_hash,
+           registered_at_block, registered_at_ts
+         ) VALUES ($1, 'v0-agent-runtime', $2, $3, '', 'v0', 'v0', 'v0', 0, $4)
+         ON CONFLICT (agent_id) DO UPDATE SET
+           owner_address = EXCLUDED.owner_address,
+           shadow_account = EXCLUDED.shadow_account`,
+        [agentId, ownerAddress, shadowAccount, ts],
+      );
+
+      await client.query(
+        `INSERT INTO balances (shadow_account, asset, total_deposited, current_balance)
+         VALUES ($1, 'v0-usdc', '1000', '1000')
+         ON CONFLICT (shadow_account, asset) DO NOTHING`,
+        [shadowAccount],
+      );
+
+      await client.query(
+        `INSERT INTO agent_turns (run_id, agent_id, turn, strategy, ok, latency_ms, observation_summary, output)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+         ON CONFLICT (run_id, agent_id, turn) DO UPDATE SET
+           ok = EXCLUDED.ok,
+           latency_ms = EXCLUDED.latency_ms,
+           observation_summary = EXCLUDED.observation_summary,
+           output = EXCLUDED.output`,
+        [runId, agentId, turn, strategy, ok, latencyMs, JSON.stringify(body.observationSummary ?? {}), JSON.stringify(output)],
+      );
+
+      let ordersCreated = 0;
+      let ordersCancelled = 0;
+      for (const action of actions) {
+        const type = asText(action["type"]);
+        if (type === "make_order") {
+          const marketId = asText(action["marketId"], "v0-market").toLowerCase();
+          const outcome = asText(action["outcome"], "YES").toUpperCase() === "NO" ? "NO" : "YES";
+          const side = asText(action["side"], "buy") === "sell" ? "ask" : "bid";
+          const price = decimalLike(action["price"], "0.50");
+          const size = decimalLike(action["size"], "1");
+          const bookAddress = `v0:book:${marketId}:${outcome.toLowerCase()}`;
+          const positionId = `v0-${runId}-${agentId}-${turn}-${ordersCreated}-${randomUUID()}`;
+          await ensureV0Market(client, marketId);
+          await client.query(
+            `INSERT INTO orders (
+               chain_id, book_address, position_id, owner_address, shadow_account, market_id,
+               side, token0, token1, lower_tick, upper_tick, liquidity, status,
+               placed_at_block, placed_at_ts
+             ) VALUES (0, $1, $2, $3, $4, $5, $6, $7, 'v0-usdc', $8, $8, $9, 'open', 0, $10)`,
+            [bookAddress, positionId, ownerAddress, shadowAccount, marketId, side, outcome, Math.round(Number(price) * 1_000_000), size, ts],
+          );
+          ordersCreated += 1;
+        } else if (type === "cancel_order") {
+          const orderId = asText(action["orderId"]);
+          if (orderId) {
+            const updated = await client.query(
+              `UPDATE orders SET status='cancelled', updated_at=NOW()
+               WHERE shadow_account=$1 AND (position_id=$2 OR id::text=$2) AND status='open'`,
+              [shadowAccount, orderId],
+            );
+            ordersCancelled += updated.rowCount ?? 0;
+          }
+        }
+      }
+
+      let billboardCreated = false;
+      if (output.billboardPost?.message) {
+        await client.query(
+          `INSERT INTO billboards (message_id, agent_id, message, run_id, turn)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (message_id) DO UPDATE SET message = EXCLUDED.message`,
+          [`${runId}-${agentId}-${turn}`, agentId, output.billboardPost.message, runId, turn],
+        );
+        billboardCreated = true;
+      }
+
+      let proposalCreated = false;
+      const proposal = output.marketProposal;
+      if (proposal && typeof proposal === "object") {
+        const question = asText(proposal["question"]);
+        if (question) {
+          await client.query(
+            `INSERT INTO market_proposals (
+               proposal_id, agent_id, question, description, outcomes, resolve_by,
+               resolution_source, rationale, run_id, turn
+             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
+             ON CONFLICT (proposal_id) DO NOTHING`,
+            [
+              `${runId}-${agentId}-${turn}`,
+              agentId,
+              question,
+              asText(proposal["description"]),
+              JSON.stringify(proposal["outcomes"] ?? ["YES", "NO"]),
+              asText(proposal["resolveBy"]),
+              asText(proposal["resolutionSource"]),
+              asText(proposal["rationale"]),
+              runId,
+              turn,
+            ],
+          );
+          proposalCreated = true;
+        }
+      }
+
+      await client.query(
+        `UPDATE aggregate_stats SET value = (SELECT COUNT(*)::text FROM agents), updated_at=NOW()
+         WHERE key='active_agents'`,
+      );
+      await client.query(
+        `UPDATE aggregate_stats SET value = (SELECT COUNT(*)::text FROM markets WHERE status='Active'), updated_at=NOW()
+         WHERE key='active_markets'`,
+      );
+      await client.query(
+        `UPDATE aggregate_stats SET value = (SELECT COUNT(*)::text FROM orders WHERE status='open'), updated_at=NOW()
+         WHERE key='positions_opened'`,
+      );
+
+      return { ordersCreated, ordersCancelled, billboardCreated, proposalCreated };
+    });
+
+    return { status: "ok", agentId, runId, turn, ...result };
   });
 
   app.get("/internal/cursors", async () => {

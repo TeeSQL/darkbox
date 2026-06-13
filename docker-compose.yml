@@ -4,6 +4,13 @@ services:
     networks: [hidden_net]
     volumes:
       - node_data:/var/lib/darkbox-node
+    environment:
+      HIDDEN_CHAIN_ID: ${HIDDEN_CHAIN_ID:-88813}
+      HIDDEN_RPC_PORT: "8545"
+      ANVIL_STATE_PATH: /var/lib/darkbox-node/state.json
+      ANVIL_BLOCK_TIME: ${ANVIL_BLOCK_TIME:-1}
+      ANVIL_CODE_SIZE_LIMIT: ${ANVIL_CODE_SIZE_LIMIT:-60000}
+      ANVIL_EXTRA_ARGS: ${ANVIL_EXTRA_ARGS:-}
     expose:
       - "8545"
 
@@ -16,11 +23,22 @@ services:
       POSTGRES_PASSWORD: darkbox_dev_only
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U darkbox -d darkbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   darkbox-indexer:
-    build: ./services/indexer
+    build:
+      context: .
+      dockerfile: services/indexer/Dockerfile
     networks: [hidden_net, public_net]
-    depends_on: [darkbox-node, darkbox-db]
+    depends_on:
+      darkbox-node:
+        condition: service_started
+      darkbox-db:
+        condition: service_healthy
     environment:
       HIDDEN_RPC_URL: http://darkbox-node:8545
       DATABASE_URL: postgres://darkbox:darkbox_dev_only@darkbox-db:5432/darkbox
@@ -28,16 +46,41 @@ services:
       - "8080"
 
   darkbox-agents:
-    build: ./services/agents
-    networks: [hidden_net]
+    build:
+      context: .
+      dockerfile: services/agents/Dockerfile
+    networks: [hidden_net, egress_net]
     depends_on: [darkbox-indexer, darkbox-node]
     environment:
+      DARKBOX_INDEXER_URL: http://darkbox-indexer:8080
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
       HIDDEN_RPC_URL: http://darkbox-node:8545
+      AGENT_STRATEGY: ${AGENT_STRATEGY:-random}
+      AGENT_KIND: ${AGENT_KIND:-random-mixed}
+      AGENT_COUNT: ${AGENT_COUNT:-3}
+      AGENT_TURNS: ${AGENT_TURNS:-0}
+      AGENT_RUN_ID: ${AGENT_RUN_ID:-cvm-v0}
+      AGENT_TURN_LOG_DIR: /app/logs/agents
+      AGENT_IDENTITIES_FILE: services/agents/config/agent-identities.json
+      VENICE_API_KEY: ${VENICE_API_KEY:-}
+      VENICE_MODEL: ${VENICE_MODEL:-venice-grok-41-fast}
+      MIN_WORKERS: ${MIN_WORKERS:-2}
+      MAX_WORKERS: ${MAX_WORKERS:-8}
+      TARGET_TURNS_PER_MINUTE: ${TARGET_TURNS_PER_MINUTE:-20}
+      MIN_AGENT_INTERVAL_MS: ${MIN_AGENT_INTERVAL_MS:-30000}
+      MAX_AGENT_INTERVAL_MS: ${MAX_AGENT_INTERVAL_MS:-900000}
+      SCHEDULER_TICK_MS: ${SCHEDULER_TICK_MS:-2000}
+      JITTER_PCT: ${JITTER_PCT:-30}
+      MAX_IN_FLIGHT_PER_AGENT: ${MAX_IN_FLIGHT_PER_AGENT:-1}
+    volumes:
+      - agent_logs:/app/logs/agents
 
   darkbox-bridge:
-    build: ./services/bridge
+    build:
+      context: .
+      dockerfile: services/bridge/Dockerfile
     networks: [hidden_net, egress_net]
+    profiles: [bridge]
     depends_on: [darkbox-indexer, darkbox-node]
     environment:
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
@@ -51,7 +94,9 @@ services:
   # secret) OFF the bridge. Demo-deferred (withdrawals locked until settlement)
   # but built/tested so the secure topology is ready. First CVM target.
   darkbox-signer:
-    build: ./services/signer
+    build:
+      context: .
+      dockerfile: services/signer/Dockerfile
     networks: [hidden_net]
     profiles: [signer]
     environment:
@@ -69,10 +114,12 @@ services:
   darkbox-ens:
     build: ./services/ens
     networks: [egress_net]
+    profiles: [ens]
 
   darkbox-frontend:
     build: ./apps/frontend
     networks: [public_net]
+    profiles: [frontend]
     depends_on: [darkbox-indexer]
     ports:
       - "3000:3000"
@@ -85,7 +132,9 @@ services:
   # over a narrow internal channel once those services expose HTTP — until then
   # the gateway serves its own state + the typed-instruction whisper fallback.
   darkbox-gateway:
-    build: ./services/gateway
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
     networks: [public_net, gateway_net]
     depends_on: [darkbox-indexer]
     ports:
@@ -109,7 +158,9 @@ services:
   # gateway over gateway_net; egress_net lets it call an STT provider in http
   # mode. Defaults to STT_MODE=stub so the stack runs offline.
   darkbox-transcriber:
-    build: ./services/transcriber
+    build:
+      context: .
+      dockerfile: services/transcriber/Dockerfile
     networks: [gateway_net, egress_net]
     environment:
       PORT: "8095"
@@ -124,7 +175,9 @@ services:
   # Reveal bundle builder ("open the box"). Confidential plane: reads indexer
   # /internal state, so hidden_net only (egress for optional bundle publishing).
   darkbox-reveal:
-    build: ./services/reveal
+    build:
+      context: .
+      dockerfile: services/reveal/Dockerfile
     networks: [hidden_net, egress_net]
     depends_on: [darkbox-indexer, darkbox-node]
     profiles: [reveal]
@@ -152,3 +205,4 @@ networks:
 volumes:
   node_data: {}
   db_data: {}
+  agent_logs: {}

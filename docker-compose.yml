@@ -81,6 +81,13 @@ services:
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
       HIDDEN_RPC_URL: http://darkbox-node:8545
 
+  darkbox-transcriber:
+    build: ./services/transcriber
+    networks: [hidden_net, egress_net]
+    depends_on: [darkbox-indexer]
+    environment:
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+
   darkbox-ens:
     build: ./services/ens
     networks: [egress_net]
@@ -93,6 +100,18 @@ services:
       - "3000:3000"
     environment:
       PUBLIC_INDEXER_URL: http://darkbox-indexer:8080/public
+
+  darkbox-telegram-miniapp:
+    build:
+      context: .
+      dockerfile: apps/telegram-miniapp/Dockerfile
+    networks: [public_net, egress_net]
+    depends_on: [darkbox-indexer]
+    ports:
+      - "3014:3014"
+    environment:
+      INDEXER_PUBLIC_URL: http://darkbox-indexer:8080
+      MINIAPP_URL: http://darkbox-telegram-miniapp:3014
 
   darkbox-reveal:
     build: ./services/reveal

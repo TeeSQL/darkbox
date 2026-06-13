@@ -1,0 +1,11 @@
+{
+  "name": "@darkbox/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DarkBox public bridge and shadow bridge controller Solidity contracts (Foundry).",
+  "scripts": {
+    "setup": "test -d lib/forge-std || git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std",
+    "build": "forge build",
+    "test": "forge test"
+  }
+}

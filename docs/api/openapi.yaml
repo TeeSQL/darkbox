@@ -1,0 +1,983 @@
+openapi: 3.1.0
+info:
+  title: DarkBox Frontend & Mini App API
+  version: 0.1.0
+  summary: Public and authenticated frontend-facing API surface for DarkBox.
+  description: |
+    This spec covers the frontend/Mini App boundary only.
+
+    Included:
+    - public game/spectator endpoints
+    - authenticated self-status
+    - invite claim
+    - whisper transcription upload/status/confirm
+    - deposit intent/status
+    - registration/commitment
+    - withdrawal request/status
+
+    Explicitly out of scope:
+    - /internal indexer endpoints
+    - admin/reconciliation endpoints
+    - signer service internals
+    - raw hidden-market state before reveal
+    - raw whisper audio/transcript retrieval beyond the narrow confirm flow
+servers:
+  - url: https://darkbox.example.com
+    description: Example production host
+  - url: http://localhost:3000
+    description: Example local gateway/BFF host
+tags:
+  - name: Public
+  - name: Authenticated
+  - name: Invites
+  - name: Whispers
+  - name: Deposits
+  - name: Registration
+  - name: Withdrawals
+paths:
+  /public/health:
+    get:
+      tags: [Public]
+      summary: Public health check
+      operationId: getPublicHealth
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /public/game:
+    get:
+      tags: [Public]
+      summary: Get public game lifecycle state
+      operationId: getPublicGame
+      responses:
+        '200':
+          description: Public game state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicGame'
+  /public/leaderboard:
+    get:
+      tags: [Public]
+      summary: Get public leaderboard
+      operationId: getPublicLeaderboard
+      responses:
+        '200':
+          description: Public-safe leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicLeaderboardEntry'
+  /public/markets:
+    get:
+      tags: [Public]
+      summary: Get public market list
+      operationId: getPublicMarkets
+      responses:
+        '200':
+          description: Public market list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicMarket'
+  /public/markets/{marketId}:
+    get:
+      tags: [Public]
+      summary: Get one public market
+      operationId: getPublicMarket
+      parameters:
+        - $ref: '#/components/parameters/MarketId'
+      responses:
+        '200':
+          description: Public market metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicMarket'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /public/activity:
+    get:
+      tags: [Public]
+      summary: Get aggregate public activity stats
+      operationId: getPublicActivity
+      responses:
+        '200':
+          description: Aggregate public activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicActivity'
+  /public/reveal/status:
+    get:
+      tags: [Public]
+      summary: Get reveal status
+      operationId: getRevealStatus
+      responses:
+        '200':
+          description: Reveal status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealStatusResponse'
+  /api/self/status:
+    get:
+      tags: [Authenticated]
+      summary: Get authenticated player's safe status
+      operationId: getSelfStatus
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      responses:
+        '200':
+          description: Player-safe status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/invites/claim:
+    post:
+      tags: [Invites]
+      summary: Claim a signup invite / promo credit
+      operationId: claimInvite
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteClaimRequest'
+      responses:
+        '200':
+          description: Invite claim result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteClaimResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Invite already claimed / ineligible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/whispers/transcriptions:
+    post:
+      tags: [Whispers]
+      summary: Upload or reference a whisper for transcription
+      operationId: createWhisperTranscription
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhisperCreateJsonRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WhisperCreateMultipartRequest'
+      responses:
+        '200':
+          description: Draft transcription created or accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhisperStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/whispers/transcriptions/{whisperId}:
+    get:
+      tags: [Whispers]
+      summary: Get whisper transcription status/result
+      operationId: getWhisperTranscription
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WhisperId'
+      responses:
+        '200':
+          description: Whisper status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhisperStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/whispers/transcriptions/{whisperId}/confirm:
+    post:
+      tags: [Whispers]
+      summary: Confirm/edit transcript and produce commitment payload
+      operationId: confirmWhisperTranscription
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WhisperId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhisperConfirmRequest'
+      responses:
+        '200':
+          description: Confirmed whisper commitment payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhisperConfirmResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/deposit-intents:
+    post:
+      tags: [Deposits]
+      summary: Create a deposit intent
+      operationId: createDepositIntent
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositIntentRequest'
+      responses:
+        '200':
+          description: Deposit intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositIntentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/deposits/{depositOpId}:
+    get:
+      tags: [Deposits]
+      summary: Get deposit status
+      operationId: getDepositStatus
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DepositOpId'
+      responses:
+        '200':
+          description: Deposit operation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/registrations:
+    post:
+      tags: [Registration]
+      summary: Register or update an agent commitment before freeze
+      operationId: createOrUpdateRegistration
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRequest'
+      responses:
+        '200':
+          description: Registration recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Registration frozen or conflicting state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/withdrawable/{owner}:
+    get:
+      tags: [Withdrawals]
+      summary: Get withdrawable available balance for owner
+      operationId: getWithdrawableBalance
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Owner'
+      responses:
+        '200':
+          description: Withdrawable balance only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawableResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/withdrawals/commands:
+    post:
+      tags: [Withdrawals]
+      summary: Submit a user-signed withdrawal command
+      operationId: createWithdrawalCommand
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalCommandRequest'
+      responses:
+        '200':
+          description: Withdrawal accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Insufficient withdrawable balance or locked state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/withdrawals/{withdrawalId}:
+    get:
+      tags: [Withdrawals]
+      summary: Get withdrawal lifecycle status
+      operationId: getWithdrawalStatus
+      security:
+        - telegramAuth: []
+        - walletAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WithdrawalId'
+      responses:
+        '200':
+          description: Withdrawal status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    telegramAuth:
+      type: apiKey
+      in: header
+      name: X-Telegram-Init-Data
+      description: Placeholder for Telegram Mini App auth material.
+    walletAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Placeholder for wallet/web auth session token.
+  parameters:
+    MarketId:
+      name: marketId
+      in: path
+      required: true
+      schema:
+        type: string
+    WhisperId:
+      name: whisperId
+      in: path
+      required: true
+      schema:
+        type: string
+    DepositOpId:
+      name: depositOpId
+      in: path
+      required: true
+      schema:
+        type: string
+    WithdrawalId:
+      name: withdrawalId
+      in: path
+      required: true
+      schema:
+        type: string
+    Owner:
+      name: owner
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/EvmAddress'
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    EvmAddress:
+      type: string
+      pattern: '^0x[a-fA-F0-9]{40}$'
+    Hex32:
+      type: string
+      pattern: '^0x[a-fA-F0-9]{64}$'
+    IsoDateTime:
+      type: string
+      format: date-time
+    CurrencyAmount:
+      type: string
+      description: Decimal string to avoid float issues in clients.
+    GameStatus:
+      type: string
+      enum: [draft, registration_open, frozen, live, halted, revealing, resolved, cancelled]
+    RevealStatus:
+      type: string
+      enum: [pending, in_progress, ready]
+    WithdrawalLifecycleStatus:
+      type: string
+      enum:
+        - requested
+        - user_signed
+        - shadow_burn_submitted
+        - shadow_burned
+        - service_signed
+        - submitted_public_withdrawal
+        - withdrawn
+        - failed
+    RegistrationStatus:
+      type: string
+      enum: [unregistered, pending, registered, frozen]
+    FundingStatus:
+      type: string
+      enum: [unfunded, pending, funded]
+    WhisperStatusEnum:
+      type: string
+      enum: [uploaded, processing, draft_ready, confirmed, failed]
+    PublicGame:
+      type: object
+      additionalProperties: false
+      required:
+        - gameId
+        - title
+        - status
+        - startsAt
+        - endsAt
+        - revealStatus
+        - updatedAt
+      properties:
+        gameId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        registrationFreezeAt:
+          $ref: '#/components/schemas/IsoDateTime'
+        startsAt:
+          $ref: '#/components/schemas/IsoDateTime'
+        endsAt:
+          $ref: '#/components/schemas/IsoDateTime'
+        revealStatus:
+          $ref: '#/components/schemas/RevealStatus'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    PublicLeaderboardEntry:
+      type: object
+      additionalProperties: false
+      required: [agentId, displayName, pnl, rank, updatedAt]
+      properties:
+        agentId:
+          type: string
+        displayName:
+          type: string
+        ensName:
+          type: string
+          nullable: true
+        pnl:
+          type: number
+        rank:
+          type: integer
+          minimum: 1
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    PublicMarket:
+      type: object
+      additionalProperties: false
+      required: [marketId, question, status, updatedAt]
+      properties:
+        marketId:
+          type: string
+        question:
+          type: string
+        status:
+          type: string
+        category:
+          type: string
+        resolverType:
+          type: string
+        description:
+          type: string
+        closesAt:
+          $ref: '#/components/schemas/IsoDateTime'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    PublicActivity:
+      type: object
+      additionalProperties: false
+      required:
+        - activeAgents
+        - activeMarkets
+        - totalTrades
+        - updatedAt
+      properties:
+        activeAgents:
+          type: integer
+          minimum: 0
+        activeMarkets:
+          type: integer
+          minimum: 0
+        totalTrades:
+          type: integer
+          minimum: 0
+        totalVolume:
+          type: number
+        positionsOpened:
+          type: integer
+          minimum: 0
+        positionsClosed:
+          type: integer
+          minimum: 0
+        totalDeposits:
+          type: number
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    RevealStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [revealStatus, updatedAt]
+      properties:
+        revealStatus:
+          $ref: '#/components/schemas/RevealStatus'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    WithdrawalLock:
+      type: object
+      additionalProperties: false
+      required: [locked]
+      properties:
+        locked:
+          type: boolean
+        reason:
+          type: string
+        unlockAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    SelfStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - owner
+        - registrationStatus
+        - fundingStatus
+        - enteredViaInvite
+        - withdrawableAvailableBalance
+        - updatedAt
+      properties:
+        owner:
+          $ref: '#/components/schemas/EvmAddress'
+        telegramId:
+          type: string
+        agentId:
+          type: string
+        registrationStatus:
+          $ref: '#/components/schemas/RegistrationStatus'
+        fundingStatus:
+          $ref: '#/components/schemas/FundingStatus'
+        enteredViaInvite:
+          type: boolean
+        inviteId:
+          type: string
+        withdrawableAvailableBalance:
+          $ref: '#/components/schemas/CurrencyAmount'
+        instructionCommitmentHash:
+          $ref: '#/components/schemas/Hex32'
+        withdrawalLock:
+          $ref: '#/components/schemas/WithdrawalLock'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    InviteClaimRequest:
+      type: object
+      additionalProperties: false
+      required: [inviteCode, owner]
+      properties:
+        inviteCode:
+          type: string
+        owner:
+          $ref: '#/components/schemas/EvmAddress'
+        telegramInitData:
+          type: string
+    InviteFundingCredit:
+      type: object
+      additionalProperties: false
+      required: [currency, amount, type]
+      properties:
+        currency:
+          type: string
+          enum: [USDC]
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        type:
+          type: string
+          enum: [promo_shadow]
+    InviteClaimResponse:
+      type: object
+      additionalProperties: false
+      required: [inviteId, claimStatus, agentFundingCredit, updatedAt]
+      properties:
+        inviteId:
+          type: string
+        claimStatus:
+          type: string
+          enum: [claimed, already_claimed, expired, revoked]
+        agentFundingCredit:
+          $ref: '#/components/schemas/InviteFundingCredit'
+        withdrawalLock:
+          $ref: '#/components/schemas/WithdrawalLock'
+        shadowAccount:
+          type: string
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    WhisperCreateJsonRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        telegramFileId:
+          type: string
+        audioUrl:
+          type: string
+          format: uri
+        languageHint:
+          type: string
+      anyOf:
+        - required: [telegramFileId]
+        - required: [audioUrl]
+    WhisperCreateMultipartRequest:
+      type: object
+      additionalProperties: false
+      required: [audio]
+      properties:
+        audio:
+          type: string
+          format: binary
+        languageHint:
+          type: string
+    WhisperStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - whisperId
+        - status
+        - updatedAt
+      properties:
+        whisperId:
+          type: string
+        status:
+          $ref: '#/components/schemas/WhisperStatusEnum'
+        transcript:
+          type: string
+        language:
+          type: string
+        durationMs:
+          type: integer
+          minimum: 0
+        audioHash:
+          $ref: '#/components/schemas/Hex32'
+        transcriptHash:
+          $ref: '#/components/schemas/Hex32'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    WhisperConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [finalTranscript]
+      properties:
+        finalTranscript:
+          type: string
+          minLength: 1
+        commitmentSalt:
+          $ref: '#/components/schemas/Hex32'
+    CommitmentPayload:
+      type: object
+      additionalProperties: false
+      required: [instructionHash]
+      properties:
+        instructionHash:
+          $ref: '#/components/schemas/Hex32'
+        transcriptHash:
+          $ref: '#/components/schemas/Hex32'
+    WhisperConfirmResponse:
+      type: object
+      additionalProperties: false
+      required: [whisperId, status, instructionHash, commitmentPayload, updatedAt]
+      properties:
+        whisperId:
+          type: string
+        status:
+          type: string
+          enum: [confirmed]
+        instructionHash:
+          $ref: '#/components/schemas/Hex32'
+        commitmentPayload:
+          $ref: '#/components/schemas/CommitmentPayload'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    DepositIntentRequest:
+      type: object
+      additionalProperties: false
+      required: [owner, amount, chainId, token]
+      properties:
+        owner:
+          $ref: '#/components/schemas/EvmAddress'
+        agentId:
+          type: string
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        chainId:
+          type: integer
+        token:
+          type: string
+          enum: [USDC]
+    DepositIntentResponse:
+      type: object
+      additionalProperties: false
+      required: [depositOpId, status, chainId, token, amount]
+      properties:
+        depositOpId:
+          type: string
+        status:
+          type: string
+          enum: [intent_created]
+        chainId:
+          type: integer
+        token:
+          type: string
+          enum: [USDC]
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        beneficiary:
+          $ref: '#/components/schemas/EvmAddress'
+        depositAddress:
+          $ref: '#/components/schemas/EvmAddress'
+        expiresAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    DepositStatus:
+      type: object
+      additionalProperties: false
+      required: [depositOpId, status, amount, updatedAt]
+      properties:
+        depositOpId:
+          type: string
+        status:
+          type: string
+          enum:
+            - intent_created
+            - observed
+            - confirming
+            - shadow_mint_submitted
+            - shadow_minted
+            - failed
+        chainId:
+          type: integer
+        txHash:
+          type: string
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        shadowAccount:
+          type: string
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    RegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [agentName, instructionHash, revealSaltHash]
+      properties:
+        agentName:
+          type: string
+        ensName:
+          type: string
+        instructionHash:
+          $ref: '#/components/schemas/Hex32'
+        revealSaltHash:
+          $ref: '#/components/schemas/Hex32'
+        runtimeHash:
+          $ref: '#/components/schemas/Hex32'
+    RegistrationResponse:
+      type: object
+      additionalProperties: false
+      required: [registrationStatus, agentId, commitmentRecorded, registeredAt]
+      properties:
+        registrationStatus:
+          type: string
+          enum: [registered, updated, frozen]
+        agentId:
+          type: string
+        commitmentRecorded:
+          type: boolean
+        instructionHash:
+          $ref: '#/components/schemas/Hex32'
+        registeredAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    WithdrawableResponse:
+      type: object
+      additionalProperties: false
+      required: [owner, withdrawableAvailableBalance, currency, updatedAt]
+      properties:
+        owner:
+          $ref: '#/components/schemas/EvmAddress'
+        withdrawableAvailableBalance:
+          $ref: '#/components/schemas/CurrencyAmount'
+        currency:
+          type: string
+          enum: [USDC]
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    WithdrawalCommandRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - owner
+        - shadowAccount
+        - amount
+        - recipient
+        - destinationChainId
+        - destinationBridge
+        - nonce
+        - deadline
+        - signature
+      properties:
+        owner:
+          $ref: '#/components/schemas/EvmAddress'
+        shadowAccount:
+          type: string
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        recipient:
+          $ref: '#/components/schemas/EvmAddress'
+        destinationChainId:
+          type: integer
+        destinationBridge:
+          $ref: '#/components/schemas/EvmAddress'
+        nonce:
+          type: integer
+          minimum: 0
+        deadline:
+          type: integer
+          minimum: 0
+        signature:
+          type: string
+    WithdrawalAuthorization:
+      type: object
+      additionalProperties: false
+      required: [deadline, signature]
+      properties:
+        deadline:
+          type: integer
+          minimum: 0
+        signature:
+          type: string
+    WithdrawalStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - withdrawalId
+        - status
+        - amount
+        - recipient
+        - destinationChainId
+        - updatedAt
+      properties:
+        withdrawalId:
+          type: string
+        status:
+          $ref: '#/components/schemas/WithdrawalLifecycleStatus'
+        amount:
+          $ref: '#/components/schemas/CurrencyAmount'
+        recipient:
+          $ref: '#/components/schemas/EvmAddress'
+        destinationChainId:
+          type: integer
+        authorization:
+          $ref: '#/components/schemas/WithdrawalAuthorization'
+        updatedAt:
+          $ref: '#/components/schemas/IsoDateTime'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          oneOf:
+            - type: object
+            - type: array
+            - type: string
+            - type: 'null'

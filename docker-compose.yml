@@ -121,14 +121,22 @@ services:
     expose:
       - "8095"
 
+  # Reveal bundle builder ("open the box"). Confidential plane: reads indexer
+  # /internal state, so hidden_net only (egress for optional bundle publishing).
   darkbox-reveal:
     build: ./services/reveal
     networks: [hidden_net, egress_net]
     depends_on: [darkbox-indexer, darkbox-node]
     profiles: [reveal]
     environment:
+      PORT: "8096"
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
       HIDDEN_RPC_URL: http://darkbox-node:8545
+      DEPLOYMENTS_DIR: /app/packages/contracts/deployments
+      GAME_ID: ${GAME_ID:-0x0000000000000000000000000000000000000000000000000000000000000001}
+      REVEAL_INCLUDE_INSTRUCTIONS: ${REVEAL_INCLUDE_INSTRUCTIONS:-false}
+    expose:
+      - "8096"
 
 networks:
   hidden_net:

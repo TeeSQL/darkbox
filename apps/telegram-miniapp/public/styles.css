@@ -313,7 +313,34 @@ body.keyboard-open .cmdbar { position: fixed; }
   color: var(--mut);
   font-size: 12px;
 }
+.daemon-wait-portrait {
+  position: relative;
+  width: min(100%, 360px);
+  aspect-ratio: 2 / 3;
+  margin: 24px auto 22px;
+  border: 1px solid var(--hair);
+  background: #101016;
+  overflow: hidden;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.32);
+}
+.daemon-wait-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #101016;
+  filter: contrast(1.04) brightness(1.03) saturate(1.02);
+}
+.daemon-wait-portrait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(231, 227, 217, 0.08);
+  box-shadow: inset 0 0 42px rgba(0, 0, 0, 0.34);
+}
 @media (max-width:560px) {
   .daemon-reveal-stage { min-height: 360px; }
   .daemon-reveal-fallback { padding: 12px; }
+  .daemon-wait-portrait { width: min(100%, 320px); }
 }

@@ -20,6 +20,7 @@ const fingerprintEl = document.querySelector('#fingerprint');
 const daemonNameEl = document.querySelector('#daemon-name');
 const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
 const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
+const waitDaemonImageEl = document.querySelector('#daemon-wait-image');
 const daemonBalanceEl = document.querySelector('#daemon-balance');
 const daemonStatusEl = document.querySelector('#daemon-status');
 const daemonMurmurEl = document.querySelector('#daemon-murmur');
@@ -44,6 +45,9 @@ const daemonImages = [
   '/daemons/rune-13.webp', '/daemons/grin-14.webp', '/daemons/lilt-15.webp', '/daemons/rook-16.webp',
   '/daemons/vesper-17.webp', '/daemons/knell-18.webp', '/daemons/vant-19.webp', '/daemons/thorn-20.webp',
 ];
+const defaultDaemonImage = '/daemons/rasp-05.webp';
+const selectedDaemon = { image: defaultDaemonImage, name: 'hopiumd', seed: 'silence:5' };
+let dispatchedRevealKey = '';
 
 const names = ['hopiumd', 'fomod', 'rugd', 'greedd', 'panicd', 'copiumd', 'lateforkd', 'doubtd'];
 const statuses = ['circling', 'running', 'sleeping', 'listening', 'quiet', 'zombie'];
@@ -84,6 +88,21 @@ function currentSeed() {
   return `${input?.value.trim() || 'silence'}:${selectedStake}`;
 }
 
+function setSelectedDaemon({ image, name, seed }) {
+  selectedDaemon.image = image;
+  selectedDaemon.name = name;
+  selectedDaemon.seed = seed;
+  if (waitDaemonImageEl) {
+    if (waitDaemonImageEl.getAttribute('src') !== selectedDaemon.image) waitDaemonImageEl.src = selectedDaemon.image;
+    waitDaemonImageEl.alt = `${selectedDaemon.name} daemon portrait`;
+  }
+  const revealKey = `${selectedDaemon.image}|${selectedDaemon.name}|${selectedDaemon.seed}`;
+  if (revealKey !== dispatchedRevealKey) {
+    dispatchedRevealKey = revealKey;
+    window.dispatchEvent(new CustomEvent('daemonhall:reveal', { detail: selectedDaemon }));
+  }
+}
+
 function renderPrivateState() {
   const seed = currentSeed();
   const h = hashNumber(seed);
@@ -94,7 +113,7 @@ function renderPrivateState() {
   if (daemonNameEl) daemonNameEl.textContent = ownName;
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
   if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(seed)}`;
-  window.dispatchEvent(new CustomEvent('daemonhall:reveal', { detail: { image: daemonImage, name: ownName, seed } }));
+  setSelectedDaemon({ image: daemonImage, name: ownName, seed });
   if (daemonBalanceEl) daemonBalanceEl.innerHTML = `$${(selectedStake + (h % 900) / 100).toFixed(2)} <span class="tell">· only you</span>`;
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, seed, 3);

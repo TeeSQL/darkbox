@@ -13,6 +13,7 @@ let loader: THREE.TextureLoader | null = null;
 let raf = 0;
 let started = false;
 let targetWake = 0.18;
+let loadedAspect = 1024 / 1536;
 
 const vertexShader = `
   varying vec2 vUv;
@@ -88,7 +89,15 @@ function resize() {
   camera.updateProjectionMatrix();
   const frustumWidth = aspect * view * 2;
   const frustumHeight = view * 2;
-  mesh.scale.setScalar(Math.min((frustumWidth * 0.94) / 1.28, (frustumHeight * 0.94) / 1.92));
+  const fitHeight = frustumHeight * 0.94;
+  const fitWidth = frustumWidth * 0.94;
+  let imageWidth = fitHeight * loadedAspect;
+  let imageHeight = fitHeight;
+  if (imageWidth > fitWidth) {
+    imageWidth = fitWidth;
+    imageHeight = imageWidth / loadedAspect;
+  }
+  mesh.scale.set(imageWidth, imageHeight, 1);
 }
 
 function animate(time = 0) {
@@ -113,7 +122,7 @@ function init() {
     camera.position.z = 2;
     loader = new THREE.TextureLoader();
     mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.28, 1.92, 84, 128),
+      new THREE.PlaneGeometry(1, 1, 84, 128),
       new THREE.ShaderMaterial({
         uniforms: { uMap: { value: null }, uTime: { value: 0 }, uWake: { value: targetWake } },
         vertexShader,
@@ -141,8 +150,11 @@ function setImage(image: string) {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
+    const imageBitmap = texture.image as { width?: number; height?: number };
+    if (imageBitmap.width && imageBitmap.height) loadedAspect = imageBitmap.width / imageBitmap.height;
     if (mesh) mesh.material.uniforms.uMap.value = texture;
     stage.classList.add('webgl-ready');
+    resize();
   }, undefined, () => {
     stage.classList.add('webgl-fallback');
   });

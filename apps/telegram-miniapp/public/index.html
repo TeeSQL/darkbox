@@ -51,7 +51,7 @@
             </button>
           </div>
           <p id="whisper-status" class="whisper-status">only you hear this.</p>
-          <button id="continue" class="continue-button" type="button">let the dark answer</button>
+          <div class="action-dock"><button id="continue" class="ritual-action continue-button" type="button">let the dark answer</button></div>
         </div>
 
         <div class="dark-answer" aria-label="The dark answers" aria-hidden="true">
@@ -66,7 +66,7 @@
             <strong id="sealed-name">██████</strong>
           </div>
           <p class="answer-note">bind the pact to take the key. until then, it stays behind the glass.</p>
-          <button id="open-pact" class="bind-preview" type="button">bind the pact</button>
+          <div class="action-dock"><button id="open-pact" class="ritual-action bind-preview" type="button">seal the pact</button></div>
         </div>
 
         <div class="pact ritual-screen" aria-label="Seal the pact" aria-hidden="true">
@@ -88,7 +88,7 @@
             <strong id="fingerprint">0x••••••••••••</strong>
           </div>
           <p class="pact-note">prototype only. no wallet. no backend. the story continues.</p>
-          <button id="seal-pact" class="primary-ritual" type="button">seal the pact</button>
+          <div class="action-dock"><button id="seal-pact" class="ritual-action primary-ritual" type="button">seal the pact</button></div>
         </div>
 
         <div class="daemon-reveal ritual-screen" aria-label="Private daemon reveal" aria-hidden="true">
@@ -104,7 +104,7 @@
             <span>sealed fingerprint</span>
             <strong id="reveal-fingerprint">0x••••••••••••</strong>
           </div>
-          <button id="send-daemon" class="primary-ritual" type="button">send it into the hall</button>
+          <div class="action-dock"><button id="send-daemon" class="ritual-action primary-ritual" type="button">send it into the hall</button></div>
         </div>
 
         <div class="wait-room ritual-screen" aria-label="Wait room" aria-hidden="true">
@@ -121,11 +121,11 @@
           </div>
 
           <p class="wait-note">your daemon is inside. the wall is all you get.</p>
-          <button id="open-hall-wall" class="primary-ritual wall-button" type="button">listen at the wall</button>
+          <div class="action-dock"><button id="open-hall-wall" class="ritual-action wall-button" type="button">listen at the wall</button></div>
 
           <div class="hall-wall" aria-label="The hall wall" aria-hidden="true">
             <div class="hall-wall-inner">
-              <button id="close-hall-wall" class="wall-close" type="button">step back</button>
+              <button id="close-hall-wall" class="ritual-action wall-close" type="button">step back</button>
               <p class="ritual-kicker">muffled through stone.</p>
               <h2>something is happening in the hall.</h2>
               <p class="wall-copy">you can feel the crowd you cannot read. the numbers are echoes, not windows.</p>
@@ -147,7 +147,7 @@
             </div>
           </div>
 
-          <button id="restart-flow" class="ghost-ritual" type="button">whisper again</button>
+          <div class="action-dock secondary-dock"><button id="restart-flow" class="ritual-action ghost-ritual" type="button">whisper again</button></div>
         </div>
       </section>
     </main>

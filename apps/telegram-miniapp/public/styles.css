@@ -1081,3 +1081,250 @@ textarea::-webkit-scrollbar { display: none; }
     padding: 9px 0 7px;
   }
 }
+
+/* Unified DAEMONHALL action system: one sealed threshold-plate style. */
+.action-dock {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: clamp(18px, 3vh, 28px);
+  padding: 0 18px;
+}
+.secondary-dock { margin-top: 14px; }
+.ritual-action,
+.continue-button,
+.bind-preview,
+.primary-ritual,
+.ghost-ritual,
+.wall-button,
+.wall-close {
+  appearance: none;
+  min-width: min(268px, calc(100vw - 72px));
+  min-height: 46px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(215,215,223,0.24);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(215,215,223,0.055), rgba(10,10,15,0.24)),
+    rgba(139,123,255,0.028);
+  color: #d8d5e1;
+  box-shadow: inset 0 0 28px rgba(139,123,255,0.045), 0 0 28px rgba(139,123,255,0.045);
+  padding: 0 22px;
+  font-size: clamp(10px, 0.95vw, 12px);
+  line-height: 1;
+  letter-spacing: 0.15em;
+  text-transform: lowercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 1;
+  pointer-events: auto;
+  transition: color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, opacity 220ms ease;
+}
+.ritual-action:hover,
+.continue-button:hover,
+.bind-preview:hover,
+.primary-ritual:hover,
+.ghost-ritual:hover,
+.wall-button:hover,
+.wall-close:hover {
+  color: #f0edf7;
+  border-color: rgba(215,215,223,0.48);
+  box-shadow: inset 0 0 32px rgba(139,123,255,0.065), 0 0 34px rgba(139,123,255,0.075);
+}
+.ritual-action:active { transform: translateY(1px) scale(0.992); }
+.continue-button:not(.ready) {
+  opacity: 0;
+  pointer-events: none;
+}
+.wall-close {
+  position: sticky;
+  top: max(14px, env(safe-area-inset-top));
+  z-index: 3;
+  margin: 8px 0 0 auto;
+  min-width: 118px;
+  min-height: 38px;
+  font-size: 10px;
+  padding: 0 16px;
+  background: rgba(10,10,15,0.82);
+}
+@media (max-width: 760px) {
+  .action-dock {
+    margin-top: 16px;
+    padding-left: max(24px, env(safe-area-inset-left));
+    padding-right: max(24px, env(safe-area-inset-right));
+  }
+  .ritual-action,
+  .continue-button,
+  .bind-preview,
+  .primary-ritual,
+  .ghost-ritual,
+  .wall-button {
+    width: min(286px, calc(100vw - 64px));
+    min-width: 0;
+    min-height: 48px;
+    padding: 0 18px;
+  }
+  .pact .primary-ritual {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    margin: 0;
+    min-width: 0;
+    width: min(286px, calc(100vw - 64px));
+  }
+  .pact .action-dock {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 24px;
+    z-index: 8;
+  }
+  .wall-close {
+    width: auto;
+    min-width: 116px;
+    min-height: 40px;
+  }
+}
+/* Button consistency hardening pass. */
+.action-dock { align-self: center; }
+.ritual-action,
+.continue-button,
+.bind-preview,
+.primary-ritual,
+.ghost-ritual,
+.wall-button {
+  width: min(286px, calc(100vw - 72px));
+  max-width: 286px;
+}
+.dark-answer .action-dock,
+.daemon-reveal .action-dock,
+.wait-room .action-dock,
+.whisper .action-dock { justify-content: center; }
+@media (max-width: 760px) {
+  .stage[data-loop="dark-answer"] .terminal { top: 58%; min-height: 430px; }
+  .dark-answer { padding-top: 44px; padding-bottom: 76px; justify-content: flex-start; }
+  .dark-answer .presence { margin-bottom: 16px; width: 92px; height: 92px; }
+  .dark-answer .answer-note { margin-top: 14px; }
+  .dark-answer .action-dock { margin-top: 16px; }
+
+  .stage[data-loop="pact"] .terminal { top: 55%; min-height: 560px; }
+  .pact { padding-top: 58px; }
+
+  .stage[data-loop="daemon-reveal"] .terminal { top: 58%; min-height: 610px; }
+  .daemon-reveal { padding-top: 54px; padding-bottom: 74px; justify-content: flex-start; }
+  .daemon-reveal .action-dock { margin-top: 16px; }
+  .daemon-form { width: 104px; height: 104px; margin-top: 10px; }
+
+  .stage[data-loop="wait-room"] .terminal { top: 55%; min-height: 470px; }
+  .wait-room { padding-top: 80px; }
+}
+
+/* FINAL button override: keep every main action consistent and mobile-safe. */
+.action-dock {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding-left: max(24px, env(safe-area-inset-left)) !important;
+  padding-right: max(24px, env(safe-area-inset-right)) !important;
+}
+.ritual-action,
+.continue-button,
+.bind-preview,
+.primary-ritual,
+.ghost-ritual,
+.wall-button {
+  width: min(286px, calc(100vw - 64px)) !important;
+  min-width: min(286px, calc(100vw - 64px)) !important;
+  max-width: min(286px, calc(100vw - 64px)) !important;
+  min-height: 48px !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-align: center !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="pact"] .terminal { top: 59% !important; min-height: 600px !important; }
+  .pact { padding-top: 86px !important; padding-bottom: 92px !important; }
+  .pact h2 { font-size: 19px !important; line-height: 1.1 !important; }
+  .pact-promises { margin-top: 12px !important; }
+  .pact .action-dock {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 28px !important;
+    margin: 0 !important;
+  }
+  .dark-answer .action-dock,
+  .daemon-reveal .action-dock,
+  .wait-room .action-dock,
+  .whisper .action-dock {
+    margin-top: 16px !important;
+  }
+}
+@media (max-width: 760px) {
+  .ritual-action,
+  .continue-button,
+  .bind-preview,
+  .primary-ritual,
+  .ghost-ritual,
+  .wall-button {
+    width: 286px !important;
+    min-width: 286px !important;
+    max-width: calc(100vw - 64px) !important;
+    box-sizing: border-box !important;
+  }
+  .dark-answer .action-dock,
+  .pact .action-dock,
+  .daemon-reveal .action-dock,
+  .wait-room .action-dock,
+  .whisper .action-dock {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+@media (max-width: 760px) {
+  .dark-answer { padding-bottom: 96px !important; }
+  .dark-answer .action-dock {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 26px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+    margin: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+  .dark-answer .ritual-action {
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+@media (max-width: 760px) {
+  .dark-answer .ritual-action {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: 30px !important;
+    transform: translateX(-50%) !important;
+    width: 286px !important;
+    min-width: 286px !important;
+    max-width: calc(100vw - 64px) !important;
+    z-index: 30 !important;
+  }
+}
+@media (max-width: 760px) {
+  .dark-answer .ritual-action {
+    left: calc(50% + 52px) !important;
+  }
+}
+@media (max-width: 760px) {
+  .dark-answer .ritual-action {
+    left: calc(50% + 92px) !important;
+  }
+}

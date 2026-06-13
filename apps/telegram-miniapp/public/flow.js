@@ -207,6 +207,8 @@ async function requestMicAccess(allowedText) {
   if (whisperStatus) whisperStatus.textContent = 'asking for microphone access…';
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   stream.getTracks().forEach((track) => track.stop());
+  try { sessionStorage.setItem('daemonhall:mic-ok-this-session', '1'); } catch (_) {}
+  window.dispatchEvent(new CustomEvent('daemonhall:mic-granted-this-session'));
   if (allowedText && whisperStatus) whisperStatus.textContent = allowedText;
   return true;
 }

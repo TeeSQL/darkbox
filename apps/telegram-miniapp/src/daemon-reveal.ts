@@ -41,6 +41,7 @@ let waitMicLevel = 0;
 let waitMicTarget = 0;
 let waitMicProbeStarted = false;
 let waitMicMode: 'idle' | 'listening' | 'test' = 'idle';
+let waitMicAllowedThisSession = false;
 
 const vertexShader = `
   varying vec2 vUv;
@@ -336,20 +337,23 @@ function stopWaitMic() {
   setWaitMicLevel(0, 'idle');
 }
 
+function hasWaitMicSessionGrant() {
+  if (waitMicAllowedThisSession) return true;
+  try {
+    waitMicAllowedThisSession = sessionStorage.getItem('daemonhall:mic-ok-this-session') === '1';
+  } catch (_) {
+    waitMicAllowedThisSession = false;
+  }
+  return waitMicAllowedThisSession;
+}
+
 async function maybeStartWaitMic() {
   if (waitMicProbeStarted || waitMicStream || !waitPortrait) return;
+  if (!hasWaitMicSessionGrant()) return;
   waitMicProbeStarted = true;
   if (!navigator.mediaDevices?.getUserMedia) return;
 
   try {
-    const permissions = navigator.permissions;
-    if (!permissions?.query) return;
-    const status = await permissions.query({ name: 'microphone' as PermissionName });
-    if (status.state !== 'granted') {
-      waitMicProbeStarted = false;
-      return;
-    }
-
     waitMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) {
@@ -467,6 +471,10 @@ if (revealView && stage) {
 window.__daemonhallSetWaitMicLevelForTest = (level: number) => setWaitMicLevel(level, 'test');
 window.addEventListener('daemonhall:wait-mic-level', (event) => {
   setWaitMicLevel((event as CustomEvent<number>).detail, 'test');
+});
+window.addEventListener('daemonhall:mic-granted-this-session', () => {
+  waitMicAllowedThisSession = true;
+  void maybeStartWaitMic();
 });
 
 function hashCode(seed: string) {

@@ -292,6 +292,38 @@ body.keyboard-open .cmdbar { position: fixed; }
   .brow .pulse { font-size: 11px; }
 }
 
+/* Shader preview should never be wider than the viewport/debug panel. */
+html.bestiary-html .daemon-preview,
+html.bestiary-html .daemon-stage {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.bestiary-html .daemon-stage canvas {
+  max-width: 100% !important;
+}
+
+/* Evaluation mode: make the selected daemon large enough to judge the effect. */
+html.bestiary-html .daemon-preview {
+  grid-template-columns: minmax(220px, 0.42fr) minmax(320px, 1.58fr) !important;
+  min-height: min(94vh, 1040px) !important;
+}
+
+html.bestiary-html .daemon-stage {
+  min-height: min(88vh, 960px) !important;
+}
+
+@media (max-width: 860px) {
+  html.bestiary-html .daemon-preview {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+  }
+
+  html.bestiary-html .daemon-stage {
+    min-height: 86vh !important;
+  }
+}
+
 /* Private daemon reveal — Three.js shader stage with static image fallback. */
 .reveal-wrap { max-width: 520px; }
 .daemon-reveal-panel {
@@ -484,4 +516,88 @@ body.keyboard-open .cmdbar { position: fixed; }
   .daemon-reveal-stage { min-height: 360px; }
   .daemon-reveal-fallback { padding: 12px; }
   .daemon-wait-portrait { width: min(100%, 320px); }
+}
+
+/* Reveal screen polish: name first, smaller apparition. */
+.reveal-wrap { max-width: 460px; }
+.daemon-reveal-panel { margin-top: 18px; }
+.daemon-reveal-copy-top {
+  padding: 15px 18px 13px;
+  border-bottom: 1px solid var(--hair);
+  background: linear-gradient(180deg, rgba(139, 123, 255, 0.075), rgba(255,255,255,0.018));
+  text-align: center;
+}
+.daemon-reveal-copy-top strong {
+  font-size: clamp(1.58rem, 7.2vw, 2.35rem);
+  letter-spacing: 0.04em;
+}
+.daemon-reveal-stage {
+  min-height: min(38vh, 300px);
+  max-height: 320px;
+}
+.daemon-reveal-fallback { padding: 26px 34px; }
+@media (max-width: 760px) {
+  .reveal-wrap { max-width: 410px; }
+  .daemon-reveal-panel { margin-top: 15px; }
+  .daemon-reveal-stage { min-height: min(35vh, 270px); }
+  .daemon-reveal-fallback { padding: 24px 32px; }
+}
+
+/* Wait-room refined layout */
+.wait-wrap { max-width: 420px; }
+.wait-ledger { margin-bottom: 10px; }
+.wait-metric.balance strong {
+  text-shadow: 0 0 18px rgba(139, 123, 255, 0.26);
+}
+.daemon-wait-card {
+  width: 100%;
+}
+.wait-card-header {
+  display: grid;
+  gap: 3px;
+  padding: 11px 16px 10px;
+  border: 1px solid var(--hair);
+  border-bottom: 0;
+  background: linear-gradient(180deg, rgba(139, 123, 255, 0.065), rgba(255, 255, 255, 0.012));
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+.wait-card-header .k {
+  color: var(--mut);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+.wait-card-header strong {
+  color: var(--bone);
+  font-family: var(--display);
+  font-style: italic;
+  font-size: clamp(1.3rem, 6.5vw, 2rem);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wait-card-status {
+  color: var(--mut);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+.wait-card-footer {
+  padding: 7px 14px 8px;
+  border: 1px solid var(--hair);
+  border-top: 0;
+  background: var(--srf);
+  color: var(--mut);
+  font-size: 11px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daemon-wait-card .daemon-wait-portrait {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-top: 0;
+  border-bottom: 0;
 }

@@ -78,16 +78,15 @@
       <section class="view" id="v-reveal">
         <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="reveal-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap reveal-wrap">
-          <div class="eyebrow">visible only with your key</div>
-          <h2 class="headline">something took your shape.</h2>
+          <h2 class="headline reveal-headline">something took your shape.</h2>
           <div class="daemon-reveal-panel" aria-label="Private daemon render">
-            <div id="daemon-reveal-stage" class="daemon-reveal-stage" aria-label="Your daemon preview">
-              <img id="daemon-reveal-fallback" class="daemon-reveal-fallback" src="/daemons/rasp-05.webp" alt="your daemon" />
-            </div>
-            <div class="daemon-reveal-copy">
+            <div class="daemon-reveal-copy daemon-reveal-copy-top">
               <span class="k">YOUR DAEMON</span>
               <strong id="reveal-daemon-name">hopiumd</strong>
               <span id="reveal-daemon-meta">shader sealed · private preview</span>
+            </div>
+            <div id="daemon-reveal-stage" class="daemon-reveal-stage" aria-label="Your daemon preview">
+              <img id="daemon-reveal-fallback" class="daemon-reveal-fallback" src="/daemons/rasp-05.webp" alt="your daemon" />
             </div>
           </div>
           <div class="sub"><span class="tell">only you see this private render.</span><br />send it in to see the portrait you sealed.</div>
@@ -100,21 +99,24 @@
 
       <section class="view" id="v-wait">
         <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="wait-countdown">SEALED</span></span></div>
-        <div class="content"><div class="wrap">
+        <div class="content"><div class="wrap wait-wrap">
           <div class="wait-ledger" aria-label="Your private position summary">
-            <div class="wait-metric"><span class="k">BALANCE</span><strong id="daemon-balance">$5.00</strong><span class="tell">only you</span></div>
+            <div class="wait-metric balance"><span class="k">BALANCE</span><strong id="daemon-balance">$5.00</strong><span class="tell">only you</span></div>
             <div class="wait-metric pnl"><span class="k">PNL</span><strong id="daemon-pnl">+$0.00</strong><span id="daemon-pnl-note">unrealized</span></div>
           </div>
-          <h2 class="headline wait-headline">your daemon is inside.</h2>
-          <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
-            <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="your daemon portrait" />
+          <div class="daemon-wait-card">
+            <div class="wait-card-header">
+              <span class="k">YOUR DAEMON</span>
+              <strong id="daemon-name">hopiumd</strong>
+              <span id="daemon-status" class="wait-card-status">circling</span>
+            </div>
+            <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
+              <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="your daemon portrait" />
+            </div>
+            <div class="wait-card-footer">
+              <span id="daemon-murmur">▸ a daemon laughed without opening its mouth</span>
+            </div>
           </div>
-          <div class="panel wait-panel">
-            <div class="prow"><span class="k">YOUR DAEMON</span><span id="daemon-name" class="v">hopiumd</span></div>
-            <div class="prow"><span class="k">STATUS</span><span id="daemon-status" class="v">circling</span></div>
-            <div class="prow"><span class="k">MURMUR</span><span id="daemon-murmur" class="v">▸ a daemon laughed without opening its mouth</span></div>
-          </div>
-          <div class="sub wait-sub">the wall hides the trades. your balance stays above the fold.</div>
         </div></div>
         <div class="cmdbar">
           <span class="hint">it won't say what it's holding.</span>

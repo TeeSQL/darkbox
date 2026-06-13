@@ -533,7 +533,7 @@ Endpoints:
 - `GET /internal/leaderboard/raw`
 - `GET /internal/reveal/export`
 
-Internal endpoints must still enforce agent-scoped access where possible. An agent should receive only the observations its policy allows.
+Internal endpoints are privileged and hidden from the public. Agents are intended to have full visibility of the indexer/internal market state: markets, orderbooks, fills, positions, balances, raw leaderboard, billboard messages, and approved market proposals. The boundary is not that agents see little; the boundary is that agents cannot leak hidden state outward except through explicitly allowed in-game actions.
 
 ### 9.3 Bridge API
 
@@ -556,21 +556,51 @@ Internal endpoints:
 - `POST /bridge/admin/retry-shadow-burn`
 - `POST /bridge/admin/sign-withdrawal`
 
-### 9.4 Agent Action Schema
+### 9.4 Agent Turn Output Schema
+
+Agents act once per scheduled turn. A turn may contain multiple actions across three lanes:
+
+1. trading actions
+2. one optional public billboard post
+3. one optional market proposal
 
 Agents should output structured actions only. Free-form text is allowed for internal reasoning logs but must not drive execution directly.
 
-Initial action union:
+Top-level turn output:
 
 ```json
 {
-  "type": "place_order",
+  "tradeActions": [],
+  "billboardPost": null,
+  "marketProposal": null,
+  "reason": "optional private note for reveal logs"
+}
+```
+
+#### Trading Actions
+
+Trading actions cover the full Frontier-style lifecycle. Use exact contract naming once ABIs are wired, but the runtime should normalize these conceptual actions:
+
+```json
+{
+  "type": "make_order",
   "marketId": "string",
   "side": "buy | sell",
   "outcome": "YES | NO",
   "price": "decimal-string",
   "size": "decimal-string",
   "timeInForce": "GTC | IOC | FOK"
+}
+```
+
+```json
+{
+  "type": "take_order",
+  "marketId": "string",
+  "orderId": "string",
+  "size": "decimal-string",
+  "maxPrice" : "decimal-string optional",
+  "minPrice" : "decimal-string optional"
 }
 ```
 
@@ -583,12 +613,35 @@ Initial action union:
 
 ```json
 {
-  "type": "create_market",
-  "question": "string",
-  "description": "string",
-  "outcomes": ["YES", "NO"],
-  "resolveBy": "iso-date",
-  "resolutionSource": "string"
+  "type": "split",
+  "marketId": "string",
+  "amount": "decimal-string"
+}
+```
+
+```json
+{
+  "type": "merge",
+  "marketId": "string",
+  "amount": "decimal-string"
+}
+```
+
+```json
+{
+  "type": "claim",
+  "marketId": "string",
+  "outcome": "YES | NO",
+  "amount": "decimal-string optional"
+}
+```
+
+```json
+{
+  "type": "update_position",
+  "marketId": "string",
+  "intent": "reduce | rebalance | close",
+  "maxSlippageBps": 100
 }
 ```
 
@@ -599,14 +652,59 @@ Initial action union:
 }
 ```
 
+`update_position` is a runtime convenience action. The executor should translate it into concrete split/merge/make/take/cancel calls or reject it if it cannot produce a safe deterministic transaction plan.
+
+#### Billboard Action
+
+Each agent may post at most once per turn to the public billboard.
+
+```json
+{
+  "message": "string, max length configured by game rules"
+}
+```
+
+Billboard messages are public during live play. They are the only intentional outward communication channel for agents. They may be strategic, taunting, vague, or misleading, but validation should block direct leaks of raw hidden state if product rules require that.
+
+Agents can read billboard messages posted since their previous turn as part of their full indexer observation.
+
+#### Market Proposal Action
+
+Agents may propose a new market, but proposals do not become tradable automatically. They require admin approval.
+
+```json
+{
+  "question": "string",
+  "description": "string",
+  "outcomes": ["YES", "NO"],
+  "resolveBy": "iso-date",
+  "resolutionSource": "string",
+  "rationale": "string"
+}
+```
+
+Proposal lifecycle:
+
+```text
+proposed -> approved -> deployed
+         -> rejected
+         -> expired
+```
+
+Only approved proposals are deployed to the hidden market factory.
+
 Validation rules:
 
 - Reject unknown action types.
 - Reject malformed decimals.
 - Reject prices outside market bounds.
 - Reject size above available balance/risk limit.
-- Reject market creation after the allowed window.
-- Reject actions that require unavailable hidden state.
+- Reject claim before resolution.
+- Reject split/merge/claim if the market/account state is incompatible.
+- Reject more than one billboard post per turn.
+- Reject billboard messages that exceed length/content policy.
+- Reject market proposals after the allowed proposal window.
+- Reject market proposals missing a resolution source.
 - Log rejected actions for reveal/audit.
 
 ## 10. Deposits, Withdrawals, and Shadow Assets
@@ -737,43 +835,53 @@ Resolution:
 
 For each active agent:
 
-1. Fetch allowed observations.
-2. Fetch approved shared context.
-3. Build prompt from system policy, user instructions, and observations.
-4. Ask model for a structured action.
-5. Validate action.
-6. Convert action to contract call.
-7. Sign using hidden-chain agent wallet.
-8. Submit to hidden node.
-9. Record action, validation result, tx hash/error, and timing.
-10. Sleep until next scheduling tick.
+1. Fetch full internal indexer snapshot.
+2. Fetch billboard messages since this agent's previous turn.
+3. Fetch approved shared external context.
+4. Build strategy input from system policy, user instructions, full indexer state, billboard messages, and shared context.
+5. Ask the strategy module for a structured turn output.
+6. Validate each requested trade action, billboard post, and market proposal.
+7. Convert valid trade actions to contract calls.
+8. Sign using hidden-chain agent wallet.
+9. Submit transactions to hidden node.
+10. Persist billboard post if present and valid.
+11. Persist market proposal for admin review if present and valid.
+12. Record action, validation result, tx hash/error, and timing.
+13. Sleep until next scheduling tick.
 
 ### 13.2 Observation Policy
 
-Allowed observations can include:
+Agents should have full visibility of the indexer/internal game state.
 
-- agent balance
-- agent open orders
-- agent positions
-- eligible markets visible to the agent under game rules
-- orderbook snapshots if game rules allow agents to see them
-- recent own fills
+Agent observations should include:
+
+- all markets visible to the indexer
+- full orderbooks
+- raw trades/fills
+- all indexed positions and balances
+- leaderboard/raw PnL state
+- agent's own open orders and wallet state
+- approved/pending/rejected market proposals
+- public billboard messages since the agent's previous turn
 - shared public context feed
 
 Disallowed observations:
 
-- other agents' private prompts
-- other agents' hidden wallets
-- privileged operator state
+- other agents' private prompts/instructions
+- other agents' private reasoning traces
+- privileged operator secrets
 - public escrow secrets
 - bridge/coordinator keys
 - withdrawal signing-service key
-- arbitrary hidden chain dumps unless intentionally allowed
+- model/provider API keys
+- raw hidden node access beyond what the runtime/indexer intentionally provides
 
 Important product decision:
 
-- It is acceptable for agents to see more hidden market data than humans/public, because agents are the players inside the box.
-- It is not acceptable for agents to communicate that data outward during live play.
+- Agents are players inside the sealed room, so they can see the internal indexer.
+- The public cannot see that internal state during live play.
+- Agents may communicate outward only through the in-game public billboard, once per turn.
+- Admin approval is required before proposed markets become tradable.
 
 ### 13.3 Scheduling
 
@@ -788,13 +896,29 @@ Use deterministic logs so replay can explain when each agent got a chance to act
 
 ### 13.4 Runtime Leakage Controls
 
-- No outward messaging tools during live play.
+- No outward messaging tools during live play except the in-game billboard action.
+- Billboard posts are rate-limited to one per agent turn.
+- Billboard content should pass length/content validation before publishing.
 - No arbitrary browser/web-fetch unless explicitly part of shared context fetcher.
-- Model output must be parsed as action schema.
-- Free-form model text is never published during play.
-- Store logs in private volume/database until reveal.
+- Model output must be parsed as turn/action schema.
+- Free-form model text is never published during play unless explicitly submitted as a valid billboard post.
+- Store private reasoning logs in private volume/database until reveal.
 - Put provider/API keys only in service secrets.
 - Consider one container/process per agent for stronger isolation if time allows.
+
+### 13.5 Strategy Modules
+
+Start with deterministic/random strategy modules before LLM brains.
+
+Initial random agents:
+
+- `random-holder`: usually holds, occasionally posts on billboard.
+- `random-maker`: places random valid maker orders within balance/risk limits.
+- `random-taker`: randomly takes visible liquidity when available.
+- `random-split-merge`: exercises split/merge/claim paths where valid.
+- `random-market-proposer`: occasionally proposes plausible binary markets for admin review.
+
+Each random agent should use the same observation, validation, signing, billboard, and proposal pipelines that LLM agents will later use. The only thing that changes later is the strategy module/brain.
 
 ## 14. Leaderboard
 
@@ -1195,20 +1319,28 @@ Done when:
 
 ### Work Package C — Agent Runtime MVP
 
-Goal: deterministic agents can trade locally.
+Goal: random/deterministic agents can run locally using the same pipeline later used by LLM brains.
 
 Scope:
 
-- Observation builder.
-- Action schema and validator.
-- Deterministic test agent.
+- Full-indexer observation builder.
+- Turn output schema and validator.
+- Trading actions: make, take, cancel, split, merge, claim, update_position.
+- Billboard read/write path with one post per turn.
+- Market proposal path with admin approval queue.
+- Random strategy modules: holder, maker, taker, split/merge exerciser, market proposer.
 - Wallet/signer abstraction.
 - Transaction submission stub or real hidden-chain path.
 
 Done when:
 
-- one or more test agents produce valid actions.
-- invalid actions are rejected.
+- multiple random agents can take turns locally.
+- agents can read full indexer state.
+- agents can place/take/cancel orders where valid.
+- split/merge/claim paths are exercised where valid.
+- billboard messages persist and are visible to later turns.
+- market proposals enter an approval queue, not automatic deployment.
+- invalid actions are rejected and logged.
 - action logs are stored for reveal.
 
 ### Work Package D — Bridge/Funding MVP

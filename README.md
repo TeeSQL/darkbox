@@ -43,6 +43,7 @@ Each runtime service is intended to build into a separate Docker container for C
 ## Design docs
 
 - [Technical specification](docs/TECH_SPEC.md)
+- [Deposits + Withdrawals specification](docs/DEPOSITS_WITHDRAWALS_SPEC.md)
 
 ## Status
 

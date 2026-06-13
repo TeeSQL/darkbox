@@ -474,19 +474,24 @@ Risks:
 - Less product-specific than Blink/Privy/Dynamic.
 - Needs careful integration to avoid being bounty garnish.
 
-### 5.3 Recommended MVP Path
+### 5.3 Final MVP Path
 
-Pick one primary funding integration:
+Use a public USDC escrow contract as the source of truth and keep the hidden chain on synthetic credits.
 
-- If Blink supports our target flow cleanly: use Blink.
-- Else if Privy universal deposits are fastest: use Privy.
-- Else use Dynamic if server wallets help agent signing too.
+MVP decision:
 
-Do not integrate all of them. The deposit story should be one clean path, plus maybe one fallback manual Base USDC deposit for demo reliability.
+- Canonical asset: USDC.
+- Canonical escrow chain: Base unless a selected sponsor flow strictly requires another settlement chain.
+- Canonical fallback: direct Base USDC deposit into the escrow contract.
+- Sponsor integration: pick exactly one adapter for UX/bounty fit after SDK validation; do not integrate multiple funding providers.
+- Hidden-chain balance: 1:1 synthetic game credit minted by the coordinator after confirmed public deposit.
+- Withdrawals: disabled during live play; pre-freeze refunds and post-reveal Merkle claims only.
+
+See [Deposits + Withdrawals Specification](DEPOSITS_WITHDRAWALS_SPEC.md) for the complete lifecycle, bridge API, escrow interface, refund rules, Docker/CVM config, and settlement flow.
 
 ### 5.4 Public Entry Contract
 
-A public contract records entry commitments and deposits.
+A public contract records entry commitments, deposits, refunds, final roots, and claims.
 
 Responsibilities:
 
@@ -501,6 +506,7 @@ Candidate interface:
 
 ```solidity
 function registerAgent(
+    bytes32 gameId,
     bytes32 agentId,
     string calldata ensName,
     bytes32 instructionHash,
@@ -508,13 +514,31 @@ function registerAgent(
     bytes32 revealSaltHash
 ) external;
 
-function depositForAgent(bytes32 agentId, uint256 amount) external;
+function depositForAgent(bytes32 gameId, bytes32 agentId, uint256 amount, bytes32 fundingRef) external;
+
+function registerAndDeposit(
+    bytes32 gameId,
+    bytes32 agentId,
+    string calldata ensName,
+    bytes32 instructionHash,
+    bytes32 runtimeHash,
+    bytes32 revealSaltHash,
+    uint256 amount,
+    bytes32 fundingRef
+) external;
 
 function freezeRegistration(bytes32 gameId) external;
 
-function publishFinalRoot(bytes32 gameId, bytes32 hiddenChainRoot, bytes32 revealBundleHash) external;
+function publishFinalRoot(
+    bytes32 gameId,
+    bytes32 hiddenChainRoot,
+    bytes32 revealBundleHash,
+    bytes32 settlementRoot
+) external;
 
-function claim(bytes32 agentId, bytes calldata proof) external;
+function refund(bytes32 gameId, bytes32 agentId) external;
+
+function claim(bytes32 gameId, bytes32 agentId, address recipient, uint256 amount, bytes32[] calldata proof) external;
 ```
 
 ## 6. ENS Identity and Commitment Layer
@@ -1294,9 +1318,9 @@ Mitigations:
 
 ### Settlement
 
-- Are gains/losses real USDC or demo credits until final payout?
-- Do we need a dispute window?
-- Are losing balances burned/transferred automatically or only after claim?
+- What exact dispute window do we want after reveal: zero for demo, or short challenge window for credibility?
+- Which signer/multisig publishes `settlementRoot` for the MVP?
+- Are protocol/demo fees zero, or do we reserve a small fee field in the settlement artifact?
 
 ## 18. Recommended Final Shape for Hackathon
 

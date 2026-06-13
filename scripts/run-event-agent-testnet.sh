@@ -57,18 +57,36 @@ NO_BOOK="$(json_get "$DEPLOY_OUT" "d['canonicalMarket']['noBook']")"
 log "market=$MARKET market_id=$MARKET_ID yes_book=$YES_BOOK no_book=$NO_BOOK"
 
 BINDINGS="$LOG_DIR/owner-daemon-bindings.json"
-cp services/agents/config/owner-daemon-bindings.json "$BINDINGS"
 OWNER="0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
 GAME_ID="0x0000000000000000000000000000000000000000000000000000000000000001"
 IFS=',' read -r -a AGENTS <<< "$AGENTS_CSV"
-for AGENT in "${AGENTS[@]}"; do
-  pnpm exec tsx scripts/record-owner-daemon-binding.ts \
-    --game-id "$GAME_ID" \
-    --owner "$OWNER" \
-    --agent-id "$AGENT" \
-    --status registered \
-    --bindings "$BINDINGS" >>"$LOG_DIR/bindings.log"
-done
+AGENTS_JSON="$(printf '%s\n' "${AGENTS[@]}" | python3 -c 'import json,sys; print(json.dumps([x.strip() for x in sys.stdin if x.strip()]))')"
+AGENTS_JSON="$AGENTS_JSON" OWNER="$OWNER" GAME_ID="$GAME_ID" BINDINGS="$BINDINGS" python3 <<'PYBIND' >"$LOG_DIR/bindings.log"
+import json, os
+from datetime import datetime, timezone
+with open('services/agents/config/agent-identities.json') as f:
+    identities = {a['agentId']: a for a in json.load(f)['agents']}
+agents = json.loads(os.environ['AGENTS_JSON'])
+now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+rows = []
+for agent in agents:
+    identity = identities[agent]
+    rows.append({
+        'gameId': os.environ['GAME_ID'],
+        'owner': os.environ['OWNER'],
+        'agentId': agent,
+        'daemonAddress': identity['address'],
+        'shadowAccount': identity['shadowAccount'],
+        'status': 'registered',
+        'createdAt': now,
+        'updatedAt': now,
+    })
+out = {'schema': 'darkbox.owner-daemon-bindings.v1', 'updatedAt': now, 'bindings': rows}
+with open(os.environ['BINDINGS'], 'w') as f:
+    json.dump(out, f, indent=2)
+    f.write('\n')
+print(json.dumps(out, indent=2))
+PYBIND
 log "registered owner-daemon bindings for: $AGENTS_CSV"
 
 START=$(date +%s)

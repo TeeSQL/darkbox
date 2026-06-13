@@ -31,8 +31,12 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/services/indexer/dist ./services/indexer/dist
-COPY services/indexer/migrations ./services/indexer/migrations
+# Migrations must land where the compiled migrate.js looks for them
+# (dist/services/indexer/src/migrate.js → ../migrations). Copying to the non-dist
+# path left readdir() throwing ENOENT → crash-loop. Keep the legacy path too so
+# the resolver's fallback candidate also resolves.
 COPY services/indexer/migrations ./services/indexer/dist/services/indexer/migrations
+COPY services/indexer/migrations ./services/indexer/migrations
 
 RUN adduser -D -u 10001 darkbox
 USER darkbox

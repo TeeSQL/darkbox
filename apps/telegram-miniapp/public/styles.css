@@ -1444,3 +1444,177 @@ textarea::-webkit-scrollbar { display: none; }
     padding-top: max(52px, env(safe-area-inset-top));
   }
 }
+
+/* Hall wall modal close: full-page modal with simple X. */
+.modal-close {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 80;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  appearance: none;
+  border: 1px solid rgba(215,215,223,0.24);
+  border-radius: 999px;
+  background: rgba(10,10,15,0.72);
+  color: #d8d5e1;
+  box-shadow: inset 0 0 24px rgba(139,123,255,0.04), 0 0 28px rgba(0,0,0,0.26);
+  font-size: 26px;
+  line-height: 1;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+.modal-close:hover {
+  color: #f0edf7;
+  border-color: rgba(215,215,223,0.48);
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 70 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  overflow-y: auto !important;
+  border-radius: 0 !important;
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+  padding-top: max(68px, calc(env(safe-area-inset-top) + 56px)) !important;
+}
+@media (max-width: 760px) {
+  .modal-close {
+    top: max(14px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    width: 42px;
+    height: 42px;
+    font-size: 25px;
+  }
+  .stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+    padding-top: max(72px, calc(env(safe-area-inset-top) + 58px)) !important;
+  }
+}
+/* Modal clarity fixes: blur background only, never the modal itself. */
+.stage.hall-open .wait-room > :not(.hall-wall) {
+  filter: blur(3px);
+  opacity: 0.16;
+}
+.stage.hall-open .wait-room > .hall-wall {
+  filter: none !important;
+  opacity: 1 !important;
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+  padding-bottom: max(110px, calc(env(safe-area-inset-bottom) + 96px)) !important;
+}
+.stage[data-loop="wait-room"].hall-open .modal-close {
+  position: fixed !important;
+  top: max(12px, env(safe-area-inset-top)) !important;
+  right: max(12px, env(safe-area-inset-right)) !important;
+  transform: none !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+    padding-top: max(88px, calc(env(safe-area-inset-top) + 72px)) !important;
+    padding-bottom: max(120px, calc(env(safe-area-inset-bottom) + 104px)) !important;
+  }
+}
+/* Final modal override: no inherited blur, simple fixed X. */
+.stage.hall-open .wait-room > :not(.hall-wall) {
+  filter: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.stage.hall-open .wait-room,
+.stage.hall-open .hall-wall,
+.stage.hall-open .hall-wall * {
+  filter: none !important;
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall {
+  opacity: 1 !important;
+  background:
+    radial-gradient(48% 32% at 50% 8%, rgba(139,123,255,0.11), transparent 70%),
+    linear-gradient(180deg, rgba(5,5,8,0.99), rgba(10,10,15,0.99)) !important;
+}
+.stage[data-loop="wait-room"].hall-open .modal-close {
+  position: fixed !important;
+  top: 16px !important;
+  right: 16px !important;
+  left: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  z-index: 999 !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="wait-room"].hall-open .modal-close {
+    top: 16px !important;
+    right: 16px !important;
+  }
+  .stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+    padding-top: 84px !important;
+    padding-bottom: 132px !important;
+  }
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall {
+  display: block !important;
+}
+.stage[data-loop="wait-room"].hall-open .modal-close {
+  position: absolute !important;
+  top: 16px !important;
+  right: 16px !important;
+  width: 44px !important;
+  height: 44px !important;
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+  position: relative !important;
+  top: auto !important;
+  transform: none !important;
+  padding-top: 84px !important;
+  padding-bottom: 140px !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+    padding-top: 84px !important;
+    padding-bottom: 148px !important;
+  }
+}
+.stage-modal-close {
+  display: none;
+  position: fixed !important;
+  top: 16px !important;
+  right: 16px !important;
+  z-index: 1000 !important;
+}
+.stage.hall-open > .stage-modal-close {
+  display: grid !important;
+}
+.stage:not(.hall-open) > .stage-modal-close {
+  display: none !important;
+}
+@media (max-width: 760px) {
+  .stage-modal-close {
+    top: 14px !important;
+    right: 14px !important;
+  }
+}
+.stage.hall-open > .stage-modal-close {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: #f0edf7 !important;
+  background: rgba(10,10,15,0.92) !important;
+  border: 1px solid rgba(215,215,223,0.5) !important;
+}
+.stage.hall-open > .stage-modal-close::before {
+  content: "×";
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+}
+.stage.hall-open > .stage-modal-close {
+  font-size: 0 !important;
+}

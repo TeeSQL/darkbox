@@ -1,1401 +1,1241 @@
 # DarkBox Technical Specification
 
-## 1. Product Summary
+Status: finalized handoff spec for coding agents  
+Last updated: 2026-06-13  
+Repository: `TeeSQL/darkbox`  
+Primary local workflow: Docker Compose
 
-DarkBox is a sealed agent prediction-market arena built on Frontier CLOB/orderbook contracts.
+## 1. Product Thesis
 
-Participants deposit USDC, register an agent, and give that agent private instructions. During the hackathon, the agent trades inside a hidden blockchain environment. The public can only see a leaderboard showing each agent's PnL. No one can inspect the orderbook, trades, positions, market state, or chain state until the final reveal.
+DarkBox is a sealed agent prediction-market arena.
 
-At the end of the hackathon, the box opens: the hidden chain state, execution history, commitments, and agent behavior are published; markets are resolved; and winnings are settled.
+Users deposit USDC, register an agent, and give that agent private instructions. During live play, agents trade prediction markets inside a hidden execution environment backed by Frontier CLOB/orderbook contracts. The public can see only a leaderboard. The orderbook, trades, positions, prompts, agent actions, and chain state stay hidden until the reveal.
 
-The central product thesis:
+At the end, the box opens: chain history, commitments, agent actions, market state, and settlement artifacts are published so the game can be audited and replayed.
+
+Core promise:
 
 > A sealed, verifiable agent economy where prediction-market strategy is hidden during play and auditable after reveal.
 
-## 2. Design Goals
+## 2. MVP Scope
 
-### 2.1 User Goals
+### 2.1 Must Ship
 
-- Easy entry: deposit USDC without thinking about chain complexity.
-- Clear game loop: whisper instructions first, choose/receive agent identity, finalize auth/deposit, watch leaderboard.
-- Strong spectator appeal: public rankings update while the actual market remains hidden.
-- Trustworthy finale: reveal proves the hidden game was executed correctly.
-- Memorable hackathon story: agents competing silently inside a black box.
-- Atmospheric onboarding: the landing page should be a playable 3D dark room / underground labyrinth where users find terminals and whisper instructions to their agents.
+- Local-first Docker Compose stack with every runtime component containerized.
+- Hidden Reth/Geth devnet or equivalent local EVM chain.
+- Frontier-compatible prediction-market contracts deployed inside the hidden chain.
+- Standalone indexer service with internal and public API surfaces.
+- Agent runner service that reads constrained observations and submits trades.
+- Public frontend that never touches hidden RPC or privileged APIs.
+- USDC funding/registration architecture with one concrete onboarding path and a direct Base USDC fallback.
+- ENS identity/commitment integration that is meaningful, not cosmetic.
+- Leaderboard exposing only public-safe PnL/rank data.
+- Reveal bundle builder for post-game audit/replay.
+- Clear security boundaries that coding agents can enforce while building.
 
-### 2.2 Technical Goals
+### 2.2 Should Ship If Time Allows
 
-- Reuse Frontier CLOB/orderbook contracts as the trading engine.
-- Run the trading engine inside a confidential or hidden execution environment.
-- Prevent agents from leaking private chain state or their strategy during the game.
-- Keep the public API intentionally narrow.
-- Commit all relevant game inputs before play begins.
-- Publish enough data at reveal to audit execution and settlement.
-- Integrate bounty-relevant infra only where it strengthens the product.
+- One sponsor-aligned deposit adapter: Blink, Privy, Dynamic/Fireblocks, LI.FI, or Arc.
+- CVM or TEE deployment proof/attestation around the same Docker topology.
+- Replay UI that can scrub through revealed trades and leaderboard changes.
+- Per-agent sandbox containers instead of one shared agent runner.
 
-### 2.3 Non-Goals for Hackathon MVP
+### 2.3 Explicit Non-Goals
 
-- Fully decentralized confidential chain consensus.
-- Production-grade dispute system.
-- Permissionless bridge custody across many chains.
-- Perfect bot sandboxing against all possible model/provider leaks.
-- Polymarket-scale UX.
-- General-purpose prediction-market protocol beyond this arena.
+- Production-grade decentralized confidential consensus.
+- Permissionless cross-chain bridge custody.
+- Mid-game withdrawals.
+- Public access to hidden node, hidden indexer data, orderbooks, trades, positions, or agent prompts.
+- General-purpose prediction-market protocol beyond this hackathon arena.
+- Perfect LLM sandboxing against all possible provider/model leaks.
 
-## 3. Visibility Model
+## 3. Hard Invariants
 
-### 3.1 Visible During Game
+These are non-negotiable. Coding agents should treat any violation as a bug.
 
-- Public leaderboard:
-  - agent ENS/display name
-  - current PnL
+- Public frontend talks only to public APIs.
+- Public frontend never connects to hidden node RPC.
+- Hidden node RPC is private-network only.
+- Indexer is a standalone service, not a thin frontend proxy.
+- Indexer owns all derived market state: orders, fills, positions, balances, PnL, leaderboard snapshots, reveal exports.
+- Indexer has separate internal and public API surfaces.
+- Public API exposes only visible game data.
+- Agents cannot send messages outward during play.
+- Agents cannot call arbitrary tools or fetch arbitrary URLs unless explicitly allowed by runtime policy.
+- Agents receive observations only through constrained internal indexer endpoints and approved external context feeds.
+- Real USDC stays in the public escrow/onboarding layer; hidden chain uses synthetic game credit.
+- Deposits are idempotent; the same public funding event must never mint hidden credit twice.
+- Withdrawals are disabled during live play.
+- Registration and instruction commitments freeze before game start.
+- All state needed for audit must be included in the reveal bundle.
+- Local Docker Compose is the source of truth for service boundaries.
+
+## 4. Visibility Model
+
+### 4.1 Visible During Game
+
+Public:
+
+- Game metadata: title, rules, schedule, resolution policy, reveal policy.
+- Eligible hackathon projects/teams, if known.
+- Leaderboard:
+  - agent display name / ENS name
   - rank
-  - optional simple stats: starting balance, current balance, drawdown, last update time
-- User's own private dashboard:
-  - deposited amount
-  - current agent balance
-  - registration status
-  - instruction commitment
-  - optional agent health status
-- Public game metadata:
-  - main market description
-  - game start/end time
-  - resolution rules
-  - list of eligible teams/projects if known
-  - final reveal policy
-- Shared external context feed visible to all agents:
-  - hackathon project submissions list
-  - project/team metadata
-  - ETH/USDC price if WETH/ETH is included in the trading surface
-  - keep this intentionally small for MVP; sponsor/prize schedules, social data, and GitHub activity are stretch goals only.
+  - current PnL
+  - optional current balance
+  - optional drawdown
+  - last update time
+- Reveal countdown/status.
 
-### 3.2 Hidden During Game
+Private to the registered user:
+
+- Their deposit/funding status.
+- Their own registration status.
+- Their own agent identity.
+- Their instruction commitment hash.
+- Their own high-level agent health status.
+- Their own balance if the product chooses to show it.
+
+Shared external context for all agents:
+
+- Hackathon project submissions list.
+- Project/team metadata.
+- Limited market-relevant public context.
+- Optional ETH/USDC price feed if the trading surface needs it.
+
+### 4.2 Hidden During Game
 
 - Full chain state.
+- Hidden node RPC.
 - Orderbooks.
-- Trades.
+- Trades/fills.
 - Positions.
 - Open orders.
+- Market creation activity, unless intentionally surfaced as metadata only.
+- Per-market PnL breakdown.
 - Agent prompts/instructions.
 - Agent reasoning traces.
-- Market creation activity.
-- Which derivative markets exist, unless we intentionally expose market names without state.
-- Per-market PnL breakdown.
+- Agent actions before they become revealed transactions.
+- Internal indexer APIs.
+- Bridge/coordinator keys.
 
-### 3.3 Revealed After Game
+### 4.3 Revealed After Game
 
 - Hidden chain blocks or equivalent execution trace.
 - Final state root and state dump.
 - Contract addresses and deployment metadata.
-- All transactions submitted by agents.
-- Initial deposits mapped to agents.
-- Agent instruction preimages, unless users explicitly opt for hidden strategy even after game.
-- Prompt/model/runtime metadata.
+- Agent transactions.
 - Market creation history.
+- Orders/fills/positions/PnL exports.
+- Initial deposits mapped to agents.
+- Registration commitments and reveal preimages.
+- Agent instruction preimages, unless product rules allow users to keep strategies private post-game.
+- Prompt/model/runtime metadata.
 - Resolution transaction(s).
-- Settlement proof.
-- Replay UI data.
+- Settlement root/proofs.
+- Replay data.
 
-## 4. High-Level Architecture
+## 5. Repository Layout
 
-DarkBox has six major subsystems:
+```text
+apps/
+  frontend/        Public web UI. Talks only to public APIs.
 
-1. Public funding and registration layer.
-2. ENS identity and commitment layer.
-3. Hidden execution layer.
-4. Agent runtime layer.
-5. Public leaderboard/read API.
-6. Reveal and settlement layer.
+services/
+  indexer/         Hidden-chain indexer, internal APIs, public leaderboard APIs.
+  agents/          Agent prompts, wallets, model loop, action validation, tx submission.
+  bridge/          Deposits, hidden credits, settlement coordination.
+  ens/             ENS subnames and commitment/reveal record updates.
+  reveal/          Reveal export, replay bundle, settlement artifacts.
 
-### 4.1 System Flow
+infra/
+  node/            Hidden Reth/Geth chain container and chain config.
 
-1. User visits DarkBox frontend.
-2. User signs in/connects wallet.
-3. User deposits USDC using the selected onboarding/onramp flow.
-4. User registers an agent:
-   - chooses agent name
-   - writes private instructions
-   - selects model/runtime options if exposed
-   - receives or configures ENS/subname identity
-5. Registration creates public commitments:
-   - user identity commitment
-   - agent identity commitment
-   - instruction hash
-   - runtime hash
-   - funding amount
-6. Deposit is acknowledged by the coordinator.
-7. Coordinator credits the agent inside the hidden chain.
-8. Game starts.
-9. Agent runner loops:
-   - reads allowed private inputs
-   - asks model for action
-   - converts action to hidden-chain transaction
-   - submits transaction
-10. Leaderboard service computes and publishes limited PnL.
-11. At deadline, trading stops.
-12. Resolver resolves canonical and derivative markets.
-13. Reveal publisher releases full audit bundle.
-14. Settlement contract pays out or allows withdrawals.
+packages/
+  shared/          Shared TypeScript types, schemas, config helpers.
 
+docs/
+  TECH_SPEC.md                    This spec.
+  DEPOSITS_WITHDRAWALS_SPEC.md    Detailed funding/refund/settlement spec.
+```
 
-## 4A. CVM / Docker Deployment Model
+## 6. Runtime Architecture
 
-A core deployment constraint: every independent runtime component must be packaged as a Docker container so it can run inside the CVM environment with explicit networking, volumes, secrets, and attestation boundaries.
+### 6.1 Services
 
-The CVM should be treated as a sealed mini-cluster. No service should rely on host-level state except mounted encrypted volumes and explicitly injected secrets.
+#### `darkbox-node`
 
-Local Docker Compose is the source of truth for component boundaries. The goal is: if it runs locally in Compose, the same component graph can be deployed into the CVM with minimal changes.
-
-### 4A.1 Container Topology
-
-Minimum service set:
-
-1. `darkbox-node`
-   - Runs the hidden blockchain node: Reth or Geth.
-   - Owns hidden chain data directory.
-   - Exposes JSON-RPC only on the private Docker network.
-   - No public RPC.
-   - Optional internal admin RPC restricted to indexer/coordinator containers.
-
-2. `darkbox-indexer`
-   - Mandatory standalone service, not a thin RPC proxy.
-   - Reads hidden-chain RPC/event logs/blocks continuously.
-   - Maintains queryable derived state in Postgres or another indexed store.
-   - Computes balances, open orders, fills, positions, realized/unrealized PnL, market metadata, and leaderboard snapshots.
-   - Serves high-volume trading data to trusted internal trading bots without making them scan RPC.
-   - Has two API surfaces:
-     - internal API: rich/privileged indexed state for trading bots, agent runner, bridge coordinator, reveal builder.
-     - external API: strictly filtered public state: leaderboard, public game metadata, reveal status.
-   - Enforces the visible/hidden boundary at the API layer.
-
-3. `darkbox-agents`
-   - Owns agent wallets, prompts, runtime policy, and model calls.
-   - Runs the agent loop.
-   - Reads only allowed observations from `darkbox-indexer` internal constrained endpoints.
-   - Submits signed transactions to `darkbox-node`.
-   - Can be one container for all agents in MVP, or one container per agent if stronger isolation is needed.
-
-4. `darkbox-bridge`
-   - Watches public deposit chain / onboarding provider events.
-   - Credits agents inside the hidden chain.
-   - Builds withdrawal/settlement artifacts after reveal.
-   - Talks to Base/Arc/onboarding provider externally, and hidden node internally.
-
-5. `darkbox-ens`
-   - Handles ENS/subname registration and record updates.
-   - Writes pre-game commitment records and post-game reveal records.
-   - Can be separate for clean bounty/demo boundaries, or merged into bridge/coordinator for MVP if time is tight.
-
-6. `darkbox-frontend`
-   - Public web UI.
-   - Talks only to external/public API endpoints.
-   - Never connects to hidden node RPC.
-
-7. `darkbox-reveal`
-   - Builds final reveal bundle.
-   - Exports chain data, indexed events, agent logs, commitments, settlement tree, and replay data.
-   - Can be dormant until game end.
-
-Optional supporting containers:
-
-- `darkbox-db`: Postgres for indexed state and app metadata.
-- `darkbox-cache`: Redis for round scheduling/locks, if needed.
-- `darkbox-attester`: Chainlink/Phala/CVM attestation adapter.
-- `darkbox-object-store`: local MinIO for reveal bundle staging before publishing externally.
-
-### 4A.2 Network Segmentation
-
-Use separate Docker networks:
-
-- `hidden_net`
-  - `darkbox-node`
-  - `darkbox-indexer`
-  - `darkbox-agents`
-  - `darkbox-bridge`
-  - `darkbox-reveal`
-  - no public ingress
-
-- `public_net`
-  - `darkbox-frontend`
-  - external side of `darkbox-indexer`
-  - reverse proxy
-
-- `egress_net`
-  - `darkbox-bridge` for public chain/provider access
-  - `darkbox-ens` for ENS writes
-  - `darkbox-agents` only if remote model APIs are used
-
-The hidden node only binds to `hidden_net`. The frontend must never share a network with the hidden node.
-
-### 4A.2B Indexer Responsibilities
-
-The indexer is a first-class backend service. It should not be replaced by direct RPC reads. RPC is the ingestion source; the indexer is the product/query layer.
-
-Why it is required:
-
-- Frontier orderbook state will be awkward/expensive to reconstruct from raw RPC for every bot tick.
-- Trading bots need low-latency derived views: best prices, fills, own orders, inventory, market metadata, and historical snapshots.
-- PnL requires indexed fills, positions, deposits, withdrawals, fees, market resolution state, and mark/fair-value logic.
-- The public leaderboard must be generated from a controlled, audited data pipeline rather than ad hoc RPC calls.
-- Reveal/replay needs a complete indexed history of markets, orders, fills, and agent actions.
-
-Core indexed tables/views:
-
-- agents
-- deposits
-- internal_balances
-- markets
-- market_outcomes
-- orders
-- fills
-- positions
-- market_snapshots
-- pnl_snapshots
-- leaderboard_snapshots
-- agent_actions
-- settlement_claims
-- external_context_snapshots
-
-Visibility decision:
-
-- Trading agents receive the full internal orderbook/indexer view, including markets, orders, fills, positions, prices, balances, replay-relevant events, and shared external context.
-- Agent observations must be mediated by the machine/indexer. Agents do not get open internet access; they receive their own prompt/history plus the shared curated context feed.
-- Human users receive only aggregate account state: available balance, estimated deployed portfolio value, total estimated equity, leaderboard rank, and PnL.
-- Live PnL should use last-trade marking for MVP. Midpoint/fair-value marking can be added later as secondary display, but last trade is simpler and less gameable in thin markets.
-- Leaderboard snapshots should be timed rather than every block for MVP, e.g. every 10–30 seconds plus final authoritative state at reveal.
-
-Trusted internal consumers:
-
-- `darkbox-agents` for agent-specific observations.
-- internal market-making/trading bots for rich trading views.
-- `darkbox-bridge` for deposit crediting and withdrawal settlement.
-- `darkbox-reveal` for final audit bundle generation.
-
-Public consumers:
-
-- `darkbox-frontend`, but only through filtered external endpoints.
-
-### 4A.3 Internal vs External APIs
-
-`darkbox-indexer` is the main boundary service.
-
-Internal endpoints may include:
-
-- `GET /internal/agent/:id/observation`
-- `GET /internal/agent/:id/balance`
-- `POST /internal/leaderboard/snapshot`
-- `GET /internal/reveal/export`
-- `GET /internal/market/:id/private-state` only if needed by trusted services, never agents
-
-External endpoints may include only:
-
-- `GET /public/game`
-- `GET /public/leaderboard`
-- `GET /public/agent/:ensName`
-- `GET /public/external-context`
-- `GET /public/reveal/status`
-- `GET /public/reveal/bundle` after reveal
-
-`/public/external-context` is not hidden market state. It is the shared public-information feed that all agents can also consume. For MVP it should include the hackathon project submissions list and project/team metadata. If WETH/ETH is included, it should also include ETH/USDC price. Sponsor/prize schedule, social data, and GitHub activity are stretch goals.
-
-No endpoint should accidentally expose raw transaction logs, orderbook state, positions, or hidden market details before reveal.
-
-### 4A.4 Agent Isolation Choices
-
-There are two acceptable MVP modes:
-
-#### Shared Agent Runner
-
-One `darkbox-agents` container runs all agents.
-
-Pros:
-
-- Fastest to build.
-- Simple scheduling.
-- Easier secret management.
-
-Cons:
-
-- Weaker isolation between agents.
-- A runner bug can affect all agents.
-
-#### Per-Agent Sandbox
-
-Each agent runs in its own container, e.g. `darkbox-agent-<id>`.
-
-Pros:
-
-- Cleaner isolation.
-- Per-agent CPU/memory/network limits.
-- Stronger story if agents can run arbitrary-ish strategies.
-
-Cons:
-
-- More orchestration complexity.
-- Harder in a hackathon CVM unless we prebuild a lightweight supervisor.
-
-Recommended MVP: start with shared runner, but design the runner API so agents can later be split into one-container-per-agent without changing contracts.
-
-### 4A.5 Secrets and Volumes
-
-Persistent volumes:
-
-- node chain data
-- indexer DB
-- agent prompt/commitment store
-- reveal bundle staging
-
-Secrets:
-
-- hidden-chain funded coordinator key
-- per-agent hidden-chain keys, if not derived/sealed internally
-- public-chain bridge signer
-- ENS manager key
-- model/provider API keys, if remote inference is used
-- onboarding provider credentials
-
-Secrets should be injected as Docker secrets or CVM-sealed environment variables, not baked into images.
-
-### 4A.6 Attestation Boundary
-
-The attested unit should ideally cover:
-
-- container image digests
-- docker-compose or service manifest hash
-- environment policy hash
-- genesis/config hash
-- agent runtime hash
-- allowed network policy
-
-At registration time, `runtimeHash` should include the relevant container image digests and service manifest hash. At reveal, the published bundle should prove that the runtime matched the pre-game commitments.
-
-
-## 5. Public Funding and Registration Layer
-
-### 5.1 Purpose
-
-This layer is the normal user-facing entry point. It should feel simple: deposit stablecoins, name your agent, write instructions, enter the arena.
-
-### 5.2 Bounty-Aligned Options
-
-The best fit should be selected after checking docs and implementation complexity.
-
-#### Option A: Blink Deposit Flow
-
-Use Blink for one-tap stablecoin deposits.
-
-Why it fits:
-
-- Best product fit for “fund my game/agent account”.
-- Can make deposit feel like a consumer app, not a bridge.
-- Likely strongest if the bounty emphasizes onboarding, checkout, or easy stablecoin UX.
-
-DarkBox use:
-
-- User chooses deposit amount.
-- Blink handles stablecoin pull/payment UX.
-- Backend receives payment confirmation.
-- Backend binds payment to agent registration.
-- Coordinator credits hidden-chain account.
-
-Risks:
-
-- Need to confirm exact supported chains/tokens.
-- Need to confirm whether it supports Base USDC or requires another settlement route.
-
-#### Option B: Privy Universal Deposit Addresses
-
-Use Privy embedded wallet + universal deposit addresses.
-
-Why it fits:
-
-- Strong cross-chain funding story.
-- User can deposit from external wallet/exchange/chain.
-- Very natural for “fund an agent account”.
-
-DarkBox use:
-
-- Privy creates user account/wallet.
-- User gets deposit address.
-- Deposit can arrive from multiple sources.
-- Backend watches funding status.
-- On confirmation, user can register/start agent.
-
-Risks:
-
-- Privy may pull the project toward embedded-wallet UX.
-- If users are already crypto-native, embedded onboarding may be unnecessary.
-
-#### Option C: Dynamic / Fireblocks Flow
-
-Use Dynamic for wallet onboarding and Flow for any-wallet/any-chain deposits.
-
-Why it fits:
-
-- Bounty text explicitly mentions iGaming/prediction markets and agentic deposits.
-- Dynamic also supports server wallets/delegated access, useful if agent signing is external.
-
-DarkBox use:
-
-- User signs in via Dynamic.
-- User funds game from any supported wallet/exchange/chain.
-- Agent wallet or coordinator wallet receives/controls funds.
-- Server wallet can be used for agent-side signing if we choose not to run agent keys inside the CVM.
-
-Risks:
-
-- More moving parts than Blink.
-- Might overcomplicate MVP if deposit is the only reason to use it.
-
-#### Option D: LI.FI Composer Deposit Workflow
-
-Use LI.FI Composer to make registration a single composed transaction/workflow.
-
-DarkBox use:
-
-- Bridge/swap into USDC.
-- Deposit to entry contract.
-- Register agent.
-- Possibly set ENS record or submit commitment.
-
-Why it fits:
-
-- Great if we want a cross-chain “one flow” demo.
-- Good developer story: one composed entry workflow.
-
-Risks:
-
-- Less product-specific than Blink/Privy/Dynamic.
-- Needs careful integration to avoid being bounty garnish.
-
-### 5.3 Recommended MVP Path
-
-Pick one primary funding integration:
-
-- If Blink supports our target flow cleanly: use Blink.
-- Else if Privy universal deposits are fastest: use Privy.
-- Else use Dynamic if server wallets help agent signing too.
-
-Do not integrate all of them. The deposit story should be one clean path, plus maybe one fallback manual Base USDC deposit for demo reliability.
-
-### 5.4 Public Entry Contract
-
-A public contract records entry commitments and deposits.
+Purpose: hidden EVM chain.
 
 Responsibilities:
 
-- Accept or acknowledge USDC funding.
-- Register participant and agent identity.
-- Store commitment hashes.
-- Emit events for backend/coordinator.
-- Freeze registration at game start.
-- Provide withdrawal/settlement hooks after reveal.
+- Run Reth or Geth in devnet/private mode.
+- Own chain data directory.
+- Expose JSON-RPC only on the private Docker network.
+- Host Frontier/orderbook contracts and game accounting contracts.
+- Accept transactions from bridge/coordinator and agent runner.
 
-Candidate interface:
+Must not:
 
-```solidity
-function registerAgent(
-    bytes32 agentId,
-    string calldata ensName,
-    bytes32 instructionHash,
-    bytes32 runtimeHash,
-    bytes32 revealSaltHash
-) external;
+- Expose public RPC.
+- Be reachable from frontend.
+- Serve as the public query API.
 
-function depositForAgent(bytes32 agentId, uint256 amount) external;
+#### `darkbox-indexer`
 
-function freezeRegistration(bytes32 gameId) external;
+Purpose: canonical derived state service.
 
-function publishFinalRoot(bytes32 gameId, bytes32 hiddenChainRoot, bytes32 revealBundleHash) external;
+Responsibilities:
 
-function claim(bytes32 agentId, bytes calldata proof) external;
-```
+- Ingest hidden-chain blocks, events, logs, and transactions.
+- Maintain indexed tables for:
+  - agents
+  - markets
+  - orders
+  - fills
+  - positions
+  - balances
+  - deposits/credits
+  - realized PnL
+  - unrealized PnL
+  - leaderboard snapshots
+  - reveal exports
+- Expose internal APIs for agents, bridge, and reveal service.
+- Expose public APIs for frontend.
+- Enforce visibility filtering.
+- Provide reveal export material after game end.
 
-## 6. ENS Identity and Commitment Layer
+Must not:
 
-### 6.1 Product Role
+- Leak hidden data through public endpoints.
+- Require agents/frontend to scan hidden RPC directly.
 
-ENS should not be a cosmetic display name. It should be the stable public namespace binding each agent to its commitments and reveal artifacts.
+#### `darkbox-agents`
 
-DarkBox ENS identity answers:
+Purpose: autonomous trading runtime.
 
-- Who is this agent?
-- What did it commit to before the game?
-- Where is the reveal/audit bundle after the game?
-- Is this the same agent across leaderboard, funding, settlement, and replay?
+Responsibilities:
 
-### 6.2 ENS Naming Model
+- Load registered agents, wallets, instructions, runtime config, and policy.
+- Query constrained observations from internal indexer endpoints.
+- Query approved shared external context feeds.
+- Generate candidate actions through model/provider calls.
+- Validate actions against schemas and game rules.
+- Sign and submit hidden-chain transactions.
+- Store enough logs for reveal/audit without exposing them during play.
 
-Possible namespace:
+Must not:
 
-- `darkbox.eth` parent name.
-- Agent subnames:
-  - `alice.darkbox.eth`
-  - `ocean.darkbox.eth`
-  - `agent17.darkbox.eth`
+- Send outward chat/messages during live play.
+- Expose prompts/reasoning to public APIs.
+- Fetch arbitrary unapproved URLs by default.
+- Bypass the indexer visibility policy.
 
-If the project cannot control `darkbox.eth`, use a hackathon-owned ENS name or testnet-equivalent namespace.
+#### `darkbox-bridge`
 
-The ENS/display name should be chosen or assigned when the user starts playing, immediately after the initial whisper flow and before/alongside deposit finalization. It should appear in the leaderboard from the beginning so the agent has a stable public identity throughout onboarding, funding, gameplay, and reveal.
+Purpose: funding coordinator, not a general bridge.
 
-### 6.3 ENS Records
+Responsibilities:
 
-Primary ENS use case: encrypted agent instructions and commitment/reveal pointers.
+- Watch public escrow/provider funding events.
+- Normalize funding events into idempotency keys.
+- Wait for required confirmations.
+- Credit synthetic balances inside hidden chain.
+- Track credit status and recovery state.
+- Support pre-freeze refunds and post-reveal settlement claim artifacts.
 
-During the game, the ENS record should point to a manifest URI/hash. The manifest should include agent identity, encrypted current-instructions blob URI/hash, instruction commitment hash, public key or encryption scheme, game/rules version, and reveal policy.
+Detailed behavior lives in `docs/DEPOSITS_WITHDRAWALS_SPEC.md`.
 
-Each mid-game instruction update creates a new encrypted blob and commitment version. Public observers can verify that instructions were committed, but cannot read plaintext before reveal. The sealed runtime/CVM can decrypt or access plaintext through the configured key path.
+Must not:
 
-After reveal, ENS can point to the final reveal bundle. Plaintext instructions may be published fully or selectively depending on the game rules and user consent.
+- Allow mid-game withdrawals.
+- Credit hidden balances from mempool-only events.
+- Double-credit duplicate deposit/provider events.
 
-Pre-game records:
+#### `darkbox-ens`
 
-- `addr`: public owner or agent registration contract.
-- `text:darkbox.agentId`: canonical `bytes32` agent id.
-- `text:darkbox.gameId`: game id.
-- `text:darkbox.instructionHash`: hash of private instructions.
-- `text:darkbox.runtimeHash`: hash of agent runtime/container/model config.
-- `text:darkbox.depositTx`: deposit transaction reference.
-- `text:darkbox.entryCommitment`: aggregate commitment hash.
+Purpose: identity and commitment namespace.
 
-During-game records:
+Responsibilities:
 
-- Mostly unchanged.
-- Optional `text:darkbox.status`: active/eliminated/frozen.
-- `text:darkbox.instructionsEncrypted`: URI/hash of the latest encrypted instruction blob.
-- `text:darkbox.instructionVersion`: monotonic instruction update version.
-- Do not publish plaintext instructions or private market state.
+- Register or update agent ENS/subnames.
+- Write pre-game commitment records.
+- Write post-game reveal records.
+- Link agent identity to commitments and reveal artifacts.
 
-Post-reveal records:
+ENS should be used as part of the trust/reveal model, not as branding decoration.
 
-- `text:darkbox.revealBundle`: URI to reveal bundle.
-- `text:darkbox.finalPnl`: final PnL or pointer to final settlement proof.
-- `text:darkbox.replay`: URI to replay UI.
-- `text:darkbox.finalStateRoot`: final hidden-chain state root.
+#### `darkbox-frontend`
 
-### 6.4 Commitment Scheme
+Purpose: public product surface.
 
-Each agent has an entry commitment:
+Responsibilities:
+
+- Landing/onboarding experience.
+- Registration and instruction entry.
+- Funding flow UI.
+- Leaderboard.
+- User status dashboard.
+- Reveal/replay UI after game end.
 
-```text
-entryCommitment = keccak256(
-  gameId,
-  ownerAddress,
-  ensName,
-  depositAmount,
-  instructionHash,
-  runtimeHash,
-  modelConfigHash,
-  salt
-)
-```
+Must not:
 
-Instruction hash:
+- Call hidden node RPC.
+- Call internal indexer endpoints.
+- Embed private API URLs or privileged tokens.
+
+#### `darkbox-reveal`
+
+Purpose: final audit package builder.
+
+Responsibilities:
 
-```text
-instructionHash = keccak256(canonicalInstructionJson)
-```
+- Export hidden chain data.
+- Export indexed events and derived state.
+- Export commitments and preimages.
+- Export agent runtime logs according to reveal policy.
+- Build settlement root/proofs.
+- Build replay data.
+- Stage/publish final bundle.
 
-Runtime hash:
-
-```text
-runtimeHash = keccak256(containerImageDigest, runnerVersion, modelIdentifier, policyConfig)
-```
-
-Reveal bundle hash:
-
-```text
-revealBundleHash = keccak256(all_blocks_or_trace, state_dump, instructions, runtime_manifest, settlement_report)
-```
-
-### 6.5 Why ENS Improves the Product
-
-ENS creates a user-facing, verifiable continuity layer:
-
-- The leaderboard is readable.
-- Agent commitments are discoverable without trusting our UI.
-- The reveal can be independently tied back to the pre-game identity.
-- It gives agents a durable name and reputation surface beyond the hackathon.
-
-This is a much better ENS story than “we resolved a name to an address”.
-
-## 7. Hidden Execution Layer
-
-### 7.1 Purpose
-
-The hidden execution layer runs the actual prediction market game. It must preserve game secrecy during play while producing an auditable record afterward.
-
-### 7.2 Execution Options
-
-#### Option A: CVM running Reth or Geth
-
-Use a confidential VM to run a private Ethereum node.
-
-Pros:
-
-- Familiar EVM stack.
-- Frontier contracts run with minimal changes.
-- Strong story: full blockchain inside a sealed box.
-- Easier replay if we preserve blocks/state.
-
-Cons:
-
-- Need credible attestation story.
-- Need to control RPC access tightly.
-- Hidden chain is centralized unless we build more.
-
-#### Option B: Phala TEE Runtime
-
-Use Phala if Chainlink Confidential AI is insufficient or if we need stronger confidential compute primitives quickly.
-
-Pros:
-
-- Purpose-built confidential compute / agent runtime story.
-- Better if AI execution must be confidential and attestable.
-
-Cons:
-
-- More unfamiliar moving parts.
-- Frontier chain still needs either embedded EVM or external hidden node.
-
-#### Option C: Simple Private Devnet for MVP
-
-Run a locked-down Reth/Geth node without full confidential guarantees, but commit to logs/state and present as a prototype.
-
-Pros:
-
-- Fastest.
-- Demo reliable.
-
-Cons:
-
-- Weaker security story.
-- Bounty/judge skepticism if “hidden” just means “we did not expose RPC”.
-
-### 7.3 Recommended MVP Path
-
-Use a sealed Reth/Geth devnet as the core, then add one attestation layer:
-
-- If Chainlink Confidential AI Attester can attest model inference or confidential processing meaningfully, integrate it around agent decisions.
-- If not, use Phala or another TEE attestation for the agent runner / chain coordinator.
-
-For the hackathon, it is acceptable if the hidden chain is operator-run, as long as:
-
-- inputs are committed before play,
-- outputs are revealed,
-- replay verifies the published result,
-- the demo clearly distinguishes MVP trust assumptions from future decentralization.
-
-### 7.4 Hidden Chain Setup
-
-- Client: Reth preferred if familiar/performant; Geth acceptable for simplicity.
-- Chain ID: custom DarkBox chain id.
-- Native gas: fake/dev ETH or gasless relayer.
-- Core token: internal wrapped USDC mirror.
-- Contracts:
-  - Frontier CLOB book/factory/router/lens.
-  - Prediction market factory.
-  - Agent account registry.
-  - Internal settlement accounting.
-  - Resolver.
-
-### 7.4B Asset Model
-
-Canonical accounting unit: USDC.
-
-MVP rules:
-
-- Base USDC is the required deposit/settlement asset.
-- Minimum deposit: $10.
-- PnL leaderboard is normalized to USDC.
-- WETH/ETH support is a stretch goal trading asset. It creates more market surface and may help the Uniswap/bounty story, but it must not block MVP.
-- If users deposit ETH, mirror it internally as WETH.
-- If WETH/ETH is included, add ETH/USDC price to the shared external context feed.
-- Multi-asset support must not block the MVP: USDC-only fallback must always work.
-
-### 7.5 State Ingress
-
-Public deposits are mirrored into the hidden chain by the coordinator.
-
-Ingress event:
-
-```text
-DepositConfirmed {
-  gameId,
-  agentId,
-  amount,
-  sourceChain,
-  sourceTx,
-  entryCommitment
-}
-```
-
-Coordinator action:
-
-- Mints/credits internal USDC to agent account on hidden chain.
-- Records source deposit reference.
-- Emits hidden-chain `AgentFunded` event.
-
-### 7.6 State Egress
-
-During game, egress is limited to leaderboard values.
-
-Allowed public outputs:
-
-- agent id/name
-- total current equity
-- PnL
-- rank
-- timestamp/root reference
-
-Forbidden public outputs:
-
-- per-market balances
-- order/trade events
-- hidden market list if derivatives are meant to be secret
+### 6.2 Supporting Services
+
+- `darkbox-db`: Postgres for indexed state and metadata.
+- `darkbox-cache`: optional Redis for locks/scheduling.
+- `darkbox-attester`: optional Chainlink/Phala/CVM attestation adapter.
+- `darkbox-object-store`: optional MinIO or equivalent for reveal bundle staging.
+
+## 7. Docker and Network Model
+
+Docker Compose is authoritative for service boundaries.
+
+Required networks:
+
+- `hidden_net`
+  - internal-only
+  - includes node, indexer, agents, bridge, reveal, db
+  - carries hidden RPC and privileged APIs
+
+- `public_net`
+  - includes frontend and public side of indexer
+  - only public-safe traffic
+
+- `egress_net`
+  - for services that need external chain/provider/model access
+  - bridge, ens, agents if model calls happen directly, reveal if publishing externally
+
+Recommended rule:
+
+- Prefer one service per container.
+- Avoid host-level dependencies.
+- Use mounted volumes only for chain data, DB data, and reveal artifacts.
+- Inject secrets through environment/secret files; never bake them into images.
+- Keep local Compose and CVM Compose as close as possible.
+
+## 8. Data Model
+
+Implementation can evolve, but services should converge on these conceptual entities.
+
+### 8.1 Game
+
+Fields:
+
+- `gameId`
+- `status`: `draft | registration_open | frozen | live | halted | revealing | resolved | cancelled`
+- `title`
+- `description`
+- `startsAt`
+- `endsAt`
+- `registrationFreezeAt`
+- `resolutionRules`
+- `revealPolicy`
+- `settlementChainId`
+- `escrowAddress`
+- `hiddenChainId`
+
+### 8.2 Agent
+
+Fields:
+
+- `agentId`
+- `gameId`
+- `ownerAddress`
+- `ensName`
+- `displayName`
+- `walletAddressHidden`
+- `instructionHash`
+- `runtimeHash`
+- `revealSaltHash`
+- `depositAmount`
+- `status`: `draft | awaiting_funds | funded | credited_hidden | active | halted | finalized | claimed | refunded`
+- `createdAt`
+- `updatedAt`
+
+### 8.3 Market
+
+Fields:
+
+- `marketId`
+- `creatorAgentId`
+- `question`
+- `description`
+- `outcomes`
+- `collateralAsset`
+- `createdAt`
+- `resolveBy`
+- `status`: `open | paused | resolved | voided`
+- `resolutionSource`
+- `resolutionOutcome`
+
+MVP should start with binary YES/NO markets.
+
+### 8.4 Order
+
+Fields:
+
+- `orderId`
+- `marketId`
+- `agentId`
+- `side`: `buy | sell`
+- `outcome`
+- `price`
+- `size`
+- `remainingSize`
+- `status`: `open | partially_filled | filled | cancelled | expired`
+- `txHash`
+- `createdAt`
+
+### 8.5 Fill
+
+Fields:
+
+- `fillId`
+- `marketId`
+- `makerOrderId`
+- `takerOrderId`
+- `makerAgentId`
+- `takerAgentId`
+- `outcome`
+- `price`
+- `size`
+- `txHash`
+- `blockNumber`
+- `timestamp`
+
+### 8.6 Position
+
+Fields:
+
+- `agentId`
+- `marketId`
+- `outcome`
+- `quantity`
+- `avgEntryPrice`
+- `realizedPnl`
+- `unrealizedPnl`
+- `markPrice`
+- `updatedAt`
+
+### 8.7 LeaderboardSnapshot
+
+Fields:
+
+- `gameId`
+- `rank`
+- `agentId`
+- `displayName`
+- `ensName`
+- `startingBalance`
+- `currentBalance`
+- `pnl`
+- `drawdown`
+- `updatedAt`
+
+Public API may expose this entity only after applying visibility filters.
+
+## 9. API Contracts
+
+Use `packages/shared` for schemas/types. Prefer Zod or another runtime validator for all request/response boundaries.
+
+### 9.1 Public Indexer API
+
+Base path: `/public`
+
+Allowed endpoints:
+
+- `GET /public/health`
+- `GET /public/game`
+- `GET /public/leaderboard`
+- `GET /public/agents/:agentId/status`
+- `GET /public/reveal/status`
+- `GET /public/reveal/bundle` after reveal only
+
+Forbidden on public API:
+
+- orderbook depth
 - open orders
-- counterparties
-- agent action logs
-
-## 8. Frontier Prediction Market Contracts
-
-### 8.1 Core Market Model
-
-The initial market predicts hackathon winner.
-
-For each candidate/project/team:
-
-- YES token/book.
-- Optional NO token/book or synthetic complement logic.
-- Prices represent probability or payout ratio.
-- Collateral: USDC.
-
-MVP can support:
-
-- Main winner market.
-- Top-N market if simple.
-- Permissionless derivative market creation.
-
-### 8.2 Market Factory
-
-Agents can create derivative markets in the same hidden game universe as the canonical market.
-
-Derivative topology:
-
-- One CVM / hidden chain for the whole game.
-- One canonical main market: hackathon winner.
-- Derivatives are connected markets inside the same hidden chain/orderbook, not separate CVMs.
-- They share the same information boundary: hidden trading state, public leaderboard only.
-- Derivatives may reference the main market, project/team metadata, or other objectively resolvable hackathon facts.
-
-Market examples:
-
-- “Will Team X place top 3?”
-- “Will an AI agent project win?”
-- “Will a DeFi project win?”
-- “Will the winner use confidential compute?”
-- “Will the final winner have more than N GitHub commits?”
-
-Factory responsibilities:
-
-- Create market metadata.
-- Create associated Frontier books.
-- Define resolver type.
-- Set collateral rules.
-- Charge market creation fee if needed.
-- Store market creator.
-
-### 8.2B Open YES/NO Market Creation
-
-Open market creation should use a collateral-backed YES/NO split/merge primitive.
-
-Flow:
-
-- Creator deposits USDC collateral.
-- Market contract mints paired outcome claims: YES and NO.
-- One YES plus one NO can merge back into 1 USDC before resolution.
-- After resolution, winning outcome tokens redeem 1:1 for USDC; losing outcome tokens redeem 0.
-- A creator or trader expresses a view by keeping one side and selling the other into the CLOB.
-
-Frontier integration:
-
-- `createMarket(question, resolver, closeTime, metadataURI)` creates a binary market.
-- `split(amount)` mints YES + NO backed by USDC.
-- `merge(amount)` burns YES + NO and returns USDC.
-- Route YES/USDC and NO/USDC through Frontier books or an equivalent paired-book wrapper.
-- Resolution writes the winning outcome and unlocks redemption.
-
-### 8.3 Market Creation Controls
-
-To avoid spam or unresolvable junk:
-
-- Require creation fee or creator bond.
-- Require human-readable resolution criteria.
-- Require resolver, expiry, source of truth, and close time.
-- Limit max markets per agent.
-- Optional allowlist for derivative market types.
-- Use resolver templates:
-  - winner equals X
-  - top N contains X
-  - boolean oracle result
-  - manual judge result
-- Markets should be solvable **by** the end of the game, not necessarily only at the end. Early-resolvable markets are allowed and encouraged.
-- Add an admin/model review gate before or shortly after market creation to catch ambiguous, duplicate, spammy, or unresolvable markets.
-
-Nullification mechanism:
-
-- If invalid before trading: nullify and refund creator collateral.
-- If invalid after trading starts: freeze the book, cancel open orders, unwind/redeem paired YES+NO collateral pro-rata, and record nullification in the replay.
-- Nullification should be rare, explicit, and visible in the final reveal.
-
-### 8.4 Resolution
-
-Canonical market resolved manually based on hackathon result.
-
-Derivative markets can resolve via:
-
-- dependency on canonical winner market,
-- manual resolver,
-- post-reveal adjudication,
-- Chainlink/attested external data if available.
-
-MVP should keep derivative markets simple enough to resolve by final reveal, or earlier when objective data is already available.
-
-## 9. Agent Runtime Layer
-
-### 9.1 Agent Capabilities
-
-Agents can:
-
-- Read the full internal indexer/orderbook view provided by the machine: markets, orders, fills, positions, prices, balances, replay-relevant events, and curated shared context.
-- Read their own private instructions and instruction history.
-- Submit trading transactions.
-- Create derivative markets through guarded templates.
-- Cancel/replace their own orders if Frontier supports it.
-
-Agents cannot:
-
-- Query arbitrary RPC or raw host services outside the approved indexer/API boundary.
-- Access public internet directly.
-- See any data source not provided uniformly by the machine/context feed.
-- Send messages to users or public chat.
-- Exfiltrate hidden state.
-- Create unbounded/unresolvable markets outside the allowed templates.
-
-### 9.2 Agent Observation API
-
-Each agent step receives a constrained observation object:
-
-```json
-{
-  "gameId": "...",
-  "agentId": "...",
-  "timeRemainingSeconds": 1234,
-  "ownBalance": "100.00",
-  "ownPnL": "5.25",
-  "publicLeaderboard": [
-    { "agent": "alice.darkbox.eth", "pnl": "5.25", "rank": 1 },
-    { "agent": "bob.darkbox.eth", "pnl": "2.10", "rank": 2 }
-  ],
-  "publicGameInfo": {
-    "market": "Who will win ETHGlobal NY 2026?",
-    "resolutionTime": "..."
-  }
-}
-```
-
-Agents do not access raw hidden-chain RPC directly. They receive rich trading state through the internal indexer API so the game can log, constrain, and replay exactly what the machine made available.
-
-### 9.3 Agent Action Schema
-
-Agents return structured actions, not freeform text.
-
-Examples:
-
-```json
-{
-  "action": "place_order",
-  "marketId": "winner:team-x",
-  "side": "YES",
-  "price": "0.42",
-  "size": "10.00"
-}
-```
-
-```json
-{
-  "action": "create_market",
-  "question": "Will an AI agent project win?",
-  "resolverType": "manual_boolean",
-  "initialLiquidity": "5.00"
-}
-```
-
-```json
-{
-  "action": "hold"
-}
-```
-
-Runner validates actions before transaction creation.
-
-### 9.4 Agent Transaction Signing
-
-Options:
-
-- Agent private keys generated and sealed inside CVM/TEE.
-- Coordinator signs on behalf of agent after validating action.
-- Dynamic/Privy server wallets sign agent transactions if used for bounty/infra.
-
-Recommended MVP:
-
-- Hidden-chain keys are generated by coordinator per agent.
-- Keys never leave hidden runtime.
-- Public deposit owner controls settlement claim on public chain, not hidden trading key.
-
-If using Dynamic/Privy agent wallets, use them for public/onboarding or settlement flows, not necessarily every hidden-chain trade.
-
-### 9.5 Agent Scheduling
-
-Loop types:
-
-- Time-based: every N seconds/minutes.
-- Event-based: after leaderboard update.
-- Budget-based: each agent gets max number of turns.
-
-Recommended MVP:
-
-- Fixed rounds.
-- Each round gives every active agent one opportunity to act.
-- Randomize or rotate order to reduce ordering advantage.
-- Publish round count but not actions.
-
-### 9.6 Preventing Agent Output Leakage
-
-- Agents produce only JSON actions.
-- Runner discards natural-language reasoning.
-- No external network by default.
-- No public messages.
-- Logs stay sealed until reveal.
-- If model provider requires remote API, treat provider as trusted for MVP or use local model/TEE provider if possible.
-
-## 9B. 3D Landing Page / Terminal Game
-
-The public landing page should be a playable Three.js experience rather than a conventional SaaS landing page.
-
-Core loop:
-
-1. User enters a dark room / underground labyrinth.
-2. User can move a character through the space.
-3. Other players may appear as silhouettes, distant figures, or proximity/audio presences, but without exposing their portfolios, orders, or strategies.
-4. User finds an open terminal.
-5. User whispers instructions to their agent before hard auth/payment finalization, so the experience hooks them emotionally first.
-6. After the whisper, the user chooses or receives an agent ENS/display name and screenshot-ready agent card.
-7. User finalizes auth/deposit using wallet connection, with name+password as an optional hackathon-friendly fallback if needed.
-8. The whisper becomes the committed/encrypted instruction bundle used by the agent runtime.
-9. User exits back to the spectator view / leaderboard while the agent acts inside the hidden box.
-
-Design metaphor:
-
-- The 3D world is the public metaphor for hidden execution: people can see/hint at each other, but cannot inspect the sealed market state.
-- "Dark underground labyrinth" is more atmospheric; "landscape of boxes" is clearer. Preferred hybrid: an underground maze of sealed boxes/rooms where opened/revealed boxes visibly change after the game ends.
-- Terminals are the bridge from human intent to hidden agent execution.
-
-Constraints:
-
-- The 3D layer is onboarding, identity, atmosphere, and instruction entry.
-- It should not become the full manual trading UI.
-- Complex trading remains agent-driven and terminal-mediated.
-- The frontend must never talk directly to the hidden node or privileged indexer API.
-
-## 10. Confidential AI / Attestation Layer
-
-### 10.1 Desired Guarantees
-
-We want to prove, or at least credibly attest, that:
-
-- Agents ran inside the declared environment.
-- Agents only received allowed inputs.
-- Agent instructions match pre-game commitments.
-- Agent outputs were actions, not public messages.
-- The final leaderboard came from the hidden-chain state.
-
-### 10.2 Chainlink Confidential AI Path
-
-Use Chainlink Confidential AI Attester if it provides usable attestations for private AI inference or confidential processing.
-
-Possible DarkBox uses:
-
-- Attest each agent decision batch.
-- Attest final replay summary.
-- Attest that the resolver used a particular final result source.
-- Attest that an inference happened over committed instructions and allowed observations.
-
-Open checks:
-
-- Does it produce verifiable attestations or just API responses?
-- Can we pass custom private inputs?
-- Can attestations be consumed onchain or stored as reveal artifacts?
-- Does it support the models we need?
-- Is latency/cost acceptable for repeated agent rounds?
-
-### 10.3 Phala Fallback
-
-If Chainlink is not sufficiently attested or practical, use Phala for confidential agent execution.
-
-Possible DarkBox uses:
-
-- Run agent runner in Phala TEE.
-- Store instructions inside TEE.
-- Query hidden chain from TEE.
-- Emit signed/attested leaderboard values.
-- Publish TEE quote at reveal.
-
-### 10.4 Hackathon Practical Recommendation
-
-Use one of these patterns:
-
-- Stronger but riskier: Chainlink Confidential AI for actual agent decisions.
-- Safer MVP: local/hosted agent runner plus final Chainlink/Phala attestation around batch/reveal.
-- Fastest demo: private runner with committed logs, plus clear future attestation plan.
-
-## 11. Leaderboard Service
-
-### 11.1 Purpose
-
-The leaderboard is the only public view into the hidden game.
-
-It should create drama without revealing strategy.
-
-### 11.2 Data Source
-
-The leaderboard service receives a narrow feed from the hidden execution layer.
-
-Feed format:
-
-```json
-{
-  "gameId": "...",
-  "round": 12,
-  "stateRoot": "0x...",
-  "entries": [
-    {
-      "agentId": "0x...",
-      "ensName": "alice.darkbox.eth",
-      "startingBalance": "100.00",
-      "currentEquity": "112.45",
-      "pnl": "12.45"
-    }
-  ],
-  "attestation": "optional"
-}
-```
-
-### 11.3 Public API
+- fills
+- positions
+- per-market PnL
+- hidden chain tx stream before reveal
+- prompts/instructions
+- internal agent logs
+- private market list if hidden-market mode is enabled
+
+### 9.2 Internal Indexer API
+
+Base path: `/internal`
+
+Allowed consumers: agents, bridge, reveal service, trusted operator tooling.
 
 Endpoints:
 
-- `GET /api/game`
-  - public game metadata
-- `GET /api/leaderboard`
-  - current PnL rankings
-- `GET /api/agent/:name`
-  - public agent identity and commitment metadata
-- `GET /api/reveal/status`
-  - reveal countdown/status
-- `GET /api/reveal/bundle`
-  - available only after reveal
+- `GET /internal/health`
+- `GET /internal/game`
+- `GET /internal/agents`
+- `GET /internal/agents/:agentId/state`
+- `GET /internal/agents/:agentId/observations`
+- `GET /internal/markets`
+- `GET /internal/markets/:marketId`
+- `GET /internal/markets/:marketId/orderbook`
+- `GET /internal/agents/:agentId/orders`
+- `GET /internal/agents/:agentId/fills`
+- `GET /internal/agents/:agentId/positions`
+- `GET /internal/leaderboard/raw`
+- `GET /internal/reveal/export`
 
-### 11.4 UI
+Internal endpoints must still enforce agent-scoped access where possible. An agent should receive only the observations its policy allows.
 
-Pages:
+### 9.3 Bridge API
 
-- Landing / explainer.
-- Register agent.
-- Deposit/funding.
-- Write instructions.
-- Leaderboard.
-- Agent public profile.
-- Reveal/replay.
+Base path: `/bridge`
 
-Leaderboard UX:
+Public-safe endpoints:
 
-- Big ranked list.
-- PnL movement animations.
-- “Box sealed” visual language.
-- Agent names via ENS.
-- Countdown to reveal.
+- `POST /bridge/funding-intents`
+- `GET /bridge/funding-intents/:id`
+- `GET /bridge/agents/:agentId/funding-status`
+- `POST /bridge/refunds` before freeze only
+- `GET /bridge/claims/:agentId` after settlement only
 
-## 12. Reveal and Replay Layer
+Internal endpoints:
 
-### 12.1 Reveal Bundle
+- `POST /bridge/admin/reconcile-deposits`
+- `POST /bridge/admin/credit-hidden`
+- `POST /bridge/admin/build-settlement`
 
-At game end, publish a bundle containing:
+### 9.4 Agent Action Schema
 
-- game manifest
-- contract deployment manifest
-- public entry events
-- hidden chain genesis
-- hidden chain blocks or transaction trace
-- hidden chain final state
-- all agent instruction preimages or encrypted/opt-in subset
-- runtime manifests
-- model/provider configs
-- market metadata
-- resolution data
-- final settlement report
-- checksums
+Agents should output structured actions only. Free-form text is allowed for internal reasoning logs but must not drive execution directly.
 
-### 12.2 Storage
+Initial action union:
 
-Potential storage:
+```json
+{
+  "type": "place_order",
+  "marketId": "string",
+  "side": "buy | sell",
+  "outcome": "YES | NO",
+  "price": "decimal-string",
+  "size": "decimal-string",
+  "timeInForce": "GTC | IOC | FOK"
+}
+```
 
-- Walrus, IPFS, or ordinary hosted object storage for MVP.
-- ENS record points to the final bundle URI/hash.
-- Public entry contract stores reveal bundle hash.
+```json
+{
+  "type": "cancel_order",
+  "orderId": "string"
+}
+```
 
-Walrus could be considered if we want a Sui bounty, but do not force it unless implementation is easy.
+```json
+{
+  "type": "create_market",
+  "question": "string",
+  "description": "string",
+  "outcomes": ["YES", "NO"],
+  "resolveBy": "iso-date",
+  "resolutionSource": "string"
+}
+```
 
-### 12.3 Replay UI
+```json
+{
+  "type": "hold",
+  "reason": "string"
+}
+```
 
-Post-game replay should show:
+Validation rules:
 
+- Reject unknown action types.
+- Reject malformed decimals.
+- Reject prices outside market bounds.
+- Reject size above available balance/risk limit.
+- Reject market creation after the allowed window.
+- Reject actions that require unavailable hidden state.
+- Log rejected actions for reveal/audit.
+
+## 10. Funding, Registration, and Settlement
+
+The funding source of truth is a public USDC escrow/onboarding flow. The hidden chain receives synthetic credits.
+
+Use `docs/DEPOSITS_WITHDRAWALS_SPEC.md` as the detailed source for:
+
+- escrow state machine
+- deposit confirmation policy
+- idempotency keys
+- refund rules
+- settlement root
+- claim models
+- failure recovery
+
+MVP decisions:
+
+- Canonical asset: USDC.
+- Preferred escrow chain: Base unless sponsor requirements dictate otherwise.
+- Direct Base USDC deposit is the reliability fallback.
+- Pick one sponsor-aligned adapter; do not implement many half-working adapters.
+- Hidden credits mint 1:1 against confirmed deposits.
+- No withdrawals during live play.
+- Late deposits after freeze are refundable, not credited.
+
+## 11. ENS Identity and Commitments
+
+ENS should make the reveal/audit model clearer.
+
+Recommended naming:
+
+```text
+<agent>.darkbox.eth
+```
+
+or, if unavailable for hackathon timing:
+
+```text
+<agent>.<controlled-parent>.eth
+```
+
+Pre-game ENS text records can include:
+
+- `darkbox:gameId`
+- `darkbox:agentId`
+- `darkbox:instructionHash`
+- `darkbox:runtimeHash`
+- `darkbox:depositCommitment`
+- `darkbox:revealSaltHash`
+- `darkbox:rulesUri`
+
+Post-reveal records can include:
+
+- `darkbox:revealBundleUri`
+- `darkbox:finalStateRoot`
+- `darkbox:settlementRoot`
+- `darkbox:replayUri`
+
+Commitment hash:
+
+```text
+instructionHash = keccak256(gameId, agentId, ownerAddress, instructions, salt)
+runtimeHash = keccak256(model, toolsPolicy, systemPromptHash, actionSchemaVersion)
+```
+
+Do not store raw instructions in ENS before reveal.
+
+## 12. Hidden Chain and Frontier Markets
+
+### 12.1 Hidden Chain
+
+Recommended MVP path:
+
+- Start with a private local EVM devnet in Docker.
+- Use Reth or Geth, whichever gets stable faster.
+- Deploy Frontier CLOB/orderbook contracts plus any game accounting/factory contracts.
+- Keep RPC reachable only on `hidden_net`.
+- Later deploy the same Docker graph into CVM/TEE if available.
+
+### 12.2 Asset Model
+
+- Real USDC remains in public escrow.
+- Hidden chain uses synthetic game credit.
+- Synthetic credit exists only for gameplay accounting.
+- Credit minting is restricted to bridge/coordinator key.
+- Every credit references a public deposit event id.
+
+### 12.3 Market Model
+
+MVP market shape:
+
+- Binary YES/NO prediction markets.
+- Collateral: synthetic USDC credit.
+- Initial canonical market: “Which project/team wins the hackathon?”
+- Agents may create derivative markets if allowed by rules.
+
+Market creation controls:
+
+- fee or collateral requirement
+- max markets per agent
+- max question length
+- no duplicate exact questions
+- no markets resolving after game deadline unless explicitly allowed
+- resolver/admin can void abusive markets
+
+Resolution:
+
+- Canonical market resolved by declared hackathon winner.
+- Derivative markets require explicit resolution source at creation.
+- Ambiguous/invalid derivative markets can be voided.
+
+## 13. Agent Runtime
+
+### 13.1 Agent Loop
+
+For each active agent:
+
+1. Fetch allowed observations.
+2. Fetch approved shared context.
+3. Build prompt from system policy, user instructions, and observations.
+4. Ask model for a structured action.
+5. Validate action.
+6. Convert action to contract call.
+7. Sign using hidden-chain agent wallet.
+8. Submit to hidden node.
+9. Record action, validation result, tx hash/error, and timing.
+10. Sleep until next scheduling tick.
+
+### 13.2 Observation Policy
+
+Allowed observations can include:
+
+- agent balance
+- agent open orders
+- agent positions
+- eligible markets visible to the agent under game rules
+- orderbook snapshots if game rules allow agents to see them
+- recent own fills
+- shared public context feed
+
+Disallowed observations:
+
+- other agents' private prompts
+- other agents' hidden wallets
+- privileged operator state
+- public escrow secrets
+- bridge/coordinator keys
+- arbitrary hidden chain dumps unless intentionally allowed
+
+Important product decision:
+
+- It is acceptable for agents to see more hidden market data than humans/public, because agents are the players inside the box.
+- It is not acceptable for agents to communicate that data outward during live play.
+
+### 13.3 Scheduling
+
+MVP options:
+
+- fixed interval per agent, e.g. every 30-120 seconds
+- round-robin scheduler
+- random jitter to prevent deterministic first-mover advantage
+- per-agent max actions per hour
+
+Use deterministic logs so replay can explain when each agent got a chance to act.
+
+### 13.4 Runtime Leakage Controls
+
+- No outward messaging tools during live play.
+- No arbitrary browser/web-fetch unless explicitly part of shared context fetcher.
+- Model output must be parsed as action schema.
+- Free-form model text is never published during play.
+- Store logs in private volume/database until reveal.
+- Put provider/API keys only in service secrets.
+- Consider one container/process per agent for stronger isolation if time allows.
+
+## 14. Leaderboard
+
+Purpose: spectator surface without revealing market internals.
+
+Inputs:
+
+- starting hidden credit
+- current mark-to-market portfolio value
+- realized PnL
+- unrealized PnL
+- fees, if any
+
+Public output:
+
+- rank
+- agent display/ENS name
+- current PnL
+- current balance or score
+- drawdown if desired
+- last update timestamp
+
+Do not expose:
+
+- positions
+- market inventory
+- order/fill history
+- per-market PnL
+- market-specific exposure
+
+Mark price policy must be deterministic and revealed later. Options:
+
+- last traded price
+- mid-price if both sides exist
+- conservative mark if thin book
+- final settlement value after resolution
+
+## 15. Reveal and Replay
+
+### 15.1 Reveal Bundle Contents
+
+The reveal service should produce a versioned bundle containing:
+
+```text
+manifest.json
+chain/
+  genesis.json
+  blocks.ndjson or execution_trace.ndjson
+  final_state_root.txt
+contracts/
+  deployments.json
+  abis/
+indexer/
+  markets.ndjson
+  orders.ndjson
+  fills.ndjson
+  positions.ndjson
+  balances.ndjson
+  leaderboard_snapshots.ndjson
+agents/
+  agents.json
+  runtime_hashes.json
+  actions.ndjson
+  validation_errors.ndjson
+commitments/
+  registrations.ndjson
+  instruction_preimages.ndjson (if reveal policy allows)
+  ens_records.ndjson
+settlement/
+  settlement_root.json
+  claims.ndjson
+  proofs/
+replay/
+  replay_events.ndjson
+```
+
+### 15.2 Manifest
+
+`manifest.json` should include:
+
+- spec version
+- game id
+- hidden chain id
+- public escrow chain id
+- escrow contract
+- hidden contract addresses
+- start/end/freeze timestamps
+- final state root
+- settlement root
+- file hashes for every bundle file
+- bundle creation timestamp
+
+### 15.3 Replay UI
+
+Replay UI should support:
+
+- leaderboard over time
 - market creation timeline
-- agent actions
-- orderbook evolution
-- trades
-- PnL graph
-- final resolution
-- “why agent won/lost” summaries
+- order/fill timeline
+- agent action timeline
+- final settlement view
 
-This is the payoff for the hidden game.
+Replay can be implemented after raw bundle export, but the export schema should anticipate it.
 
-## 13. Settlement
+## 16. Attestation / Confidential AI
 
-### 13.1 MVP Settlement
+Desired guarantees:
 
-Simplest MVP:
+- Hidden environment ran the expected containers/images.
+- Agent runtime used the committed policy/runtime.
+- Operator did not mutate state secretly during play.
+- Reveal bundle matches hidden execution.
 
-- Public deposits are held in public entry/escrow contract.
-- Hidden chain computes final balances.
-- Reveal publisher posts final root/report.
-- Users claim from public escrow using a proof or admin-signed claim authorization.
+Practical recommendation:
 
-### 13.2 Claim Models
+- Build local Docker Compose first.
+- Add image digests and runtime hashes to commitments.
+- If Chainlink Confidential AI Attester is real and usable, integrate it around agent/runtime evidence.
+- If not, use Phala/CVM attestation or a simpler signed operator commitment for MVP.
+- Do not block core product on attestation if sponsor tooling is unstable.
 
-Options:
+## 17. Security and Abuse
 
-- Merkle claim tree from final balances.
-- Direct settlement by operator after reveal.
-- Optimistic settlement with dispute window.
-- Fully verified hidden-chain proof, likely out of scope.
+### 17.1 State Leakage
 
-Recommended MVP:
+Risks:
 
-- Merkle claim tree.
-- Publicly publish settlement JSON.
-- Store Merkle root on public contract.
-- Users claim USDC with Merkle proof.
+- frontend accidentally pointed to internal API
+- CORS/open proxy mistake
+- logs exposed publicly
+- public API returns hidden fields
+- source maps or env files deployed publicly
 
-### 13.3 Trust Assumptions
+Controls:
 
-MVP trust model:
+- separate public/internal routes
+- schema-level response filtering
+- public API contract tests
+- no public node RPC
+- no secrets in frontend bundles
+- no `.env` or source maps in production static output
 
-- Operator honestly runs hidden chain during game.
-- Commit/reveal reduces ability to rewrite history after the fact.
-- Published blocks/traces allow social/audit verification.
-- Future version can add stronger TEE attestation and/or fraud proofs.
+### 17.2 Agent Prompt Injection
 
-## 14. Security and Abuse Considerations
+Risks:
 
-### 14.1 Agent Prompt Injection
+- shared external context contains malicious text
+- user instructions try to bypass rules
+- model emits invalid/exfiltrating output
 
-User-provided instructions are intentionally untrusted.
+Controls:
 
-Mitigations:
+- treat external context as data, not instructions
+- strict system policy
+- structured action parser
+- deny unsupported tools
+- action validation before signing
+- log rejected actions
 
-- Agents run in sandboxed process/container.
-- No arbitrary tools.
-- No shell access.
-- No network except model API if required.
-- Structured action output only.
-- Output validated against schema.
-- Invalid actions become hold/no-op.
+### 17.3 Operator Cheating
 
-### 14.2 Market Spam
+Risks:
 
-Mitigations:
+- operator edits hidden state
+- operator changes agent instructions after freeze
+- operator selectively reveals data
 
-- Market creation fee.
-- Round/action limits.
-- Max open markets per agent.
-- Resolver template allowlist.
-- Minimum collateral/liquidity.
+Controls:
 
-### 14.3 State Leakage
+- pre-game commitments
+- freeze transition
+- deterministic logs
+- signed image/runtime hashes
+- reveal bundle with file hashes
+- settlement root traceable to revealed state
 
-Mitigations:
+### 17.4 Market Abuse
 
-- No public RPC.
-- Internal firewall around hidden node.
-- Leaderboard service has read-only constrained query.
-- Logs sealed until reveal.
-- Agent outputs filtered to actions only.
-- No model responses exposed during play.
+Risks:
 
-### 14.4 Operator Cheating
+- spam markets
+- ambiguous derivative markets
+- offensive questions
+- unresolvable markets
 
-Mitigations:
+Controls:
 
-- Pre-game commitments.
-- Hidden-chain state roots periodically committed publicly if possible.
-- TEE/CVM attestation if available.
-- Reveal blocks/traces after game.
-- Merkle settlement root tied to reveal bundle.
+- creation fee/collateral
+- max markets per agent
+- question validation
+- resolver/void path
+- resolution source required at creation
 
-### 14.5 User Cheating
+### 17.5 Deposit Abuse
 
-Possible issues:
+Risks:
 
-- Users encode exfiltration attempts into prompts.
-- Users try to create ambiguous derivative markets.
-- Users sybil with many agents.
-- Users attempt griefing with many low-value actions.
+- duplicate webhooks
+- chain reorgs
+- late deposits
+- failed hidden credit tx
 
-Mitigations:
-
-- Prompt sandboxing.
-- Market templates.
-- Entry fee / minimum deposit.
-- Optional one-human-one-agent via World ID if needed.
-- Rate limits and action budgets.
-
-## 15. Implementation Plan
-
-### Phase 0: Decisions
+Controls:
 
-- Pick funding integration: Blink vs Privy vs Dynamic vs LI.FI.
-- Confirm Chainlink Confidential AI capabilities.
-- Decide Phala fallback scope.
-- Choose Reth or Geth.
-- Decide ENS namespace availability.
+- confirmations before credit
+- idempotency keys
+- hidden-chain event recovery before retry
+- late-deposit refund path
+- bridge reconciliation job
 
-### Phase 1: Core Local Prototype
+## 18. Implementation Plan
 
-- Run hidden local Reth/Geth chain.
-- Deploy Frontier contracts.
-- Deploy prediction market factory.
-- Seed main hackathon winner market.
-- Build minimal agent runner with fake/local agents.
-- Build leaderboard service exposing only PnL.
-- Build frontend leaderboard.
+### Phase 0 — Repo Foundation
 
-### Phase 2: Registration and Funding
+Deliverables:
 
-- Public entry contract.
-- Deposit integration.
-- Agent registration flow.
-- Instruction commitment.
-- Coordinator mirrors deposits into hidden chain.
+- `pnpm` workspace works.
+- Docker Compose builds all service containers.
+- Shared config/types package exists.
+- Minimal health endpoints for services.
+- Public/internal network separation exists in Compose.
 
-### Phase 3: ENS Integration
+Acceptance checks:
 
-- Subname registration/assignment.
-- Text record writes for commitments.
-- Leaderboard resolves ENS names.
-- Agent profile page reads ENS commitment metadata.
+- `pnpm install`
+- `pnpm -r typecheck` or equivalent placeholder scripts
+- `docker compose config`
+- `docker compose build`
 
-### Phase 4: Confidential/Attested AI
+### Phase 1 — Hidden Chain and Contracts
 
-- Integrate Chainlink Confidential AI if usable.
-- Else integrate Phala or create clear TEE/attestation placeholder.
-- Add runtime hash and attestation artifacts.
+Deliverables:
 
-### Phase 5: Reveal and Settlement
+- Hidden devnet container runs locally.
+- Frontier/orderbook contracts deploy in local flow.
+- Game accounting/credit contract exists if needed.
+- Seed script creates canonical hackathon-winner market.
 
-- Stop game.
-- Resolve markets.
-- Generate reveal bundle.
-- Generate Merkle settlement tree.
-- Publish reveal URI/hash.
-- Update ENS records.
-- Enable claim flow.
-- Build replay page.
+Acceptance checks:
 
-## 16. Demo Script
+- hidden RPC reachable only inside Compose network
+- deploy script outputs contract addresses
+- sample order transaction succeeds
 
-1. Show landing page: “sealed agent prediction market”.
-2. Register agent with ENS name.
-3. Deposit USDC using selected onboarding flow.
-4. Write private strategy instructions.
-5. Start sealed game.
-6. Show leaderboard moving while orderbook remains hidden.
-7. Show agents creating/trading derivative markets internally.
-8. Trigger final resolution.
-9. Open the box:
-   - reveal chain trace
-   - reveal agent actions
-   - reveal market history
-   - update ENS records
-   - show settlement claim
-10. Explain bounties:
-   - deposit/onboarding integration
-   - ENS as commitment/reveal namespace
-   - confidential/attested AI layer
+### Phase 2 — Indexer
 
-## 17. Open Questions
+Deliverables:
 
-### Funding
+- Indexer ingests hidden chain events.
+- DB schema/migrations for core entities.
+- Internal API returns markets/orderbook/agent state.
+- Public API returns only game and leaderboard.
+- Response filtering tests prevent leaks.
 
-- Which deposit/onboarding sponsor has the cleanest actual SDK?
-- Do we require Base USDC specifically, or accept any supported stablecoin path into a canonical escrow?
-- Is public escrow on Base, Arc, or sponsor-specific chain?
+Acceptance checks:
 
-### ENS
+- sample events become indexed rows
+- public API leak tests pass
+- frontend can render leaderboard from public API only
 
-- Can we get/control a suitable parent name?
-- Are subnames assigned on registration or pre-minted?
-- Which records are mutable after reveal?
-- Do users own their subnames or are they controlled by the game contract?
+### Phase 3 — Agent Runtime
 
-### Hidden Chain
+Deliverables:
 
-- Reth or Geth?
-- How do we commit periodic hidden-chain roots publicly without leaking state?
-- Do we need confidential VM attestation for the node or only for agent runner?
+- Agent config/registration loader.
+- Observation builder.
+- Action schema parser/validator.
+- Basic model stub or deterministic test agent.
+- Transaction signer/submitter.
+- Rejected action logging.
 
-### Agents
+Acceptance checks:
 
-- Which model(s)?
-- Are agents allowed to use public internet/hackathon project data?
-- Can users update instructions mid-game, or are they frozen?
-- How many turns/actions per agent?
+- deterministic test agent can place/cancel orders
+- invalid action is rejected and logged
+- no outward messaging/fetch tools are available by default
 
-### Markets
+### Phase 4 — Registration and Funding
 
-- Are derivative markets hidden during play or publicly listed without state?
-- What resolver templates are allowed?
-- How do we handle ambiguous/unresolvable derivative markets?
+Deliverables:
 
-### Settlement
+- Public escrow contract or mocked local equivalent.
+- Bridge watches funding events.
+- Idempotent hidden credit flow.
+- Registration freeze behavior.
+- Pre-freeze refund and post-freeze lock rules.
 
-- Are gains/losses real USDC or demo credits until final payout?
-- Do we need a dispute window?
-- Are losing balances burned/transferred automatically or only after claim?
+Acceptance checks:
 
-## 18. Recommended Final Shape for Hackathon
+- duplicate funding event does not double-credit
+- late deposit after freeze is refundable/not credited
+- hidden credit references public funding event id
 
-Build the smallest coherent version:
+### Phase 5 — ENS and Commitments
 
-- One public app.
-- One clean USDC funding/onboarding integration.
-- ENS names as real commitment/reveal anchors.
-- Hidden Reth/Geth chain running Frontier.
-- Agents trade silently with only balance observations.
-- Public leaderboard only shows PnL.
-- Chainlink Confidential AI if it gives real attestations; otherwise Phala/fallback TEE story.
-- Reveal bundle + replay + Merkle settlement.
+Deliverables:
 
-The winning narrative:
+- Agent identity model.
+- Commitment hash generation.
+- ENS/subname text record writer or mocked adapter.
+- Post-reveal record update path.
 
-> DarkBox is a prediction market where the market is not public until the end. Agents enter a sealed execution environment, trade on Frontier’s orderbook, invent derivative markets, and compete only through visible PnL. ENS binds each agent to its pre-game commitments and post-game reveal. Stablecoin onboarding makes entering trivial. Confidential AI/TEE infrastructure makes the sealed game credible.
+Acceptance checks:
+
+- commitment hashes are deterministic
+- raw instructions are not published pre-reveal
+- reveal records link to final bundle/root
+
+### Phase 6 — Frontend
+
+Deliverables:
+
+- Landing/onboarding flow.
+- Agent registration/instruction form.
+- Funding status UI.
+- Leaderboard.
+- Reveal status page.
+- Optional 3D dark room/terminal experience.
+
+Acceptance checks:
+
+- frontend uses only public API env vars
+- no hidden RPC/internal URL appears in built frontend
+- build output passes static secret scan before deployment
+
+### Phase 7 — Reveal and Settlement
+
+Deliverables:
+
+- Reveal bundle export.
+- Manifest with file hashes.
+- Settlement root/proofs.
+- Replay event file.
+- Optional replay UI.
+
+Acceptance checks:
+
+- bundle can be generated from local game run
+- settlement totals reconcile to escrow deposits
+- replay data reconstructs leaderboard progression
+
+### Phase 8 — CVM/Attestation
+
+Deliverables:
+
+- Compose stack deployable into CVM/TEE target.
+- Image digests/runtime hashes captured.
+- Attestation artifact, if sponsor tooling supports it.
+
+Acceptance checks:
+
+- same images run locally and in target environment
+- public frontend still cannot reach hidden RPC
+- attestation/reveal artifact references image/runtime hashes
+
+## 19. Coding-Agent Work Packages
+
+Use these as initial tasks for implementation agents.
+
+### Work Package A — Compose + Service Skeleton Hardening
+
+Goal: make the repo reliably build and run service health checks.
+
+Scope:
+
+- Add package scripts.
+- Add minimal HTTP server/health endpoint per service.
+- Add shared config loader.
+- Ensure Dockerfiles build.
+- Add `.env.example` values for local dev.
+
+Done when:
+
+- `docker compose build` succeeds.
+- `docker compose up` starts all non-profile services.
+- `GET /health` works where applicable.
+
+### Work Package B — Indexer API and Schema
+
+Goal: create the state backbone.
+
+Scope:
+
+- DB schema/migrations.
+- Internal/public route separation.
+- Shared response schemas.
+- Seed/mock event ingestion before contracts are ready.
+- Leak-prevention tests.
+
+Done when:
+
+- public leaderboard endpoint works from seeded data.
+- internal market/agent endpoints work.
+- tests prove hidden fields are absent from public responses.
+
+### Work Package C — Agent Runtime MVP
+
+Goal: deterministic agents can trade locally.
+
+Scope:
+
+- Observation builder.
+- Action schema and validator.
+- Deterministic test agent.
+- Wallet/signer abstraction.
+- Transaction submission stub or real hidden-chain path.
+
+Done when:
+
+- one or more test agents produce valid actions.
+- invalid actions are rejected.
+- action logs are stored for reveal.
+
+### Work Package D — Bridge/Funding MVP
+
+Goal: confirmed deposits credit hidden balances exactly once.
+
+Scope:
+
+- Implement deposit event model.
+- Implement idempotency store.
+- Implement hidden credit flow.
+- Implement reconciliation job.
+- Wire to direct Base escrow or local mock first.
+
+Done when:
+
+- duplicate event test passes.
+- hidden credit event references public funding event.
+- pre-freeze/late-deposit behavior matches spec.
+
+### Work Package E — Reveal Bundle
+
+Goal: produce audit bundle from local game.
+
+Scope:
+
+- Manifest format.
+- Export indexed tables.
+- Export agent action logs.
+- Export commitments.
+- Produce file hashes.
+
+Done when:
+
+- a local simulated game produces a complete bundle.
+- bundle can be validated by a script.
+
+## 20. Demo Script
+
+1. Open DarkBox landing page.
+2. User enters the dark-room/terminal onboarding flow.
+3. User creates an agent name and whispers instructions.
+4. User funds/registers agent.
+5. ENS/commitment record is created.
+6. Game starts.
+7. Several agents trade hidden markets.
+8. Public leaderboard updates, but no orderbook/trades/positions are visible.
+9. At deadline, game freezes.
+10. Winner/resolutions are applied.
+11. Reveal bundle is generated.
+12. Replay UI shows what happened inside the box.
+13. Settlement root/proofs are available for claims.
+
+## 21. Open Decisions
+
+These should be resolved by humans or explicit project lead choice, not guessed by coding agents.
+
+- Exact sponsor/onboarding path for the first funding adapter.
+- Whether raw user instructions are revealed after the game or only their hashes/runtime metadata.
+- Whether agents can create derivative markets in MVP or only trade the canonical market.
+- Whether agents can see full orderbooks or only constrained market observations.
+- Final CVM/TEE provider and attestation path.
+- Final resolution authority for derivative markets.
+
+## 22. Default Recommendation
+
+For the hackathon build, optimize for a coherent end-to-end demo over maximal decentralization:
+
+- Local-first Docker Compose stack.
+- Private Reth/Geth devnet.
+- Frontier contracts inside hidden chain.
+- Standalone indexer with strict public/internal API split.
+- Deterministic test agents first, LLM agents second.
+- Base USDC escrow/direct deposit fallback.
+- One sponsor onboarding adapter only.
+- ENS commitments for real audit value.
+- Reveal bundle before fancy replay UI.
+- CVM/attestation only after the local loop is stable.

@@ -93,7 +93,7 @@ cd /home/xiko/darkbox
 pnpm --filter @darkbox/contracts test
 ```
 Observed result in this pass:
-- **35 tests passed, 0 failed**
+- **38 tests passed, 0 failed** after Ocean patches (zero signer guard, exact token receipt guard, and explicit winner-withdrawal-over-deposit regression test).
 
 If Foundry is available, also run:
 ```bash
@@ -114,7 +114,7 @@ For `DarkBoxBridge.sol`:
 - emergency withdrawal power review
 - ERC20 safe transfer assumptions
 - total deposited / total withdrawn accounting sanity
-- lack of solvency invariant enforcement
+- withdrawal authorization invariant: public bridge should accept withdrawals that exceed original deposit when backed by hidden-ledger winnings and a valid TEE/signer authorization
 
 For `ShadowBridgeController.sol`:
 - owner ↔ shadow mapping immutability
@@ -193,7 +193,7 @@ Based on the present snapshot, these are the likely issue buckets Dan should exp
 - Admin/signer centralization risk
 - Offchain signer service is the real security boundary, but not implemented/audited here
 - Hidden-chain coordinator is fully trusted and can arbitrarily mint/burn/lock
-- No onchain solvency check or reserve proof between shadow accounting and public escrow
+- No onchain proof that the TEE/signer authorization exactly matches hidden-ledger resolved value; this is expected for MVP privacy but makes signer/TEE correctness the real security boundary
 - Promo invite withdrawal lock is specified but not enforced in current Solidity
 - “Withdrawals disabled during live play” exists as an operational rule, not automated rule
 - Base deployment config inconsistency suggests operational drift risk
@@ -210,9 +210,8 @@ These blockers prevent a complete Fran-requested audit right now:
 - No actual bridge service implementation to audit
 - No hidden node config/deployment implementation to audit
 - No signing service implementation to audit
-- No Base Sepolia deployment artifact to validate end-to-end staging flow
 - No Arc deployment config/artifact
-- No PDF reports generated yet
+- PDF report generation pending in this run
 
 ## 10. Recommended immediate next audit tasks for Dan's agent
 

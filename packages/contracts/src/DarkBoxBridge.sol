@@ -49,7 +49,6 @@ contract DarkBoxBridge is IDarkBoxBridge {
     error BadSigner();
     error ZeroAmount();
     error ShortTokenReceipt(uint256 requested, uint256 received);
-    error InsufficientOwnerEscrow(address owner, uint256 available, uint256 requested);
     error WrongDestination(uint256 destinationChainId, address destinationBridge);
 
     event SignerUpdated(address indexed previousSigner, address indexed newSigner);
@@ -164,13 +163,8 @@ contract DarkBoxBridge is IDarkBoxBridge {
         address recovered = ECDSA.recover(digest, serviceSignature);
         if (recovered != signer) revert BadSigner();
 
-        uint256 withdrawn = totalWithdrawn[owner];
-        uint256 deposited = totalDeposited[owner];
-        uint256 available = deposited > withdrawn ? deposited - withdrawn : 0;
-        if (amount > available) revert InsufficientOwnerEscrow(owner, available, amount);
-
         usedNonces[owner][nonce] = true;
-        totalWithdrawn[owner] = withdrawn + amount;
+        totalWithdrawn[owner] += amount;
 
         _safeTransfer(usdc, recipient, amount);
 

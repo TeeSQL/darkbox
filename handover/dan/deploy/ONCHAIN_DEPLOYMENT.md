@@ -358,7 +358,7 @@ Highest-risk issues Dan should assume remain open:
 
 See `BASE_SEPOLIA_DEPLOYMENT.md`.
 
-- `DarkBoxBridge`: `0xbA629d5F1951e05BA61121F4567CCc0EebC476A4`
-- `MockERC20` test USDC: `0x5768EB9466460438D853b707aF13CD4e5a070026`
+- `DarkBoxBridge`: `0xe0004c955721b3A994E94CCcA86d91Da4Cf2E6f9`
+- `MockERC20` test USDC: `0x8C885Cb844362Ed8d161792aEA6745d29d839246`
 - Deployer/admin/signer: `0x7c2Af79eD218f75664ae23820C35102Fd8560E6D`
 - Broadcast artifact: `packages/contracts/broadcast/Deploy.s.sol/84532/run-latest.json`

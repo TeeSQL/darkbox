@@ -201,21 +201,17 @@ contract DarkBoxBridgeTest is BridgeEIP712Helper {
         _submit(a, sig);
     }
 
-    function test_WithdrawRevertsWhenOwnerEscrowInsufficient() public {
+    function test_WithdrawCanExceedOriginalDepositWhenSignedAndVaultFunded() public {
         uint256 amount = 100e6;
         _depositForUser(amount);
-        _fundBridgeUSDC(amount); // pooled liquidity from elsewhere must not satisfy this owner.
+        _fundBridgeUSDC(amount); // Represents winnings / loser-funded pool liquidity.
         Authorization memory a = _auth(amount * 2, 2, block.timestamp + 1 hours);
         bytes memory sig = _sign(signerPk, _authDigest(bridge, a));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                DarkBoxBridge.InsufficientOwnerEscrow.selector,
-                user,
-                amount,
-                amount * 2
-            )
-        );
         _submit(a, sig);
+
+        assertEq(usdc.balanceOf(recipient), amount * 2);
+        assertEq(bridge.totalDeposited(user), amount);
+        assertEq(bridge.totalWithdrawn(user), amount * 2);
     }
 
     function test_WithdrawRevertsOnWrongSigner() public {

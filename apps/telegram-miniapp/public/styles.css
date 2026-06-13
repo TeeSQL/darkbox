@@ -2780,3 +2780,83 @@ body,
     line-height: 1.55 !important;
   }
 }
+
+/* Telegram keyboard focus fix: no iOS zoom, terminal becomes foreground sheet. */
+textarea,
+#whisper-input {
+  font-size: 16px !important;
+  line-height: 1.45 !important;
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
+}
+@media (max-width: 760px) {
+  textarea,
+  #whisper-input {
+    font-size: 16px !important;
+  }
+}
+.stage.keyboard-open[data-loop="terminal"] .door,
+.stage.keyboard-open[data-loop="threshold-copy"] .door,
+.stage:focus-within[data-loop="terminal"] .door,
+.stage:focus-within[data-loop="threshold-copy"] .door {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.stage.keyboard-open[data-loop="terminal"] .halo,
+.stage.keyboard-open[data-loop="terminal"] .approach-light,
+.stage.keyboard-open[data-loop="threshold-copy"] .halo,
+.stage.keyboard-open[data-loop="threshold-copy"] .approach-light,
+.stage:focus-within[data-loop="terminal"] .halo,
+.stage:focus-within[data-loop="terminal"] .approach-light,
+.stage:focus-within[data-loop="threshold-copy"] .halo,
+.stage:focus-within[data-loop="threshold-copy"] .approach-light {
+  display: none !important;
+}
+@media (max-width: 760px) {
+  .stage.keyboard-open[data-loop="terminal"] .terminal,
+  .stage.keyboard-open[data-loop="threshold-copy"] .terminal,
+  .stage:focus-within[data-loop="terminal"] .terminal,
+  .stage:focus-within[data-loop="threshold-copy"] .terminal {
+    position: fixed !important;
+    z-index: 30 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: auto !important;
+    width: 100vw !important;
+    max-width: none !important;
+    min-height: 100svh !important;
+    height: 100svh !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    transform: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    padding: max(22px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)) !important;
+    overflow-y: auto !important;
+    background: var(--dh-panel) !important;
+  }
+  .stage.keyboard-open[data-loop="terminal"] .whisper,
+  .stage.keyboard-open[data-loop="threshold-copy"] .whisper,
+  .stage:focus-within[data-loop="terminal"] .whisper,
+  .stage:focus-within[data-loop="threshold-copy"] .whisper {
+    width: 100% !important;
+    max-width: 560px !important;
+    padding: 18px 4px 140px !important;
+  }
+  .stage.keyboard-open[data-loop="terminal"] .whisper-row,
+  .stage.keyboard-open[data-loop="threshold-copy"] .whisper-row,
+  .stage:focus-within[data-loop="terminal"] .whisper-row,
+  .stage:focus-within[data-loop="threshold-copy"] .whisper-row {
+    align-items: start !important;
+  }
+  .stage.keyboard-open[data-loop="terminal"] .action-dock,
+  .stage.keyboard-open[data-loop="threshold-copy"] .action-dock,
+  .stage:focus-within[data-loop="terminal"] .action-dock,
+  .stage:focus-within[data-loop="threshold-copy"] .action-dock {
+    margin-top: 22px !important;
+  }
+}

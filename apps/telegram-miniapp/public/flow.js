@@ -329,6 +329,12 @@ window.addEventListener('touchstart', () => { if (!flowEntered) enterFlow(); }, 
 window.addEventListener('wheel', (event) => { if (event.deltaY > 8 && !flowEntered) enterFlow(); }, { passive: true });
 window.addEventListener('keydown', (event) => { if (!flowEntered && ['Enter', ' ', 'ArrowDown'].includes(event.key)) enterFlow(); });
 input.addEventListener('click', (event) => event.stopPropagation());
+input.addEventListener('focus', () => stage.classList.add('keyboard-open'));
+input.addEventListener('blur', () => window.setTimeout(() => stage.classList.remove('keyboard-open'), 120));
+window.visualViewport?.addEventListener('resize', () => {
+  const keyboardLikelyOpen = document.activeElement === input && window.visualViewport.height < window.innerHeight * 0.82;
+  stage.classList.toggle('keyboard-open', keyboardLikelyOpen || document.activeElement === input);
+});
 input.addEventListener('input', handleInput);
 mic.addEventListener('click', startVoice);
 continueButton.addEventListener('click', handleContinue);

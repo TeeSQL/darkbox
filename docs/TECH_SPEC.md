@@ -9,7 +9,7 @@ Primary local workflow: Docker Compose
 
 DarkBox is a sealed agent prediction-market arena.
 
-Users deposit USDC, register an agent, and give that agent private instructions. During live play, agents trade prediction markets inside a hidden execution environment backed by Frontier CLOB/orderbook contracts. The public can see only a leaderboard. The orderbook, trades, positions, prompts, agent actions, and chain state stay hidden until the reveal.
+Users deposit USDC, register an agent, and give that agent private instructions. During live play, agents trade prediction markets inside a hidden execution environment backed by Frontier CLOB/orderbook contracts. The public can see a lively leaderboard, visible market list, and aggregate market activity stats. Per-agent balances, orderbooks, trades, positions, prompts, agent actions, and chain state stay hidden until the reveal.
 
 At the end, the box opens: chain history, commitments, agent actions, market state, and settlement artifacts are published so the game can be audited and replayed.
 
@@ -29,7 +29,7 @@ Core promise:
 - Public frontend that never touches hidden RPC or privileged APIs.
 - USDC funding/registration architecture with one concrete onboarding path and a direct Base USDC fallback.
 - ENS identity/commitment integration that is meaningful, not cosmetic.
-- Leaderboard exposing only public-safe PnL/rank data.
+- Leaderboard exposing public-safe PnL/rank data plus aggregate activity stats that prove the market is alive without leaking per-agent balances or positions.
 - Reveal bundle builder for post-game audit/replay.
 - Clear security boundaries that coding agents can enforce while building.
 
@@ -45,7 +45,7 @@ Core promise:
 - Production-grade decentralized confidential consensus.
 - Permissionless cross-chain bridge custody.
 - Mid-game withdrawals.
-- Public access to hidden node, hidden indexer data, orderbooks, trades, positions, or agent prompts.
+- Public access to hidden node, privileged indexer data, orderbooks, raw trades, per-agent positions/balances, or agent prompts.
 - General-purpose prediction-market protocol beyond this hackathon arena.
 - Perfect LLM sandboxing against all possible provider/model leaks.
 
@@ -59,7 +59,7 @@ These are non-negotiable. Coding agents should treat any violation as a bug.
 - Indexer is a standalone service, not a thin frontend proxy.
 - Indexer owns all derived market state: orders, fills, positions, balances, PnL, leaderboard snapshots, reveal exports.
 - Indexer has separate internal and public API surfaces.
-- Public API exposes only visible game data.
+- Public API exposes only visible game data: public leaderboard/PnL, market list/metadata, aggregate activity stats, reveal status, and authenticated self-status.
 - Agents cannot send messages outward during play.
 - Agents cannot call arbitrary tools or fetch arbitrary URLs unless explicitly allowed by runtime policy.
 - Agents receive observations only through constrained internal indexer endpoints and approved external context feeds.
@@ -82,9 +82,17 @@ Public:
   - agent display name / ENS name
   - rank
   - current PnL
-  - optional current balance
   - optional drawdown
   - last update time
+  - simulated/realtime-feeling UI interpolation between public snapshots
+- Public market list and market metadata.
+- Aggregate market activity stats:
+  - total deposits
+  - total trades
+  - total volume, if available
+  - total positions opened/closed
+  - total active markets
+  - total active agents
 - Reveal countdown/status.
 
 Private to the registered user:
@@ -94,7 +102,7 @@ Private to the registered user:
 - Their own agent identity.
 - Their instruction commitment hash.
 - Their own high-level agent health status.
-- Their own balance if the product chooses to show it.
+- Their own balance if the product chooses to show it; per-agent balances are not public.
 
 Shared external context for all agents:
 
@@ -108,11 +116,11 @@ Shared external context for all agents:
 - Full chain state.
 - Hidden node RPC.
 - Orderbooks.
-- Trades/fills.
-- Positions.
+- Raw trades/fills.
+- Per-agent positions.
+- Per-agent balances.
 - Open orders.
-- Market creation activity, unless intentionally surfaced as metadata only.
-- Per-market PnL breakdown.
+- Per-agent/per-market PnL breakdown.
 - Agent prompts/instructions.
 - Agent reasoning traces.
 - Agent actions before they become revealed transactions.
@@ -389,6 +397,8 @@ Fields:
 
 MVP should start with binary YES/NO markets.
 
+Detailed contract source of truth: `docs/MARKET_CREATION_AND_SPLIT_JOIN_SPEC.md`. Use it for the market factory, binary market lifecycle, split/join vault, outcome token, Frontier integration, events, invariants, and tests.
+
 ### 8.4 Order
 
 Fields:
@@ -466,21 +476,35 @@ Allowed endpoints:
 - `GET /public/health`
 - `GET /public/game`
 - `GET /public/leaderboard`
+- `GET /public/markets`
+- `GET /public/markets/:marketId`
+- `GET /public/activity`
 - `GET /public/agents/:agentId/status`
 - `GET /public/reveal/status`
 - `GET /public/reveal/bundle` after reveal only
 
+Public leaderboard/activity may expose:
+
+- per-agent public PnL and rank
+- public market list and market metadata
+- aggregate total deposits
+- aggregate number of trades
+- aggregate total volume, if available
+- aggregate positions opened/closed
+- aggregate active agents/markets
+- snapshot timestamps
+
 Forbidden on public API:
 
+- per-agent balances
 - orderbook depth
 - open orders
-- fills
-- positions
-- per-market PnL
+- raw fills/trade stream
+- per-agent positions
+- per-agent/per-market PnL breakdown
 - hidden chain tx stream before reveal
 - prompts/instructions
 - internal agent logs
-- private market list if hidden-market mode is enabled
 
 ### 9.2 Internal Indexer API
 
@@ -680,6 +704,13 @@ Market creation controls:
 - no duplicate exact questions
 - no markets resolving after game deadline unless explicitly allowed
 - resolver/admin can void abusive markets
+
+Split/join primitive:
+
+- `split(amount)`: lock synthetic USDC and mint equal YES + NO claims.
+- `join(amount)`: burn equal YES + NO claims and release synthetic USDC before resolution.
+- `redeem(outcome, amount)`: after resolution, burn winning claims and release synthetic USDC.
+- Standard terminology is split/join; `merge` may be used as an alias only if helpful for implementation compatibility.
 
 Resolution:
 

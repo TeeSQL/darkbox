@@ -121,9 +121,12 @@ JSON
       --agent "$AGENT" \
       --out "$ACTIONS_JSONL"
   done
-  SUMMARY=$(tail -n "${#AGENTS[@]}" "$ACTIONS_JSONL" | python3 <<'PYSUM' 
-import json, sys
-rows = [json.loads(x) for x in sys.stdin if x.strip()]
+  SUMMARY=$(ACTIONS_JSONL="$ACTIONS_JSONL" AGENT_COUNT="${#AGENTS[@]}" python3 <<'PYSUM'
+import json, os
+path = os.environ['ACTIONS_JSONL']
+count = int(os.environ['AGENT_COUNT'])
+with open(path) as f:
+    rows = [json.loads(x) for x in f if x.strip()][-count:]
 print('; '.join('%s:%s:%s' % (r['agentId'], r['ok'], ','.join(a['type'] for a in r['tradeActions'])) for r in rows))
 PYSUM
 )

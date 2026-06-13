@@ -139,19 +139,10 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  # ── One-shot contract deployer ──────────────────────────────────────────────
-  # Runs DeployDarkBox onto chain 88813 over localhost:8545 (slimmed EIP-170 book
-  # + 1% taker fee), emits the market/factory/book/synthetic-USDC addresses to its
-  # logs, then exits (restart: "no"). DEPLOYER_KEY = GETH1_NODEKEY — a fresh
-  # private-chain-only, genesis-prefunded key (NOT the cluster-owner/mainnet key).
-  deployer:
-    image: ghcr.io/teesql/darkbox-deployer:latest
-    restart: "no"
-    network_mode: "service:sidecar"
-    depends_on: [ geth-1 ]
-    environment:
-      - RPC_URL=http://localhost:8545
-      - DEPLOYER_KEY=${GETH1_NODEKEY}
+  # NOTE: the one-shot `darkbox-deployer` service ran once (chain 88813 contracts
+  # in deployed-addresses-88813.json) and was REMOVED here — it has no persistent
+  # volume, so leaving it in would re-deploy a second orphaning contract set on
+  # every core redeploy. Re-add it only to (re)deploy contracts on a fresh chain.
 
 volumes:
   agentsock:

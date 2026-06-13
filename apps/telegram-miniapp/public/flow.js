@@ -587,6 +587,9 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
+// Don't let the mic button steal focus from the textarea: blurring it would
+// close the on-screen keyboard and re-center the composer (a visible hop).
+voiceButton?.addEventListener('pointerdown', (event) => event.preventDefault());
 voiceButton?.addEventListener('click', grantMicForVisuals);
 terminalInput?.addEventListener('input', handleTerminalInput);
 terminalSealButton?.addEventListener('click', sealTerminalWhisper);

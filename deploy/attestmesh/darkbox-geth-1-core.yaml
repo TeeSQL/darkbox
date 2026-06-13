@@ -1,0 +1,136 @@
+# AttestMesh node compose — DarkBox member 1: geth-1 + confidential core.
+#
+# The "fat" CVM. sidecar + geth-1 + indexer + agents + bridge + transcriber +
+# reveal + postgres, ALL sharing the sidecar netns (network_mode: service:sidecar)
+# so they talk to each other and to geth-1 over localhost. Only the bridge→signer
+# call crosses the mesh (SIGNER_URL, whole-value from the sealed -e file).
+#
+# No public ports: this member is entirely mesh-internal (the gateway member is
+# the only public edge). Cross-member URLs are ${ENV_VAR} placeholders fed by the
+# sealed -e file so the compose hash stays stable.
+#
+# Mesh convergence takes a few minutes after boot; every service tolerates a
+# connection-refused upstream at startup (per-request timeouts / per-poll-cycle
+# retries) and never hard-exits, so ordering within the pod is not load-bearing.
+services:
+  sidecar:
+    image: ghcr.io/attestmesh/cluster-mesh-agent:latest
+    restart: unless-stopped
+    environment:
+      - CHAIN_ID=${CHAIN_ID}
+      - RPC_URL=${RPC_URL}
+      - BUNDLER_URL=${BUNDLER_URL}
+      - GAS_POLICY_ID=${GAS_POLICY_ID}
+      - INDEXER_REGISTRY_ADDR=${INDEXER_REGISTRY_ADDR}
+      - GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+      - DSTACK_SOCKET=/var/run/dstack.sock
+      - AGENT_GRPC_SOCKET=/var/run/attestmesh/agent.sock
+      - HEALTH_HTTP_ADDR=0.0.0.0:9090
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=info,cluster_mesh_agent=debug
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - agentsock:/var/run/attestmesh
+    ports:
+      - "9090:9090"     # sidecar healthz
+      - "51900:51900"   # wg-over-TCP bootstrap
+    cap_add: [ NET_ADMIN ]
+    devices: [ /dev/net/tun ]
+
+  # ── Hidden chain node 1 (clique PoA; peers geth-2 over the mesh) ────────────
+  geth-1:
+    image: ghcr.io/teesql/darkbox-geth:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    volumes:
+      - agentsock:/var/run/attestmesh:ro
+      - gethdata:/root/.ethereum
+    environment:
+      # Pinned nodekey (sealed) so the enode pubkey is a known constant; the boot
+      # helper waits for the mesh, resolves geth-2's mesh IP via the agent UDS
+      # (ListPeers, matched by ${PEER_MEMBER_APPID}), and static-peers it.
+      - GETH_NODEKEY=${GETH1_NODEKEY}
+      - PEER_ENODE_PUBKEY=${GETH2_ENODE_PUBKEY}
+      - PEER_MEMBER_APPID=${GETH2_APP_ID}
+      - CHAIN_ID=88813
+      - NODE_ROLE=signer
+
+  # ── Indexer (derived state; serves /public + /internal) ─────────────────────
+  indexer:
+    image: ghcr.io/teesql/darkbox-indexer:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - DATABASE_URL=postgres://darkbox:${POSTGRES_PASSWORD}@localhost:5432/darkbox
+      - HIDDEN_RPC_URL=http://localhost:8545
+      - HIDDEN_CHAIN_ID=88813
+      - PUBLIC_CHAIN_ID=${PUBLIC_CHAIN_ID}
+      - GAME_ID=${GAME_ID}
+      - BRIDGE_ADDRESS=${BRIDGE_ADDRESS}
+
+  # ── Agent runtime ───────────────────────────────────────────────────────────
+  agents:
+    image: ghcr.io/teesql/darkbox-agents:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - INDEXER_INTERNAL_URL=http://localhost:8080/internal
+      - HIDDEN_RPC_URL=http://localhost:8545
+      - VENICE_API_KEY=${VENICE_API_KEY}
+
+  # ── Bridge coordinator (deposits/withdrawals; calls signer cross-mesh) ───────
+  bridge:
+    image: ghcr.io/teesql/darkbox-bridge:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - INDEXER_INTERNAL_URL=http://localhost:8080/internal
+      - HIDDEN_RPC_URL=http://localhost:8545
+      # The ONE cross-member dep — whole-value from -e (overseer fills signer IP).
+      - SIGNER_URL=${SIGNER_URL}
+      - SIGNER_BRIDGE_TOKEN=${SIGNER_BRIDGE_TOKEN}
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - ARC_RPC_URL=${ARC_RPC_URL}
+
+  # ── Transcriber (typed-fallback default; audio is post-MVP) ─────────────────
+  transcriber:
+    image: ghcr.io/teesql/darkbox-transcriber:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - PORT=8095
+      - STT_MODE=stub
+
+  # ── Reveal bundle builder ───────────────────────────────────────────────────
+  reveal:
+    image: ghcr.io/teesql/darkbox-reveal:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - PORT=8096
+      - INDEXER_INTERNAL_URL=http://localhost:8080/internal
+      - GAME_ID=${GAME_ID}
+
+  # ── Postgres (indexer's store) ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    environment:
+      - POSTGRES_DB=darkbox
+      - POSTGRES_USER=darkbox
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  agentsock:
+  gethdata:
+  db_data:

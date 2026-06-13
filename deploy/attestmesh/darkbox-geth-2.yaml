@@ -1,0 +1,49 @@
+# AttestMesh node compose — DarkBox member 2: geth-2 (second hidden-chain node).
+#
+# sidecar + geth-2 only. Peers geth-1 over the mesh (clique PoA, both are signers).
+# Mesh-internal: no public ports. The boot-helper waits for mesh convergence,
+# resolves geth-1's mesh IP via the agent UDS (ListPeers, matched by
+# ${PEER_MEMBER_APPID}), and static-peers it using geth-1's pinned enode pubkey.
+services:
+  sidecar:
+    image: ghcr.io/attestmesh/cluster-mesh-agent:latest
+    restart: unless-stopped
+    environment:
+      - CHAIN_ID=${CHAIN_ID}
+      - RPC_URL=${RPC_URL}
+      - BUNDLER_URL=${BUNDLER_URL}
+      - GAS_POLICY_ID=${GAS_POLICY_ID}
+      - INDEXER_REGISTRY_ADDR=${INDEXER_REGISTRY_ADDR}
+      - GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+      - DSTACK_SOCKET=/var/run/dstack.sock
+      - AGENT_GRPC_SOCKET=/var/run/attestmesh/agent.sock
+      - HEALTH_HTTP_ADDR=0.0.0.0:9090
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=info,cluster_mesh_agent=debug
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - agentsock:/var/run/attestmesh
+    ports:
+      - "9090:9090"
+      - "51900:51900"
+    cap_add: [ NET_ADMIN ]
+    devices: [ /dev/net/tun ]
+
+  geth-2:
+    image: ghcr.io/teesql/darkbox-geth:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    volumes:
+      - agentsock:/var/run/attestmesh:ro
+      - gethdata:/root/.ethereum
+    environment:
+      - GETH_NODEKEY=${GETH2_NODEKEY}
+      - PEER_ENODE_PUBKEY=${GETH1_ENODE_PUBKEY}
+      - PEER_MEMBER_APPID=${GETH1_APP_ID}
+      - CHAIN_ID=88813
+      - NODE_ROLE=signer
+
+volumes:
+  agentsock:
+  gethdata:

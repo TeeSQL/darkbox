@@ -1,0 +1,72 @@
+# AttestMesh node compose — DarkBox member 4: gateway (public edge).
+#
+# Layout: sidecar + gateway only. The gateway is the SOLE public surface, isolated
+# in its own CVM so a public-surface compromise never shares a netns with the
+# signer / postgres / private keys. It reaches the core services over the mesh.
+#
+# Linchpin: the gateway shares the sidecar's netns (network_mode: service:sidecar)
+# so it can route to mesh IPs. ALL pod ports (incl. the public 8090) are declared
+# on the SIDECAR service block. Public URL ends up as
+#   https://<gateway_app_id>-8090.dstack-base-prod5.phala.network  (HTTP; gateway speaks plain HTTP on 8090)
+#
+# Cross-member addressing is ENV-INJECTED (option a): INDEXER_INTERNAL_URL /
+# TRANSCRIBER_URL point at the CORE member's mesh IP, handed back by the overseer
+# once the core member registers (deploy core first, then `update` this member's
+# env, or deploy gateway as a canary and refresh). Sealed values (${...}) come via
+# `phala deploy -e`.
+services:
+  sidecar:
+    image: ghcr.io/attestmesh/cluster-mesh-agent:latest
+    restart: unless-stopped
+    environment:
+      # MEMBER_CONTRACT intentionally unset — self-discovered from /Info app_id (Path A).
+      - CHAIN_ID=${CHAIN_ID}
+      - RPC_URL=${RPC_URL}
+      - BUNDLER_URL=${BUNDLER_URL}
+      - GAS_POLICY_ID=${GAS_POLICY_ID}
+      - INDEXER_REGISTRY_ADDR=${INDEXER_REGISTRY_ADDR}
+      - GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+      - DSTACK_SOCKET=/var/run/dstack.sock
+      - AGENT_GRPC_SOCKET=/var/run/attestmesh/agent.sock
+      - HEALTH_HTTP_ADDR=0.0.0.0:9090
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=info,cluster_mesh_agent=debug
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - agentsock:/var/run/attestmesh
+    ports:
+      - "9090:9090"     # sidecar healthz
+      - "51900:51900"   # wg-over-TCP bootstrap
+      - "8090:8090"     # DarkBox gateway public edge (the only DarkBox public port)
+    cap_add: [ NET_ADMIN ]
+    devices: [ /dev/net/tun ]
+
+  gateway:
+    image: ghcr.io/teesql/darkbox-gateway:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"   # share sidecar netns → on the mesh; localhost reaches sidecar
+    depends_on: [ sidecar ]
+    volumes:
+      - agentsock:/var/run/attestmesh:ro
+    environment:
+      - PORT=8090
+      # Real Telegram auth in prod (sealed). Never the insecure dev path.
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ALLOW_INSECURE_DEV_AUTH=false
+      # Demo posture: withdrawals locked until settlement.
+      - WITHDRAWALS_ENABLED=false
+      - BRIDGE_ADDRESS=${BRIDGE_ADDRESS}
+      - PUBLIC_CHAIN_ID=${PUBLIC_CHAIN_ID}
+      - GAME_ID=${GAME_ID}
+      - PROMO_AMOUNT=${PROMO_AMOUNT:-5.00}
+      - PROMO_UNLOCK_AT=${PROMO_UNLOCK_AT}
+      - REGISTRATION_FREEZE_AT=${REGISTRATION_FREEZE_AT}
+      # Core services over the mesh. WHOLE-VALUE passthrough from the sealed -e
+      # file (overseer fills the core mesh IP) — NOT constructed inline, so the
+      # compose hash stays stable and a peer-IP change is a pure env update.
+      - INDEXER_INTERNAL_URL=${INDEXER_INTERNAL_URL}
+      # Typed-whisper MVP doesn't need the transcriber; wire it when audio lands:
+      # - TRANSCRIBER_URL=${TRANSCRIBER_URL}
+
+volumes:
+  agentsock:

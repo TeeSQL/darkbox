@@ -1,0 +1,63 @@
+# AttestMesh node compose — DarkBox member 3: isolated withdrawal signer.
+#
+# Layout: sidecar + signer ONLY. The signer holds the EIP-712 withdrawal-auth key
+# (Fran's #2 RED risk), so it gets its own CVM/netns/attestation boundary — a
+# compromise of any core container can't share a namespace with the signing key.
+#
+# Mesh-internal only: NO public port. The signer listens on 0.0.0.0:8099 inside
+# the shared netns, which is automatically reachable at <signer_mesh_ip>:8099 from
+# other mesh members — so it is NOT declared in the sidecar `ports:` block (ports
+# there = public dstack-gateway exposure; the signer must never be public). Only
+# the bridge (in the core member) calls it, over the mesh.
+services:
+  sidecar:
+    image: ghcr.io/attestmesh/cluster-mesh-agent:latest
+    restart: unless-stopped
+    environment:
+      - CHAIN_ID=${CHAIN_ID}
+      - RPC_URL=${RPC_URL}
+      - BUNDLER_URL=${BUNDLER_URL}
+      - GAS_POLICY_ID=${GAS_POLICY_ID}
+      - INDEXER_REGISTRY_ADDR=${INDEXER_REGISTRY_ADDR}
+      - GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+      - DSTACK_SOCKET=/var/run/dstack.sock
+      - AGENT_GRPC_SOCKET=/var/run/attestmesh/agent.sock
+      - HEALTH_HTTP_ADDR=0.0.0.0:9090
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=info,cluster_mesh_agent=debug
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - agentsock:/var/run/attestmesh
+    ports:
+      - "9090:9090"     # sidecar healthz
+      - "51900:51900"   # wg-over-TCP bootstrap
+      # NO 8099 here — signer is mesh-internal only, never publicly exposed.
+    cap_add: [ NET_ADMIN ]
+    devices: [ /dev/net/tun ]
+
+  signer:
+    image: ghcr.io/teesql/darkbox-signer:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"   # on the mesh; reachable by the bridge at <signer_mesh_ip>:8099
+    depends_on: [ sidecar ]
+    volumes:
+      - agentsock:/var/run/attestmesh:ro
+    environment:
+      - PORT=8099
+      # Withdrawal-auth key — sealed env for now (KMS-derive via tappd is v2).
+      - SIGNER_PRIVATE_KEY=${SIGNER_PRIVATE_KEY}
+      # Shared secret the bridge must present (bridge sets the same value).
+      - SIGNER_BRIDGE_TOKEN=${SIGNER_BRIDGE_TOKEN}
+      - PUBLIC_CHAIN_ID=${PUBLIC_CHAIN_ID}
+      - BRIDGE_ADDRESS=${BRIDGE_ADDRESS}
+      - GAME_ID=${GAME_ID}
+      - AUTH_TTL_SECONDS=86400
+      # Whole-value passthrough from the sealed -e file (overseer fills the IPs),
+      # so the compose hash stays stable. Burn-verify is over the mesh (core), only
+      # exercised when withdrawals are enabled (demo: locked → dormant). PUBLIC_RPC
+      # is Base mainnet (egress, for nonce reads).
+      - BURN_VERIFY_URL=${BURN_VERIFY_URL}
+      - PUBLIC_RPC_URL=${PUBLIC_RPC_URL}
+
+volumes:
+  agentsock:

@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import { apiRoutes } from "./routes/api.js";
+import { publicProxyRoutes } from "./routes/publicProxy.js";
 import { config } from "./config.js";
 
 export async function buildServer() {
@@ -22,6 +23,10 @@ export async function buildServer() {
         : "disabled",
     withdrawalsEnabled: config.withdrawalsEnabled,
   }));
+
+  // Read-only public spectator data (indexer /public/*) over the single public
+  // edge — unauthenticated, registered outside the auth gate.
+  await app.register(publicProxyRoutes);
 
   // All authenticated player endpoints live under the encapsulated auth gate.
   await app.register(apiRoutes);

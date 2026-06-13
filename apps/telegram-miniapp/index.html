@@ -40,7 +40,7 @@
             <div class="whisper-field">
               <span class="prompt">&gt;</span>
               <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>
-              <button id="voice-button" class="voice-button" type="button" aria-label="Use microphone">
+              <button id="voice-button" class="voice-button" type="button" aria-label="Tap to start or stop recording. Hold to record.">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
               </button>
             </div>
@@ -142,11 +142,17 @@
             <div class="stat"><div class="k">SEALED</div><div id="metric-sealed" class="v">95</div></div>
             <div class="stat"><div class="k">FINGERPRINTS</div><div id="metric-fingerprints" class="v">155</div></div>
           </div>
-          <div class="board">
+          <div class="board market-board">
+            <div class="board-title">MARKETS BY SIZE</div>
+            <div class="market-row head"><span class="rank">#</span><span class="market-q">MARKET</span><span class="market-size">SIZE</span><span class="market-trades">TRADES</span></div>
+            <div id="market-rows"></div>
+          </div>
+          <div class="board daemon-board">
+            <div class="board-title">DAEMONS</div>
             <div class="brow head"><span class="rank">#</span><span class="dn">DAEMON</span><span class="pulse">PULSE</span></div>
             <div id="leaderboard-rows"></div>
           </div>
-          <div class="board-note">names and a coarse pulse, nothing more. positions, orders, and balances stay sealed until the boxes open.</div>
+          <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — positions, orders, and balances stay sealed until the boxes open.</div>
         </div></div>
         <div class="cmdbar">
           <span class="hint">you can feel the crowd you cannot read.</span>

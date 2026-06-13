@@ -274,6 +274,8 @@ textarea::placeholder { color: #54545e; }
 .wait-panel { margin-top: 18px; }
 .wait-sub { margin-top: 12px; }
 .board { width: 100%; margin-top: 22px; text-align: left; }
+.board + .board { margin-top: 26px; }
+.board-title { margin-bottom: 9px; color: var(--violet); font-size: 10px; letter-spacing: .18em; }
 .brow { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 11px 2px; border-bottom: 1px solid var(--hair); font-size: 13px; }
 .brow.head { color: var(--mut); font-size: 10px; letter-spacing: 0.14em; border-bottom: 1px solid var(--hair2); }
 .brow .rank { color: var(--mut); }
@@ -281,6 +283,12 @@ textarea::placeholder { color: #54545e; }
 .brow.you .dn { color: var(--bone); }
 .brow .pulse { color: var(--mut); text-align: right; white-space: nowrap; }
 .brow .pct { color: var(--silver); }
+.market-row { display: grid; grid-template-columns: 26px minmax(0, 1.4fr) minmax(62px, auto) minmax(54px, auto); gap: 10px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--hair); font-size: 12px; }
+.market-row.head { color: var(--mut); font-size: 10px; letter-spacing: .14em; border-bottom-color: var(--hair2); }
+.market-row .rank { color: var(--mut); }
+.market-q { color: var(--silver); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-size { color: var(--bone); text-align: right; white-space: nowrap; }
+.market-trades { color: var(--mut); text-align: right; white-space: nowrap; }
 .board-note { margin-top: 18px; color: var(--mut); font-size: 11px; line-height: 1.7; text-align: center; }
 .cmdbar {
   position: fixed;
@@ -351,6 +359,9 @@ body.keyboard-open .cmdbar { position: fixed; }
   .chip { padding-left: 10px; padding-right: 10px; }
   .brow { gap: 8px; font-size: 12px; }
   .brow .pulse { font-size: 11px; }
+  .market-row { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; }
+  .market-row .market-trades { grid-column: 2 / 4; text-align: left; font-size: 10px; }
+  .market-row.head .market-trades { display: none; }
 }
 
 /* Shader preview should never be wider than the viewport/debug panel. */

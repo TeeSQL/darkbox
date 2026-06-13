@@ -46,8 +46,11 @@
   .whisper{margin-top:28px;width:100%;text-align:left}
   .whisper-field{display:flex;align-items:center;gap:13px;border-bottom:1px solid var(--hair2);padding:15px 4px}
   .whisper-field .prompt{color:var(--violet);font-size:16px}
-  .whisper-field input{flex:1;background:transparent;border:none;outline:none;color:var(--silver);font-family:var(--mono);font-size:16px}
-  .whisper-field input::placeholder{color:#54545e}
+  .whisper-field input,.whisper-field textarea{flex:1;background:transparent;border:none;outline:none;color:var(--silver);font-family:var(--mono);font-size:16px;resize:none;min-height:28px;line-height:1.45}
+  .whisper-field input::placeholder,.whisper-field textarea::placeholder{color:#54545e}
+  .voice-button{width:38px;height:38px;border:1px solid rgba(231,227,217,.18);border-radius:999px;background:rgba(255,255,255,.035);color:#8a8a96;display:grid;place-items:center;cursor:pointer;transition:transform .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease}
+  .voice-button:hover,.voice-button:focus-visible{color:var(--bone);border-color:rgba(139,123,255,.58);box-shadow:0 0 28px rgba(139,123,255,.20);transform:translateY(-1px)}
+  .voice-button.listening{color:var(--hot);border-color:rgba(255,74,126,.62);box-shadow:0 0 28px rgba(255,74,126,.30)}
 
   .steps{width:100%;text-align:left;margin-top:26px;border-top:1px solid var(--hair)}
   .step{display:flex;gap:16px;align-items:baseline;padding:13px 2px;border-bottom:1px solid var(--hair);font-size:13px}
@@ -183,15 +186,17 @@
     <div class="whisper">
       <div class="whisper-field">
         <span class="prompt">&gt;</span>
-        <input type="text" placeholder="say it in a sentence…" aria-label="whisper" />
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a8a96" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+        <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence…" aria-label="whisper"></textarea>
+        <button id="voice-button" class="voice-button" type="button" aria-label="Use microphone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+        </button>
       </div>
     </div>
-    <div class="sub">read it back. you can't unsay it.<br><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
+    <div id="whisper-status" class="sub">read it back. you can't unsay it.<br><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
   </div></div>
   <div class="cmdbar">
     <span class="hint">&#8629; to seal</span>
-    <div class="actions"><button class="btn-primary" data-go="v-seal">seal the whisper <span class="ret">&#8629;</span></button></div>
+    <div class="actions"><button id="seal-whisper" class="btn-primary" data-go="v-seal">seal the whisper <span class="ret">&#8629;</span></button></div>
   </div>
 </section>
 
@@ -300,16 +305,7 @@
   </div>
 </section>
 
-<script>
-  document.querySelectorAll('[data-go]').forEach(function(b){
-    b.addEventListener('click',function(){
-      var id=b.getAttribute('data-go');
-      document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active');});
-      var t=document.getElementById(id);
-      if(t){t.classList.add('active');window.scrollTo(0,0);}
-    });
-  });
-</script>
 <script src="/src/daemon-reveal.ts" type="module"></script>
+<script src="/flow.js?v=20260613-web-mic" type="module"></script>
 </body>
 </html>

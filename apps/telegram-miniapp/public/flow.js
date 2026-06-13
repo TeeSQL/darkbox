@@ -199,14 +199,20 @@ function handleInput() {
   renderPrivateState();
 }
 
-async function requestMicFallback() {
+async function requestMicAccess(allowedText) {
   if (!navigator.mediaDevices?.getUserMedia) {
     if (whisperStatus) whisperStatus.textContent = 'voice unavailable here. type the whisper.';
-    return;
+    return false;
   }
+  if (whisperStatus) whisperStatus.textContent = 'asking for microphone access…';
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   stream.getTracks().forEach((track) => track.stop());
-  if (whisperStatus) whisperStatus.textContent = 'mic allowed. speech transcription is unavailable here. type the final whisper.';
+  if (allowedText && whisperStatus) whisperStatus.textContent = allowedText;
+  return true;
+}
+
+async function requestMicFallback() {
+  await requestMicAccess('mic allowed. speech transcription is unavailable here. type the final whisper.');
 }
 
 async function startVoice(event) {
@@ -214,6 +220,13 @@ async function startVoice(event) {
   if (!SpeechRecognition) {
     try { await requestMicFallback(); }
     catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
+    return;
+  }
+  try {
+    const allowed = await requestMicAccess('mic allowed. listening next…');
+    if (!allowed) return;
+  } catch (_) {
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
     return;
   }
   if (!recognition) {

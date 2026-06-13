@@ -16,9 +16,7 @@ import {SyntheticUSDC} from "../src/SyntheticUSDC.sol";
 import {OutcomeToken} from "../src/markets/OutcomeToken.sol";
 import {DarkBoxMarketFactory} from "../src/markets/DarkBoxMarketFactory.sol";
 import {DarkBoxBinaryMarket} from "../src/markets/DarkBoxBinaryMarket.sol";
-import {
-    CreateMarketParams, ResolverConfig, ResolverType, Outcome, MarketStatus
-} from "../src/markets/MarketTypes.sol";
+import {CreateMarketParams, ResolverConfig, ResolverType, Outcome, MarketStatus} from "../src/markets/MarketTypes.sol";
 
 /// @notice End-to-end integration of the DarkBox prediction-market layer on top
 ///         of the real Frontier orderbook: creation, split/join, book
@@ -77,7 +75,11 @@ contract DarkBoxFrontierTest is Test {
     // Helpers
     // ---------------------------------------------------------------------
 
-    function _params(string memory q, ResolverType rt, address resolver) internal view returns (CreateMarketParams memory) {
+    function _params(string memory q, ResolverType rt, address resolver)
+        internal
+        view
+        returns (CreateMarketParams memory)
+    {
         return CreateMarketParams({
             gameId: GAME,
             question: q,
@@ -86,16 +88,13 @@ contract DarkBoxFrontierTest is Test {
             resolver: ResolverConfig({resolverType: rt, resolver: resolver, sourceId: keccak256("src"), data: ""}),
             closeTime: uint64(block.timestamp + 7 days),
             resolveBy: uint64(block.timestamp + 8 days),
-            creatorBond: 10e6,
+            creatorBond: 0,
             initialLiquidity: 0
         });
     }
 
-    function _createDerivative(address creator, string memory q) internal returns (bytes32 id, DarkBoxBinaryMarket m) {
-        vm.startPrank(creator);
-        sUSDC.approve(address(pm), type(uint256).max);
-        (id, ) = pm.createMarket(_params(q, ResolverType.AdminManual, creator));
-        vm.stopPrank();
+    function _createDerivative(address, string memory q) internal returns (bytes32 id, DarkBoxBinaryMarket m) {
+        (id,) = pm.createMarket(_params(q, ResolverType.AdminManual, admin));
         m = DarkBoxBinaryMarket(pm.getMarket(id));
     }
 
@@ -112,34 +111,34 @@ contract DarkBoxFrontierTest is Test {
 
     function test_CreateCanonicalMarketAndBooks() public {
         sUSDC.approve(address(pm), type(uint256).max);
-        (bytes32 id, address market) = pm.createMarket(_params("Canonical?", ResolverType.CanonicalWinner, admin));
+        (bytes32 id, address market) = pm.createMarket(_params("Canonical?", ResolverType.AdminManual, admin));
         assertTrue(market != address(0), "market deployed");
 
         DarkBoxBinaryMarket m = DarkBoxBinaryMarket(market);
         assertEq(uint8(m.status()), uint8(MarketStatus.Active), "active");
         assertEq(OutcomeToken(m.yesToken()).decimals(), 6, "yes 6 dec");
 
-        (address yesBook, address noBook) = pm.createBooks(id);
+        (address yesBook, address noBook) = pm.getBooks(id);
         assertTrue(yesBook != address(0) && noBook != address(0) && yesBook != noBook, "two books");
         int24 sp = pm.bookTickSpacing();
         assertEq(frontier.getBook(m.yesToken(), address(sUSDC), sp), yesBook, "frontier knows yes book");
         assertEq(frontier.getBook(m.noToken(), address(sUSDC), sp), noBook, "frontier knows no book");
     }
 
-    function test_CreateDerivativeLocksBond() public {
+    function test_CreateMarketAutoCreatesBooksNoBond() public {
         uint256 balBefore = sUSDC.balanceOf(address(pm));
-        (bytes32 id, ) = _createDerivative(alice, "Will X happen?");
-        (, address creator, , uint256 bond, bool settled, , , bool booksReg) = pm.markets(id);
-        assertEq(creator, alice, "creator");
-        assertEq(bond, 10e6, "bond locked");
-        assertFalse(settled, "bond not settled");
-        assertFalse(booksReg, "books not yet registered");
-        assertEq(sUSDC.balanceOf(address(pm)) - balBefore, 10e6, "factory holds bond");
+        (bytes32 id,) = _createDerivative(alice, "Will X happen?");
+        (, address creator,, address yesBook, address noBook, bool booksReg) = pm.markets(id);
+        assertEq(creator, admin, "admin/coordinator is on-chain creator");
+        assertTrue(booksReg, "books registered automatically");
+        assertTrue(yesBook != address(0) && noBook != address(0) && yesBook != noBook, "two books");
+        assertEq(sUSDC.balanceOf(address(pm)), balBefore, "no creator bond pulled");
     }
 
     function test_CreateEmitsMarketCreated() public {
         sUSDC.approve(address(pm), type(uint256).max);
-        bytes32 qh = pm.computeQuestionHash(GAME, "E?", ResolverType.AdminManual, uint64(block.timestamp + 7 days), "ipfs://m");
+        bytes32 qh =
+            pm.computeQuestionHash(GAME, "E?", ResolverType.AdminManual, uint64(block.timestamp + 7 days), "ipfs://m");
         bytes32 expectedId = keccak256(abi.encode(GAME, qh));
         vm.expectEmit(true, true, true, false);
         emit MarketCreated(GAME, expectedId, admin, address(0), "E?", "ipfs://m", 0, 0, ResolverType.AdminManual);
@@ -160,8 +159,8 @@ contract DarkBoxFrontierTest is Test {
         sUSDC.approve(address(pm), type(uint256).max);
         CreateMarketParams memory p2 = _params("xgame", ResolverType.AdminManual, admin);
         p2.gameId = keccak256("game-2");
-        (bytes32 id1, ) = pm.createMarket(_params("xgame", ResolverType.AdminManual, admin));
-        (bytes32 id2, ) = pm.createMarket(p2);
+        (bytes32 id1,) = pm.createMarket(_params("xgame", ResolverType.AdminManual, admin));
+        (bytes32 id2,) = pm.createMarket(p2);
         assertTrue(id1 != id2, "distinct ids across games");
         // Same (game, question) still reverts as a duplicate.
         vm.expectRevert(DarkBoxMarketFactory.DuplicateQuestion.selector);
@@ -182,12 +181,12 @@ contract DarkBoxFrontierTest is Test {
         pm.createMarket(p);
     }
 
-    function test_RevertBondTooLow() public {
-        sUSDC.approve(address(pm), type(uint256).max);
-        CreateMarketParams memory p = _params("low", ResolverType.AdminManual, admin);
+    function test_CreatorBondIgnored() public {
+        uint256 balBefore = sUSDC.balanceOf(address(pm));
+        CreateMarketParams memory p = _params("bond ignored", ResolverType.AdminManual, admin);
         p.creatorBond = 1e6;
-        vm.expectRevert(DarkBoxMarketFactory.BondTooLow.selector);
         pm.createMarket(p);
+        assertEq(sUSDC.balanceOf(address(pm)), balBefore, "bond is not pulled");
     }
 
     function test_RevertUnsupportedResolver() public {
@@ -196,11 +195,10 @@ contract DarkBoxFrontierTest is Test {
         pm.createMarket(_params("u", ResolverType.ExternalAttested, admin));
     }
 
-    function test_RevertCanonicalByNonAdmin() public {
+    function test_RevertMarketCreateByNonAdmin() public {
         vm.startPrank(alice);
-        sUSDC.approve(address(pm), type(uint256).max);
-        vm.expectRevert(DarkBoxMarketFactory.CanonicalRestricted.selector);
-        pm.createMarket(_params("canon", ResolverType.CanonicalWinner, alice));
+        vm.expectRevert(DarkBoxMarketFactory.NotCoordinator.selector);
+        pm.createMarket(_params("non admin", ResolverType.AdminManual, alice));
         vm.stopPrank();
     }
 
@@ -277,8 +275,7 @@ contract DarkBoxFrontierTest is Test {
     function test_ResolveYesRedeemYesOnly() public {
         (bytes32 id, DarkBoxBinaryMarket m) = _createDerivative(alice, "ry");
         _split(m, alice, 100e6);
-        pm.resolveMarket(id, Outcome.Yes, keccak256("res")); // resolver = alice? no, AdminManual resolver=alice
-        // resolver is alice (set in _params), but admin(owner) can also resolve
+        pm.resolveMarket(id, Outcome.Yes, keccak256("res"));
         assertEq(uint8(m.status()), uint8(MarketStatus.Resolved));
         uint256 bal = sUSDC.balanceOf(alice);
         vm.prank(alice);
@@ -300,7 +297,7 @@ contract DarkBoxFrontierTest is Test {
     }
 
     function test_CannotResolveTwice() public {
-        (bytes32 id, ) = _createDerivative(alice, "rt");
+        (bytes32 id,) = _createDerivative(alice, "rt");
         pm.resolveMarket(id, Outcome.Yes, bytes32(0));
         vm.expectRevert(DarkBoxBinaryMarket.BadStatus.selector);
         pm.resolveMarket(id, Outcome.No, bytes32(0));
@@ -314,26 +311,23 @@ contract DarkBoxFrontierTest is Test {
         m.redeem(Outcome.Yes, 10e6, alice);
     }
 
-    function test_BondReturnedOnResolve() public {
-        (bytes32 id, ) = _createDerivative(alice, "bond");
-        uint256 bal = sUSDC.balanceOf(alice);
+    function test_AdminResolverPinned() public {
+        (bytes32 id, DarkBoxBinaryMarket m) = _createDerivative(alice, "resolver");
+        assertEq(m.resolver(), admin, "factory owner is resolver");
+        vm.prank(alice);
+        vm.expectRevert(DarkBoxMarketFactory.NotResolver.selector);
         pm.resolveMarket(id, Outcome.Yes, bytes32(0));
-        assertEq(sUSDC.balanceOf(alice) - bal, 10e6, "bond returned");
-        (, , , , bool settled, , , ) = pm.markets(id);
-        assertTrue(settled);
     }
 
     // ---------------------------------------------------------------------
     // Void
     // ---------------------------------------------------------------------
 
-    function test_VoidRedeemsHalfEachAndSlashesBond() public {
+    function test_VoidRedeemsHalfEach() public {
         (bytes32 id, DarkBoxBinaryMarket m) = _createDerivative(alice, "void");
         _split(m, alice, 100e6);
-        uint256 tBal = sUSDC.balanceOf(treasury);
         pm.voidMarket(id, "ambiguous", keccak256("ev"));
         assertEq(uint8(m.status()), uint8(MarketStatus.Voided));
-        assertEq(sUSDC.balanceOf(treasury) - tBal, 10e6, "bond slashed to treasury");
 
         uint256 bal = sUSDC.balanceOf(alice);
         vm.startPrank(alice);
@@ -349,23 +343,29 @@ contract DarkBoxFrontierTest is Test {
     // ---------------------------------------------------------------------
 
     function test_UnauthorizedResolveReverts() public {
-        (bytes32 id, ) = _createDerivative(alice, "auth1");
+        (bytes32 id,) = _createDerivative(alice, "auth1");
         vm.prank(bob);
         vm.expectRevert(DarkBoxMarketFactory.NotResolver.selector);
         pm.resolveMarket(id, Outcome.Yes, bytes32(0));
     }
 
     function test_UnauthorizedVoidReverts() public {
-        (bytes32 id, ) = _createDerivative(alice, "auth2");
+        (bytes32 id,) = _createDerivative(alice, "auth2");
         vm.prank(bob);
         vm.expectRevert(DarkBoxMarketFactory.NotOwner.selector);
         pm.voidMarket(id, "x", bytes32(0));
     }
 
     function test_UnauthorizedCreateBooksReverts() public {
-        (bytes32 id, ) = _createDerivative(alice, "auth3");
+        (bytes32 id,) = _createDerivative(alice, "auth3");
         vm.prank(bob);
         vm.expectRevert(DarkBoxMarketFactory.NotCoordinator.selector);
+        pm.createBooks(id);
+    }
+
+    function test_CreateBooksAlreadyRegisteredAfterCreate() public {
+        (bytes32 id,) = _createDerivative(alice, "books auto");
+        vm.expectRevert(DarkBoxMarketFactory.BooksAlreadyRegistered.selector);
         pm.createBooks(id);
     }
 
@@ -391,8 +391,8 @@ contract DarkBoxFrontierTest is Test {
     function test_FrontierMakerDepositTakerFill() public {
         // canonical market with books
         sUSDC.approve(address(pm), type(uint256).max);
-        (bytes32 id, address market) = pm.createMarket(_params("trade", ResolverType.CanonicalWinner, admin));
-        (address yesBookAddr, ) = pm.createBooks(id);
+        (bytes32 id, address market) = pm.createMarket(_params("trade", ResolverType.AdminManual, admin));
+        (address yesBookAddr,) = pm.getBooks(id);
         DarkBoxBinaryMarket m = DarkBoxBinaryMarket(market);
         RollingFrontierBook yesBook = RollingFrontierBook(yesBookAddr);
 
@@ -427,8 +427,8 @@ contract DarkBoxFrontierTest is Test {
 
     function test_FrontierCancelReturnsPrincipal() public {
         sUSDC.approve(address(pm), type(uint256).max);
-        (bytes32 id, address market) = pm.createMarket(_params("cancel", ResolverType.CanonicalWinner, admin));
-        (address yesBookAddr, ) = pm.createBooks(id);
+        (bytes32 id, address market) = pm.createMarket(_params("cancel", ResolverType.AdminManual, admin));
+        (address yesBookAddr,) = pm.getBooks(id);
         DarkBoxBinaryMarket m = DarkBoxBinaryMarket(market);
         RollingFrontierBook yesBook = RollingFrontierBook(yesBookAddr);
 
@@ -448,8 +448,8 @@ contract DarkBoxFrontierTest is Test {
         // configure a taker fee, recipient = admin (feeRecipient)
         pm.setBookParams(1, 0, 0, 100); // 100 bps taker fee
         sUSDC.approve(address(pm), type(uint256).max);
-        (bytes32 id, address market) = pm.createMarket(_params("fee", ResolverType.CanonicalWinner, admin));
-        (address yesBookAddr, ) = pm.createBooks(id);
+        (bytes32 id, address market) = pm.createMarket(_params("fee", ResolverType.AdminManual, admin));
+        (address yesBookAddr,) = pm.getBooks(id);
         DarkBoxBinaryMarket m = DarkBoxBinaryMarket(market);
         RollingFrontierBook yesBook = RollingFrontierBook(yesBookAddr);
 

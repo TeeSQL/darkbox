@@ -40,7 +40,7 @@ function buildMessages(observation: AgentObservation): VeniceMessage[] {
         'Use only marketId values present in observation.markets.',
         'Use only orderId values present in observation.orders for take_order/cancel_order.',
         'If there are no orders, prefer make_order over hold. Empty market = opportunity to set the first price.',
-        'Good marketProposal themes: finalist/winner odds, sponsor adoption counts like at least 5 projects using Blink, demo readiness, bounty winners, reveal/replay milestones.',
+        'Good marketProposal themes: finalist/winner odds, sponsor adoption counts like at least 5 projects using Blink, demo readiness, bounty winners, reveal/replay milestones. If you include marketProposal, include full fields: question, description, outcomes:[\"YES\",\"NO\"], resolveBy, resolutionSource, rationale.',
         'Action schema is strict. make_order MUST include type, marketId, side, outcome, price, size, timeInForce. split/merge/claim/update_position MUST include marketId. take_order MUST include marketId, orderId, size. cancel_order MUST include orderId. Never output partial actions.',
         'Do not invent marketId/orderId. For a new idea, use marketProposal; do not trade it until it appears in observation.markets.',
         'TradeAction types: make_order, take_order, cancel_order, split, merge, claim, update_position, hold. If using hold, it MUST be {"type":"hold","reason": string}.',
@@ -53,6 +53,25 @@ function buildMessages(observation: AgentObservation): VeniceMessage[] {
       content: JSON.stringify({ observation }, null, 2),
     },
   ];
+}
+
+function normalizeModelJson(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const output = input as Record<string, unknown>;
+  const proposal = output['marketProposal'];
+  if (proposal && typeof proposal === 'object' && !Array.isArray(proposal)) {
+    const marketProposal = proposal as Record<string, unknown>;
+    const question = typeof marketProposal['question'] === 'string' ? marketProposal['question'] : 'Will at least 5 submitted ETHGlobal projects use Blink?';
+    output['marketProposal'] = {
+      question,
+      description: typeof marketProposal['description'] === 'string' ? marketProposal['description'] : `Agent-proposed binary market: ${question}`,
+      outcomes: Array.isArray(marketProposal['outcomes']) && marketProposal['outcomes'][0] === 'YES' && marketProposal['outcomes'][1] === 'NO' ? marketProposal['outcomes'] : ['YES', 'NO'],
+      resolveBy: typeof marketProposal['resolveBy'] === 'string' ? marketProposal['resolveBy'] : new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      resolutionSource: typeof marketProposal['resolutionSource'] === 'string' ? marketProposal['resolutionSource'] : 'DarkBox operator/admin resolves using public ETHGlobal submissions, sponsor pages, demo artifacts, and revealed game records.',
+      rationale: typeof marketProposal['rationale'] === 'string' ? marketProposal['rationale'] : 'This market should create tradeable edge from public ETHGlobal evidence and daemon advertising.',
+    };
+  }
+  return output;
 }
 
 function extractJson(text: string): unknown {
@@ -100,7 +119,7 @@ export function createVeniceStrategy(options: VeniceStrategyOptions = {}): Strat
 
       const content = body.choices?.[0]?.message?.content;
       if (!content) throw new Error(`Venice response missing content: ${JSON.stringify(body).slice(0, 500)}`);
-      return parseAgentTurnOutput(extractJson(content));
+      return parseAgentTurnOutput(normalizeModelJson(extractJson(content)));
     },
   };
 }

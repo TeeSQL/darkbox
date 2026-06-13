@@ -2020,3 +2020,712 @@ textarea::-webkit-scrollbar { display: none; }
     top: 65% !important;
   }
 }
+
+/* Internal bestiary must behave like a normal scrollable debug/gallery page. */
+html:has(body.bestiary-page),
+body.bestiary-page {
+  width: 100%;
+  min-height: 100%;
+  height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.bestiary-page .bestiary-shell {
+  position: relative !important;
+  display: block !important;
+  min-height: 100dvh;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.bestiary-page .bestiary-gallery {
+  position: relative !important;
+  inset: auto !important;
+  display: block !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+  touch-action: pan-y !important;
+}
+
+body.bestiary-page .daemon-grid {
+  overflow: visible !important;
+}
+
+body.bestiary-page .daemon-preview {
+  position: relative !important;
+  overflow: visible !important;
+  scroll-margin-top: 18px;
+}
+
+body.bestiary-page .daemon-stage {
+  overflow: hidden !important;
+}
+
+@media (max-width: 720px) {
+  body.bestiary-page .daemon-gallery {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    max-height: none !important;
+  }
+
+  body.bestiary-page .bestiary-shell {
+    padding: 10px;
+  }
+
+  body.bestiary-page .daemon-preview {
+    min-height: auto;
+  }
+}
+
+/* Telegram WebView-safe scroll fix: no :has(), class is on <html>. */
+html.bestiary-html,
+html.bestiary-html body,
+html.bestiary-html body.bestiary-page {
+  position: static !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+html.bestiary-html body.bestiary-page {
+  display: block !important;
+  background: #020203 !important;
+}
+
+html.bestiary-html .bestiary-shell,
+html.bestiary-html .bestiary-gallery,
+html.bestiary-html .daemon-preview,
+html.bestiary-html .daemon-grid {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  width: min(1420px, 100%) !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+  touch-action: pan-y !important;
+}
+
+html.bestiary-html .daemon-grid {
+  width: 100% !important;
+}
+
+html.bestiary-html .daemon-stage {
+  position: relative !important;
+  overflow: hidden !important;
+  touch-action: pan-y !important;
+}
+
+html.bestiary-html .daemon-stage canvas {
+  pointer-events: none !important;
+}
+
+/* =========================================================
+   DAEMONHALL COMPONENT SYSTEM — canonical sweep
+   Button/card/chip/background styles live here. This block is
+   intentionally final so older one-off screen styles cannot win.
+   ========================================================= */
+:root {
+  --dh-bg: #0a0a0f;
+  --dh-panel: #101016;
+  --dh-panel-border: #24242e;
+  --dh-primary-bg: #e7e3d9;
+  --dh-primary-text: #0a0a0f;
+  --dh-primary-hover: #ffffff;
+  --dh-secondary-bg: #16161d;
+  --dh-secondary-border: #2b2b35;
+  --dh-secondary-text: #d7d7df;
+  --dh-secondary-hover: #e7e3d9;
+  --dh-muted: #8a8a96;
+  --dh-violet: #8b7bff;
+}
+html,
+body,
+.stage {
+  background: var(--dh-bg) !important;
+}
+.stage::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.45'/></svg>") !important;
+}
+.stage::after {
+  background: none !important;
+}
+.halo,
+.approach-light {
+  background: none !important;
+  box-shadow: none !important;
+}
+.stage[data-loop="door"] .halo {
+  background: radial-gradient(42% 36% at 50% 43%, rgba(139,123,255,0.18), transparent 72%) !important;
+}
+.stage[data-loop="door"] .approach-light {
+  background: linear-gradient(90deg, transparent, rgba(215,215,223,0.36), transparent) !important;
+  box-shadow: 0 0 32px rgba(139,123,255,0.08) !important;
+}
+.terminal-frame,
+.answer-seal,
+.pact-promises p,
+.fingerprint-card,
+.daemon-proof,
+.wait-card,
+.private-card,
+.hall-metrics p,
+.leaderboard,
+.daemon-reveal .portrait-form,
+.hall-wall,
+.stage > .stage-hall-wall,
+.modal-close {
+  background: var(--dh-panel) !important;
+  border: 1px solid var(--dh-panel-border) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.terminal-frame::before,
+.terminal-frame::after,
+.terminal-frame span,
+.daemon-reveal .portrait-form::before,
+.daemon-reveal .portrait-form::after,
+.daemon-reveal .portrait-glass,
+.daemon-reveal .portrait-glass::before,
+.daemon-reveal .portrait-glass::after,
+.hall-wall::after {
+  display: none !important;
+}
+.stage > .stage-hall-wall,
+.stage[data-loop="wait-room"].hall-open .hall-wall {
+  background: var(--dh-bg) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.stage > .stage-hall-wall .hall-wall-inner {
+  background: transparent !important;
+}
+.ritual-action,
+.continue-button,
+.primary-ritual,
+.bind-preview,
+.wall-button,
+.ghost-ritual,
+.modal-close {
+  appearance: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 44px !important;
+  padding: 12px 25px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--dh-secondary-border) !important;
+  background: var(--dh-secondary-bg) !important;
+  color: var(--dh-secondary-text) !important;
+  box-shadow: none !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.11em !important;
+  text-transform: lowercase !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease !important;
+}
+.ritual-action:hover,
+.continue-button:hover,
+.primary-ritual:hover,
+.bind-preview:hover,
+.wall-button:hover,
+.ghost-ritual:hover,
+.modal-close:hover {
+  border-color: var(--dh-secondary-text) !important;
+  color: var(--dh-secondary-hover) !important;
+  background: var(--dh-secondary-bg) !important;
+  box-shadow: none !important;
+}
+.continue-button,
+.primary-ritual,
+.stage[data-loop="terminal"] #continue,
+.stage[data-loop="threshold-copy"] #continue,
+.stage[data-loop="pact"] #seal-pact,
+.stage[data-loop="daemon-reveal"] #send-daemon {
+  padding: 13px 26px !important;
+  border-color: var(--dh-primary-bg) !important;
+  background: var(--dh-primary-bg) !important;
+  color: var(--dh-primary-text) !important;
+}
+.continue-button:hover,
+.primary-ritual:hover,
+.stage[data-loop="terminal"] #continue:hover,
+.stage[data-loop="threshold-copy"] #continue:hover,
+.stage[data-loop="pact"] #seal-pact:hover,
+.stage[data-loop="daemon-reveal"] #send-daemon:hover {
+  background: var(--dh-primary-hover) !important;
+  border-color: var(--dh-primary-hover) !important;
+  color: var(--dh-primary-text) !important;
+  box-shadow: 0 0 22px rgba(231,227,217,0.15) !important;
+}
+.continue-button:not(.ready) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.continue-button.ready {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.action-dock {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.stake-choice {
+  appearance: none !important;
+  border: 1px solid var(--dh-secondary-border) !important;
+  color: var(--dh-muted) !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+  padding: 8px 15px !important;
+  box-shadow: none !important;
+  font-family: var(--mono) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+}
+.stake-choice.active,
+.stake-choice[aria-pressed="true"] {
+  border-color: var(--dh-secondary-text) !important;
+  color: var(--dh-secondary-text) !important;
+  background: rgba(215,215,223,.07) !important;
+  box-shadow: none !important;
+}
+.stake-choice:hover {
+  border-color: var(--dh-secondary-text) !important;
+  color: var(--dh-secondary-text) !important;
+  background: transparent !important;
+}
+.fingerprint-card span,
+.daemon-proof span,
+.answer-seal span,
+.privacy-cue,
+.whisper-status,
+.whisper-label,
+.pact-promises span,
+.leaderboard-rows .is-user strong,
+.leaderboard-rows .is-user em,
+#fingerprint,
+#reveal-fingerprint,
+#sealed-name,
+#whisper-status {
+  color: var(--dh-violet) !important;
+}
+.wait-orbit,
+.presence,
+.presence-ring,
+.daemon-form {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.presence::before,
+.presence::after,
+.wait-orbit span {
+  background: var(--dh-panel-border) !important;
+  box-shadow: none !important;
+}
+@media (max-width: 760px) {
+  .ritual-action,
+  .continue-button,
+  .primary-ritual,
+  .bind-preview,
+  .wall-button,
+  .ghost-ritual {
+    width: auto !important;
+    max-width: calc(100vw - 48px) !important;
+  }
+  .modal-close {
+    width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+  }
+}
+
+/* Component layout sweep: docks are normal flow, never absolute overlays. */
+.dark-answer .action-dock,
+.pact .action-dock,
+.daemon-reveal .action-dock,
+.wait-room .action-dock,
+.whisper .action-dock,
+.action-dock,
+.secondary-dock {
+  position: static !important;
+  inset: auto !important;
+  margin: 18px auto 0 !important;
+  transform: none !important;
+}
+.wait-room .action-dock,
+.pact .action-dock {
+  margin-top: 20px !important;
+}
+.wait-room .secondary-dock {
+  margin-top: 12px !important;
+}
+.pact,
+.wait-room,
+.daemon-reveal,
+.dark-answer {
+  gap: 0 !important;
+  overflow: visible !important;
+}
+.pact-promises,
+.wait-card,
+.private-card,
+.fingerprint-card,
+.daemon-proof,
+.hall-metrics,
+.leaderboard {
+  margin-bottom: 0 !important;
+}
+.whisper-row {
+  background: transparent !important;
+}
+.stage[data-loop="terminal"] .terminal,
+.stage[data-loop="threshold-copy"] .terminal {
+  background: transparent !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="pact"] .terminal,
+  .stage[data-loop="wait-room"] .terminal {
+    min-height: auto !important;
+  }
+  .pact,
+  .wait-room {
+    padding-bottom: 34px !important;
+  }
+}
+
+/* Component sweep correction: inner screens are panels only; no landing logo behind them. */
+.stage[data-loop="pact"] .door,
+.stage[data-loop="daemon-reveal"] .door,
+.stage[data-loop="wait-room"] .door,
+.stage[data-loop="pact"] .halo,
+.stage[data-loop="daemon-reveal"] .halo,
+.stage[data-loop="wait-room"] .halo,
+.stage[data-loop="pact"] .approach-light,
+.stage[data-loop="daemon-reveal"] .approach-light,
+.stage[data-loop="wait-room"] .approach-light {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.terminal-frame {
+  z-index: 0 !important;
+}
+.whisper,
+.dark-answer,
+.ritual-screen {
+  z-index: 2 !important;
+}
+.stage[data-loop="terminal"] .whisper {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+.whisper-label,
+textarea,
+textarea::placeholder,
+.whisper-status,
+.mic-button {
+  position: relative !important;
+  z-index: 3 !important;
+}
+.whisper-label {
+  color: #d7d7df !important;
+}
+textarea::placeholder {
+  color: rgba(215,215,223,0.72) !important;
+}
+.fingerprint-card,
+.daemon-proof,
+.answer-seal {
+  background: var(--dh-panel) !important;
+  border-color: var(--dh-panel-border) !important;
+}
+.fingerprint-card span,
+.daemon-proof span,
+.answer-seal span {
+  color: var(--dh-muted) !important;
+}
+.pact-promises span {
+  color: var(--dh-muted) !important;
+}
+#fingerprint,
+#reveal-fingerprint,
+#sealed-name,
+.privacy-cue,
+#whisper-status {
+  color: var(--dh-violet) !important;
+}
+
+/* Component sweep correction: terminal content is immediately readable, no delayed fade-to-blank. */
+.stage[data-loop="terminal"] .terminal,
+.stage[data-loop="threshold-copy"] .terminal {
+  opacity: 1 !important;
+}
+.stage[data-loop="terminal"] .whisper {
+  opacity: 1 !important;
+  transform: none !important;
+  transition-delay: 0ms !important;
+  transition-duration: 160ms !important;
+}
+.stage[data-loop="terminal"] .terminal-frame {
+  inset: 0 !important;
+  height: auto !important;
+  min-height: 100% !important;
+}
+.stage[data-loop="terminal"] .terminal-frame,
+.stage[data-loop="pact"] .terminal-frame,
+.stage[data-loop="wait-room"] .terminal-frame {
+  opacity: 1 !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .terminal {
+    min-height: 245px !important;
+  }
+}
+
+/* Hard reset old terminal slab behavior for componentized flow states. */
+.stage[data-loop="terminal"] .terminal-frame {
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+.stage[data-loop="pact"] .terminal-frame,
+.stage[data-loop="daemon-reveal"] .terminal-frame,
+.stage[data-loop="wait-room"] .terminal-frame {
+  display: none !important;
+}
+.stage[data-loop="terminal"] .terminal {
+  top: 64% !important;
+  min-height: 286px !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+.stage[data-loop="terminal"] .whisper {
+  display: block !important;
+  padding: 30px 22px 24px !important;
+  opacity: 1 !important;
+  color: var(--dh-secondary-text) !important;
+}
+.stage[data-loop="terminal"] .whisper-row {
+  border-bottom: 1px solid var(--dh-secondary-border) !important;
+  min-height: 48px !important;
+}
+.stage[data-loop="terminal"] textarea,
+.stage[data-loop="terminal"] textarea::placeholder,
+.stage[data-loop="terminal"] .mic-button,
+.stage[data-loop="terminal"] .whisper-label {
+  color: var(--dh-secondary-text) !important;
+  opacity: 1 !important;
+}
+.stage[data-loop="pact"] .terminal,
+.stage[data-loop="daemon-reveal"] .terminal,
+.stage[data-loop="wait-room"] .terminal {
+  top: 52% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+.stage[data-loop="pact"] .pact,
+.stage[data-loop="daemon-reveal"] .daemon-reveal,
+.stage[data-loop="wait-room"] .wait-room {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 24px 18px 28px !important;
+  opacity: 1 !important;
+  transform: none !important;
+  overflow: visible !important;
+}
+.stage[data-loop="pact"] .pact {
+  padding-top: 20px !important;
+}
+.pact-promises {
+  width: 100% !important;
+  gap: 8px !important;
+}
+.pact-promises p,
+.wait-card p,
+.hall-metrics p,
+.leaderboard-rows p,
+.fingerprint-card,
+.daemon-proof {
+  padding: 11px 12px !important;
+}
+.wait-card {
+  width: min(100%, 360px) !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+.stage[data-loop="wait-room"] .wait-note {
+  margin-top: 16px !important;
+}
+.stage[data-loop="pact"] .action-dock,
+.stage[data-loop="wait-room"] .action-dock {
+  margin-top: 18px !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="pact"] .terminal,
+  .stage[data-loop="wait-room"] .terminal {
+    top: 55% !important;
+    width: calc(100vw - 48px) !important;
+  }
+  .stage[data-loop="terminal"] .terminal {
+    top: 64% !important;
+    width: calc(100vw - 48px) !important;
+  }
+}
+
+/* Final component flow reset: no cross-screen ghosting, terminal itself is the panel. */
+.terminal-frame {
+  display: none !important;
+}
+.stage[data-loop="terminal"] .terminal {
+  background: var(--dh-panel) !important;
+  border: 1px solid var(--dh-panel-border) !important;
+  border-radius: 10px !important;
+  opacity: 1 !important;
+  transform: translateY(-50%) !important;
+  transition: none !important;
+}
+.stage[data-loop="pact"] .terminal,
+.stage[data-loop="daemon-reveal"] .terminal,
+.stage[data-loop="wait-room"] .terminal {
+  opacity: 1 !important;
+  transition: none !important;
+}
+.stage[data-loop="pact"] .whisper,
+.stage[data-loop="daemon-reveal"] .whisper,
+.stage[data-loop="wait-room"] .whisper,
+.stage[data-loop="terminal"] .pact,
+.stage[data-loop="terminal"] .daemon-reveal,
+.stage[data-loop="terminal"] .wait-room,
+.stage[data-loop="pact"] .wait-room,
+.stage[data-loop="pact"] .daemon-reveal,
+.stage[data-loop="wait-room"] .pact,
+.stage[data-loop="wait-room"] .daemon-reveal {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+.stage[data-loop="terminal"] .whisper,
+.stage[data-loop="pact"] .pact,
+.stage[data-loop="daemon-reveal"] .daemon-reveal,
+.stage[data-loop="wait-room"] .wait-room {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transition: none !important;
+}
+.stage[data-loop="pact"] .pact,
+.stage[data-loop="daemon-reveal"] .daemon-reveal,
+.stage[data-loop="wait-room"] .wait-room {
+  transform: none !important;
+}
+
+/* Final component semantics: one primary per active screen, no hidden copy leaking. */
+.stage[data-loop="terminal"] .status,
+.stage[data-loop="terminal"] .threshold-copy,
+.stage[data-loop="pact"] .status,
+.stage[data-loop="pact"] .threshold-copy,
+.stage[data-loop="wait-room"] .status,
+.stage[data-loop="wait-room"] .threshold-copy,
+.stage[data-loop="daemon-reveal"] .status,
+.stage[data-loop="daemon-reveal"] .threshold-copy {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.stage[data-loop="wait-room"] #open-hall-wall {
+  padding: 13px 26px !important;
+  border-color: var(--dh-primary-bg) !important;
+  background: var(--dh-primary-bg) !important;
+  color: var(--dh-primary-text) !important;
+}
+.stage[data-loop="wait-room"] #open-hall-wall:hover {
+  background: var(--dh-primary-hover) !important;
+  border-color: var(--dh-primary-hover) !important;
+  color: var(--dh-primary-text) !important;
+  box-shadow: 0 0 22px rgba(231,227,217,0.15) !important;
+}
+.stage[data-loop="wait-room"] #restart-flow {
+  background: var(--dh-secondary-bg) !important;
+  border-color: var(--dh-secondary-border) !important;
+  color: var(--dh-secondary-text) !important;
+}
+
+/* Final color compliance: no global texture; violet only for confidentiality/verify cues. */
+.stage::before,
+.stage::after {
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+html,
+body,
+.stage,
+.terminal,
+.stage[data-loop="pact"] .terminal,
+.stage[data-loop="wait-room"] .terminal,
+.stage[data-loop="daemon-reveal"] .terminal {
+  background-color: var(--dh-bg) !important;
+  background-image: none !important;
+}
+.leaderboard-rows .is-user strong,
+.leaderboard-rows .is-user em,
+.wait-card strong,
+.hall-metrics strong {
+  color: var(--dh-secondary-text) !important;
+  text-shadow: none !important;
+}
+#whisper-status,
+.privacy-cue,
+#fingerprint,
+#reveal-fingerprint,
+#sealed-name {
+  color: var(--dh-violet) !important;
+  text-shadow: none !important;
+}
+.fingerprint-card,
+.daemon-proof,
+.answer-seal {
+  box-shadow: none !important;
+}

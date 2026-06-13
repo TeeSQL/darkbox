@@ -804,3 +804,111 @@ textarea::-webkit-scrollbar { display: none; }
   .leaderboard-head { font-size: 10px; letter-spacing: 0.12em; }
   .wait-note { color: #9a94a4; font-size: 10px; }
 }
+@media (max-width: 760px) {
+  .stage[data-loop="pact"] .terminal {
+    top: 50%;
+    min-height: 620px;
+  }
+  .pact {
+    justify-content: flex-start;
+    padding-top: 34px;
+    padding-bottom: 22px;
+  }
+  .pact .ritual-kicker { font-size: 9px; }
+  .pact h2 {
+    margin-top: 7px;
+    font-size: 21px;
+    letter-spacing: 0.08em;
+  }
+  .pact-promises {
+    margin-top: 16px;
+    gap: 7px;
+  }
+  .pact-promises p {
+    padding: 7px 9px;
+    line-height: 1.35;
+    font-size: 10px;
+  }
+  .stake-row {
+    margin-top: 12px;
+    gap: 7px;
+  }
+  .stake-choice {
+    padding: 7px 10px;
+    font-size: 9px;
+  }
+  .fingerprint-card {
+    margin-top: 12px;
+    padding: 8px 10px;
+  }
+  .pact-note {
+    margin-top: 10px;
+    font-size: 9px;
+    line-height: 1.4;
+  }
+  .pact .primary-ritual {
+    margin-top: 14px;
+    padding-bottom: 10px;
+    color: #dedbe7;
+    border-color: rgba(215,215,223,0.62);
+  }
+}
+@media (max-width: 760px) {
+  .stage[data-loop="pact"] .terminal {
+    top: 50%;
+    min-height: 500px;
+  }
+  .pact {
+    padding: 24px 16px 78px;
+  }
+  .pact-promises {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 14px;
+  }
+  .pact-promises p {
+    display: grid;
+    gap: 4px;
+    padding: 8px;
+    min-height: 58px;
+    justify-content: start;
+    text-align: left;
+    font-size: 9px;
+    letter-spacing: 0.045em;
+  }
+  .pact-promises span { font-size: 8px; }
+  .pact .fingerprint-card {
+    margin-top: 10px;
+    padding: 7px 9px;
+    font-size: 9px;
+  }
+  .pact .pact-note { display: none; }
+  .pact .primary-ritual {
+    position: absolute;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    margin: 0;
+    min-width: 168px;
+    padding: 0 0 10px;
+    z-index: 8;
+  }
+}
+@media (max-width: 760px) {
+  .pact { padding-top: 48px; }
+  .pact-promises p { min-height: 52px; padding: 7px 8px; }
+  .pact .primary-ritual {
+    bottom: 24px;
+    min-width: 190px;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0 18px;
+    border: 1px solid rgba(215,215,223,0.38);
+    background: rgba(139,123,255,0.035);
+    box-shadow: 0 0 28px rgba(139,123,255,0.07);
+  }
+}
+@media (max-width: 760px) {
+  .pact .primary-ritual { white-space: nowrap; min-width: 220px; }
+}

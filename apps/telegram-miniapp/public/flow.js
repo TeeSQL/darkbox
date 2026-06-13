@@ -43,6 +43,12 @@ const SEALED_LOG_KEY = 'daemonhall:sealed-receipts:v1';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
+let wantedListening = false;
+let recognitionBaseText = '';
+let recognitionFinalText = '';
+let holdTimer = 0;
+let holdRecording = false;
+let suppressNextVoiceClick = false;
 let selectedStake = 5;
 
 
@@ -304,7 +310,22 @@ function handleInput() {
   renderPrivateState();
 }
 
+function hasMicGrantThisSession() {
+  try { return sessionStorage.getItem('daemonhall:mic-ok-this-session') === '1'; }
+  catch (_) { return false; }
+}
+
+function rememberMicGrantThisSession() {
+  try { sessionStorage.setItem('daemonhall:mic-ok-this-session', '1'); } catch (_) {}
+  window.dispatchEvent(new CustomEvent('daemonhall:mic-granted-this-session'));
+}
+
 async function requestMicAccess(allowedText) {
+  if (hasMicGrantThisSession()) {
+    rememberMicGrantThisSession();
+    if (allowedText && whisperStatus) whisperStatus.textContent = allowedText;
+    return true;
+  }
   if (!navigator.mediaDevices?.getUserMedia) {
     if (whisperStatus) whisperStatus.textContent = 'voice unavailable here. type the whisper.';
     return false;
@@ -312,8 +333,7 @@ async function requestMicAccess(allowedText) {
   if (whisperStatus) whisperStatus.textContent = 'asking for microphone access…';
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   stream.getTracks().forEach((track) => track.stop());
-  try { sessionStorage.setItem('daemonhall:mic-ok-this-session', '1'); } catch (_) {}
-  window.dispatchEvent(new CustomEvent('daemonhall:mic-granted-this-session'));
+  rememberMicGrantThisSession();
   if (allowedText && whisperStatus) whisperStatus.textContent = allowedText;
   return true;
 }
@@ -322,50 +342,99 @@ async function requestMicFallback() {
   await requestMicAccess('mic allowed. speech transcription is unavailable here. type the final whisper.');
 }
 
-async function startVoice(event) {
-  event.preventDefault();
+function setVoiceButtonState(active, mode = '') {
+  voiceButton?.classList.toggle('listening', active);
+  voiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
+  if (voiceButton) voiceButton.dataset.recordingMode = active ? mode : '';
+}
+
+function ensureRecognition() {
+  if (recognition || !SpeechRecognition) return recognition;
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = true;
+  recognition.continuous = true;
+  recognition.onstart = () => {
+    listening = true;
+    setVoiceButtonState(true, holdRecording ? 'hold' : 'toggle');
+    if (whisperStatus) whisperStatus.textContent = holdRecording ? 'recording while you hold. release to stop.' : 'recording. tap the mic again to stop.';
+  };
+  recognition.onerror = () => {
+    wantedListening = false;
+    listening = false;
+    setVoiceButtonState(false);
+    if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
+  };
+  recognition.onend = () => {
+    listening = false;
+    setVoiceButtonState(false);
+    if (wantedListening) {
+      window.setTimeout(() => {
+        if (!wantedListening || listening) return;
+        try { recognition.start(); }
+        catch (_) { wantedListening = false; handleInput(); }
+      }, 120);
+      return;
+    }
+    handleInput();
+  };
+  recognition.onresult = (event) => {
+    let interim = '';
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      if (result.isFinal) recognitionFinalText += `${result[0].transcript} `;
+      else interim += result[0].transcript;
+    }
+    const spoken = `${recognitionFinalText}${interim}`.trim();
+    if (input) input.value = [recognitionBaseText, spoken].filter(Boolean).join(recognitionBaseText && spoken ? ' ' : '').trimStart();
+    handleInput();
+  };
+  return recognition;
+}
+
+async function beginVoice(mode = 'toggle') {
   if (!SpeechRecognition) {
     try { await requestMicFallback(); }
     catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
-    return;
+    return false;
   }
   try {
-    const allowed = await requestMicAccess('mic allowed. listening next…');
-    if (!allowed) return;
+    const allowed = await requestMicAccess(mode === 'hold' ? 'hold to record. release to stop.' : 'mic ready. tap again when done.');
+    if (!allowed) return false;
   } catch (_) {
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    return false;
+  }
+  const recognizer = ensureRecognition();
+  if (!recognizer) return false;
+  recognitionBaseText = input?.value.trim() || '';
+  recognitionFinalText = '';
+  wantedListening = true;
+  try { recognizer.start(); }
+  catch (_) {}
+  return true;
+}
+
+function stopVoice(statusText = 'recording stopped. review before sealing.') {
+  wantedListening = false;
+  holdRecording = false;
+  if (whisperStatus) whisperStatus.textContent = statusText;
+  try { recognition?.stop?.(); }
+  catch (_) {}
+  if (!listening) setVoiceButtonState(false);
+  handleInput();
+}
+
+async function startVoice(event) {
+  event.preventDefault();
+  if (suppressNextVoiceClick) {
+    suppressNextVoiceClick = false;
     return;
   }
-  if (!recognition) {
-    recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onstart = () => {
-      listening = true;
-      voiceButton?.classList.add('listening');
-      if (whisperStatus) whisperStatus.textContent = 'listening. speak it low.';
-    };
-    recognition.onerror = () => {
-      listening = false;
-      voiceButton?.classList.remove('listening');
-      if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
-    };
-    recognition.onend = () => {
-      listening = false;
-      voiceButton?.classList.remove('listening');
-      handleInput();
-    };
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (const result of event.results) transcript += result[0].transcript;
-      if (input) input.value = transcript.trimStart();
-      handleInput();
-    };
-  }
-  if (listening) recognition.stop();
-  else recognition.start();
+  if (wantedListening || listening) stopVoice();
+  else await beginVoice('toggle');
 }
+
 function syncKeyboardState() {
   const viewport = window.visualViewport;
   const keyboardOpen = document.activeElement === input && viewport && viewport.height < window.innerHeight * 0.82;
@@ -399,6 +468,34 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
+voiceButton?.addEventListener('pointerdown', (event) => {
+  if (event.button !== undefined && event.button !== 0) return;
+  if (wantedListening || listening) return;
+  voiceButton.setPointerCapture?.(event.pointerId);
+  holdTimer = window.setTimeout(async () => {
+    holdTimer = 0;
+    holdRecording = true;
+    suppressNextVoiceClick = true;
+    await beginVoice('hold');
+  }, 260);
+});
+voiceButton?.addEventListener('pointerup', (event) => {
+  if (holdTimer) {
+    window.clearTimeout(holdTimer);
+    holdTimer = 0;
+    return;
+  }
+  if (holdRecording) {
+    suppressNextVoiceClick = true;
+    stopVoice('recording stopped. review before sealing.');
+  }
+  voiceButton.releasePointerCapture?.(event.pointerId);
+});
+voiceButton?.addEventListener('pointercancel', () => {
+  if (holdTimer) window.clearTimeout(holdTimer);
+  holdTimer = 0;
+  if (holdRecording) stopVoice('recording cancelled. review before sealing.');
+});
 voiceButton?.addEventListener('click', startVoice);
 terminalButton?.addEventListener('click', openSealedTerminal);
 terminalCloseButtons.forEach((button) => button.addEventListener('click', closeSealedTerminal));

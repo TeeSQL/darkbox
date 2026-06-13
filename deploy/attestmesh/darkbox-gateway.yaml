@@ -37,7 +37,11 @@ services:
     ports:
       - "9090:9090"     # sidecar healthz
       - "51900:51900"   # wg-over-TCP bootstrap
-      - "8090:8090"     # DarkBox gateway public edge (the only DarkBox public port)
+      # Host 8090 is RESERVED by dstack (guest-agent /Info port), so publish the
+      # gateway on host 8080 → container 8090. The gateway still listens on 8090
+      # internally; the PUBLIC url uses the 8080 host mapping:
+      #   https://<gateway_app_id>-8080.dstack-base-prod5.phala.network
+      - "8080:8090"     # DarkBox gateway public edge (the only DarkBox public port)
     cap_add: [ NET_ADMIN ]
     devices: [ /dev/net/tun ]
 

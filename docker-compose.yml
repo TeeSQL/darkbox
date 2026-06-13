@@ -42,6 +42,29 @@ services:
     environment:
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
       HIDDEN_RPC_URL: http://darkbox-node:8545
+      # Once the bridge calls the isolated signer over HTTP:
+      # SIGNER_URL: http://darkbox-signer:8099
+      # SIGNER_BRIDGE_TOKEN: ${SIGNER_BRIDGE_TOKEN:-}
+
+  # Isolated withdrawal signer (confidential plane). hidden_net only: reachable
+  # by the bridge, never from public_net/internet. Holds the signer key (CVM/TEE
+  # secret) OFF the bridge. Demo-deferred (withdrawals locked until settlement)
+  # but built/tested so the secure topology is ready. First CVM target.
+  darkbox-signer:
+    build: ./services/signer
+    networks: [hidden_net]
+    profiles: [signer]
+    environment:
+      PORT: "8099"
+      SIGNER_PRIVATE_KEY: ${SIGNER_PRIVATE_KEY:-}
+      SIGNER_BRIDGE_TOKEN: ${SIGNER_BRIDGE_TOKEN:-}
+      PUBLIC_CHAIN_ID: ${PUBLIC_CHAIN_ID:-8453}
+      BRIDGE_ADDRESS: ${BRIDGE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      GAME_ID: ${GAME_ID:-0x0000000000000000000000000000000000000000000000000000000000000001}
+      BURN_VERIFY_URL: ${BURN_VERIFY_URL:-}
+      PUBLIC_RPC_URL: ${PUBLIC_RPC_URL:-}
+    expose:
+      - "8099"
 
   darkbox-ens:
     build: ./services/ens

@@ -9,7 +9,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm run test:ts && pnpm run test:contracts",
-    "test:ts": "pnpm --filter @darkbox/shared --filter @darkbox/bridge test",
+    "test:ts": "pnpm --filter @darkbox/shared --filter @darkbox/bridge --filter @darkbox/indexer test",
     "test:contracts": "pnpm --filter @darkbox/contracts run setup && pnpm --filter @darkbox/contracts run test"
   },
   "devDependencies": {

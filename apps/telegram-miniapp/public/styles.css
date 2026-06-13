@@ -1618,3 +1618,76 @@ textarea::-webkit-scrollbar { display: none; }
 .stage.hall-open > .stage-modal-close {
   font-size: 0 !important;
 }
+
+/* Hall wall modal is now a top-level stage child; never depend on terminal pane. */
+.stage > .stage-hall-wall {
+  display: none !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 900 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: none !important;
+  filter: none !important;
+  background:
+    radial-gradient(48% 32% at 50% 8%, rgba(139,123,255,0.11), transparent 70%),
+    linear-gradient(180deg, rgba(5,5,8,0.99), rgba(10,10,15,0.99)) !important;
+}
+.stage.hall-open > .stage-hall-wall {
+  display: block !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+.stage.hall-open > .stage-hall-wall,
+.stage.hall-open > .stage-hall-wall * {
+  filter: none !important;
+}
+.stage > .stage-hall-wall .hall-wall-inner {
+  width: min(760px, 100%) !important;
+  min-height: 100vh !important;
+  margin: 0 auto !important;
+  padding: 84px 22px 140px !important;
+  position: relative !important;
+  transform: none !important;
+}
+.stage.hall-open > .stage-modal-close {
+  display: flex !important;
+  position: fixed !important;
+  top: 16px !important;
+  right: 16px !important;
+  z-index: 1000 !important;
+}
+@media (max-width: 760px) {
+  .stage > .stage-hall-wall .hall-wall-inner {
+    padding: 84px 18px 148px !important;
+  }
+}
+/* Top-level modal polish: no edge scrollbar bleed, clearer mobile columns. */
+.stage > .stage-hall-wall {
+  width: 100% !important;
+  max-width: 100% !important;
+  scrollbar-width: none !important;
+}
+.stage > .stage-hall-wall::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+}
+.stage.hall-open {
+  overflow: hidden !important;
+}
+@media (max-width: 760px) {
+  .hall-wall .leaderboard-head,
+  .hall-wall .leaderboard-rows p {
+    grid-template-columns: 34px minmax(78px, 1fr) minmax(116px, auto) !important;
+    column-gap: 12px !important;
+  }
+  .hall-wall .leaderboard-head span {
+    letter-spacing: 0.08em !important;
+  }
+}

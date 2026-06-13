@@ -91,6 +91,57 @@ button { -webkit-tap-highlight-color: transparent; }
 .terminal-meta { display: block; margin-top: 3px; color: var(--mut); font-size: 10px; letter-spacing: .06em; }
 .terminal-redacted { color: #ff8ba8; }
 .terminal-empty { padding: 16px; color: var(--mut); font-size: 12px; }
+
+.sealed-terminal-compose {
+  margin-top: 16px;
+  border: 1px solid var(--hair);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px;
+}
+.terminal-whisper-field {
+  min-height: 54px;
+  align-items: center;
+}
+.terminal-whisper-field textarea {
+  min-height: 42px;
+  max-height: 160px;
+  font-size: 13px;
+}
+.terminal-compose-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.terminal-compose-status {
+  min-width: 0;
+  color: var(--mut);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.terminal-send {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 11px;
+}
+.terminal-voice-button.listening {
+  color: var(--hot);
+  border-color: rgba(255, 74, 126, 0.72);
+  background: rgba(255, 74, 126, 0.12);
+  box-shadow: 0 0 28px rgba(255, 74, 126, 0.32);
+  animation: voiceButtonPulse 1s ease-in-out infinite;
+}
+.voice-state[data-state="mic-allowed"] {
+  color: var(--bone);
+  border-color: rgba(139, 123, 255, 0.48);
+  background: rgba(139, 123, 255, 0.08);
+}
+@media (max-width: 520px) {
+  .terminal-compose-actions { align-items: stretch; flex-direction: column; }
+  .terminal-send { width: 100%; }
+}
+
 .app-shell { position: relative; z-index: 2; min-height: 100vh; min-height: 100svh; }
 .view { display: none; min-height: 100vh; min-height: 100svh; flex-direction: column; position: relative; }
 .view.active { display: flex; }

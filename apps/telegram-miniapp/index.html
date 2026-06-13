@@ -45,10 +45,10 @@
             <div class="whisper-field">
               <span class="prompt">&gt;</span>
               <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>
-              <button id="voice-button" class="voice-button" type="button" aria-label="Tap to start or stop recording. Hold to record." aria-pressed="false">
+              <button id="voice-button" class="voice-button" type="button" aria-label="Allow microphone for hall effects" aria-pressed="false">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
               </button>
-              <span id="voice-state" class="voice-state" aria-live="polite">tap / hold</span>
+              <span id="voice-state" class="voice-state" aria-live="polite">allow mic</span>
             </div>
           </div>
           <div id="whisper-status" class="sub">read it back. you can't unsay it.<br /><span class="tell">no one else will ever hear this — not the players, not the house.</span></div>
@@ -205,6 +205,20 @@
         </div>
         <h2 id="sealed-terminal-title">sealed whispers</h2>
         <p>Receipts only. The terminal never repeats what you sealed.</p>
+        <div class="sealed-terminal-compose" aria-label="Send another sealed whisper">
+          <div class="whisper-field terminal-whisper-field">
+            <span class="prompt">&gt;</span>
+            <textarea id="terminal-whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="send another order to your daemon..." aria-label="sealed terminal whisper"></textarea>
+            <button id="terminal-voice-button" class="voice-button terminal-voice-button" type="button" aria-label="Start terminal recording" aria-pressed="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+            </button>
+            <span id="terminal-voice-state" class="voice-state" aria-live="polite">off</span>
+          </div>
+          <div class="terminal-compose-actions">
+            <span id="terminal-whisper-status" class="terminal-compose-status">click the mic to record. click again to stop.</span>
+            <button id="terminal-seal-whisper" class="btn-ghost terminal-send" type="button" disabled>seal to daemon <span class="ret">&#8629;</span></button>
+          </div>
+        </div>
         <div id="sealed-terminal-log" class="sealed-terminal-log" aria-live="polite"></div>
       </section>
     </div>

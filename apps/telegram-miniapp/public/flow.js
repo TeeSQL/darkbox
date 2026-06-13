@@ -22,6 +22,8 @@ const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
 const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
 const waitDaemonImageEl = document.querySelector('#daemon-wait-image');
 const daemonBalanceEl = document.querySelector('#daemon-balance');
+const daemonPnlEl = document.querySelector('#daemon-pnl');
+const daemonPnlNoteEl = document.querySelector('#daemon-pnl-note');
 const daemonStatusEl = document.querySelector('#daemon-status');
 const daemonMurmurEl = document.querySelector('#daemon-murmur');
 const metricVolumeEl = document.querySelector('#metric-volume');
@@ -114,7 +116,14 @@ function renderPrivateState() {
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
   if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(seed)}`;
   setSelectedDaemon({ image: daemonImage, name: ownName, seed });
-  if (daemonBalanceEl) daemonBalanceEl.innerHTML = `$${(selectedStake + (h % 900) / 100).toFixed(2)} <span class="tell">· only you</span>`;
+  const balance = selectedStake + (h % 900) / 100;
+  const pnl = ((hashNumber(`${seed}:pnl`) % 520) - 140) / 100;
+  if (daemonBalanceEl) daemonBalanceEl.textContent = `$${balance.toFixed(2)}`;
+  if (daemonPnlEl) {
+    daemonPnlEl.textContent = `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)}`;
+    daemonPnlEl.classList.toggle('loss', pnl < 0);
+  }
+  if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, seed, 3);
   if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;

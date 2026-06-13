@@ -70,6 +70,16 @@
   .stat{border:1px solid var(--hair);padding:12px;text-align:center}
   .stat .k{font-size:10px;letter-spacing:.12em;color:var(--mut)}
   .stat .v{font-size:18px;color:var(--silver);margin-top:5px}
+  .wait-ledger{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 auto 16px}
+  .wait-metric{min-width:0;border:1px solid var(--hair);background:linear-gradient(180deg,rgba(255,255,255,.035),transparent 72%),var(--srf);padding:10px 10px 9px;text-align:left;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+  .wait-metric .k,.wait-metric>span:first-child{display:block;color:var(--mut);font-size:9px;line-height:1;letter-spacing:.14em}
+  .wait-metric strong{display:block;margin-top:6px;color:var(--bone);font-family:var(--display);font-style:italic;font-size:clamp(1.12rem,6vw,1.7rem);line-height:1;letter-spacing:.01em;white-space:nowrap}
+  .wait-metric>span:last-child{display:block;margin-top:5px;color:var(--mut);font-size:9px;line-height:1.15;white-space:nowrap}
+  .wait-metric.pnl strong{color:#9effc6;text-shadow:0 0 18px rgba(80,255,166,.18)}
+  .wait-metric.pnl strong.loss{color:#ff8ba8;text-shadow:0 0 18px rgba(255,74,126,.18)}
+  .wait-headline{margin-bottom:0}
+  .wait-panel{margin-top:18px}
+  .wait-sub{margin-top:12px}
   .board{width:100%;margin-top:22px;text-align:left}
   .brow{display:grid;grid-template-columns:26px 1fr auto;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--hair);font-size:13px}
   .brow.head{color:var(--mut);font-size:10px;letter-spacing:.14em;border-bottom:1px solid var(--hair2)}
@@ -185,18 +195,20 @@
 <section class="view" id="v-wait">
   <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
   <div class="content"><div class="wrap">
-    <div class="eyebrow">the hall is closed</div>
-    <h2 class="headline">your daemon is inside.</h2>
+    <div class="wait-ledger" aria-label="Your private position summary">
+      <div class="wait-metric"><span class="k">BALANCE</span><strong>$13.45</strong><span class="tell">only you</span></div>
+      <div class="wait-metric pnl"><span class="k">PNL</span><strong>+$1.84</strong><span>unrealized</span></div>
+    </div>
+    <h2 class="headline wait-headline">your daemon is inside.</h2>
     <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
       <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="hopiumd daemon portrait" />
     </div>
-    <div class="panel">
+    <div class="panel wait-panel">
       <div class="prow"><span class="k">YOUR DAEMON</span><span class="v">hopiumd</span></div>
-      <div class="prow"><span class="k">YOUR BALANCE</span><span class="v">$13.45 <span class="tell">· only you</span></span></div>
       <div class="prow"><span class="k">STATUS</span><span class="v">circling</span></div>
       <div class="prow"><span class="k">MURMUR</span><span class="v">▸ a daemon laughed without opening its mouth</span></div>
     </div>
-    <div class="sub">the wall is all you get.</div>
+    <div class="sub wait-sub">the wall hides the trades. your balance stays above the fold.</div>
   </div></div>
   <div class="cmdbar">
     <span class="hint">it won't say what it's holding.</span>

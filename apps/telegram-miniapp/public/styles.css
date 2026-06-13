@@ -102,7 +102,7 @@ button { -webkit-tap-highlight-color: transparent; }
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: calc(14px + env(safe-area-inset-top)) 18px 14px;
+  padding: calc(14px + env(safe-area-inset-top)) 66px 14px 18px;
   border-bottom: 1px solid var(--hair);
   color: var(--mut);
   font-size: 11px;
@@ -352,7 +352,7 @@ body.keyboard-open .cmdbar { position: fixed; }
   .prow .v { text-align: left; }
 }
 @media (max-width: 380px) {
-  .topbar { padding-left: 14px; padding-right: 14px; font-size: 10px; }
+  .topbar { padding-left: 14px; padding-right: 62px; font-size: 10px; }
   .content { padding-left: 14px; padding-right: 14px; }
   .headline { font-size: 1.32rem; }
   .chips { gap: 7px; }

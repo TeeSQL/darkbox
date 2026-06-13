@@ -12,3 +12,10 @@ secrets/
 .secrets/
 *.private.json
 /data/
+
+# Hidden-chain anvil state dumps
+infra/node/data/
+# Foundry build/broadcast artifacts
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/

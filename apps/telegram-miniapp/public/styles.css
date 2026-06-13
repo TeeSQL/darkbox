@@ -1406,3 +1406,41 @@ textarea::-webkit-scrollbar { display: none; }
     margin-bottom: 12px;
   }
 }
+
+/* Full-screen hall wall takeover: escape the terminal-sized pane. */
+.stage[data-loop="wait-room"].hall-open .terminal {
+  position: fixed !important;
+  inset: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  max-height: none !important;
+  transform: none !important;
+  z-index: 50 !important;
+}
+.stage[data-loop="wait-room"].hall-open .terminal-frame {
+  display: none !important;
+}
+.stage[data-loop="wait-room"].hall-open .hall-wall {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  min-height: 100vh !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="wait-room"].hall-open .terminal {
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+  }
+  .stage[data-loop="wait-room"].hall-open .hall-wall-inner {
+    min-height: 100vh;
+    padding-top: max(52px, env(safe-area-inset-top));
+  }
+}

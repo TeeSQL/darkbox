@@ -6,7 +6,6 @@ const views = [...document.querySelectorAll('.view')];
 const navButtons = [...document.querySelectorAll('[data-go]')];
 const input = document.querySelector('#whisper-input');
 const voiceButton = document.querySelector('#voice-button');
-const voiceStateEl = document.querySelector('#voice-state');
 const terminalInput = document.querySelector('#terminal-whisper-input');
 const terminalVoiceButton = document.querySelector('#terminal-voice-button');
 const terminalVoiceStateEl = document.querySelector('#terminal-voice-state');
@@ -427,12 +426,23 @@ async function requestMicFallback() {
   await requestMicAccess('mic allowed. speech transcription is unavailable here. type the final whisper.');
 }
 
-function setMainMicGrantState(allowed = hasMicGrantThisSession()) {
+let mainMicPulseTimer = 0;
+
+function pulseMainMicButton(duration = 900) {
+  if (!voiceButton) return;
+  window.clearTimeout(mainMicPulseTimer);
+  voiceButton.classList.remove('arming');
+  voiceButton.classList.add('listening');
+  voiceButton.setAttribute('aria-pressed', 'true');
+  mainMicPulseTimer = window.setTimeout(() => {
+    voiceButton.classList.remove('listening', 'arming');
+    voiceButton.setAttribute('aria-pressed', 'false');
+  }, duration);
+}
+
+function setMainMicGrantState() {
   voiceButton?.classList.remove('listening', 'arming');
   voiceButton?.setAttribute('aria-pressed', 'false');
-  if (!voiceStateEl) return;
-  voiceStateEl.dataset.state = allowed ? 'mic-allowed' : 'idle';
-  voiceStateEl.textContent = allowed ? 'mic allowed' : 'allow mic';
 }
 
 function setTerminalVoiceState(state = 'idle') {
@@ -543,12 +553,20 @@ async function startVoice(event) {
 
 async function grantMicForVisuals(event) {
   event?.preventDefault?.();
+  window.clearTimeout(mainMicPulseTimer);
+  voiceButton?.classList.remove('listening');
+  voiceButton?.classList.add('arming');
+  voiceButton?.setAttribute('aria-pressed', 'true');
   try {
-    const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
-    setMainMicGrantState(Boolean(allowed));
-    if (whisperStatus && allowed) whisperStatus.textContent = 'mic allowed for hall effects. open the private terminal to record.';
+    const allowed = await requestMicAccess('mic ready. your daemon will react when the hall opens.');
+    if (allowed) {
+      pulseMainMicButton();
+      if (whisperStatus) whisperStatus.textContent = 'mic ready. your daemon will react when the hall opens.';
+    } else {
+      setMainMicGrantState();
+    }
   } catch (_) {
-    setMainMicGrantState(false);
+    setMainMicGrantState();
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
   }
 }

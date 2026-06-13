@@ -135,11 +135,6 @@ button { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 0 28px rgba(255, 74, 126, 0.32);
   animation: voiceButtonPulse 1s ease-in-out infinite;
 }
-.voice-state[data-state="mic-allowed"] {
-  color: var(--bone);
-  border-color: rgba(139, 123, 255, 0.48);
-  background: rgba(139, 123, 255, 0.08);
-}
 @media (max-width: 520px) {
   .terminal-compose-actions { align-items: stretch; flex-direction: column; }
   .terminal-send { width: 100%; }

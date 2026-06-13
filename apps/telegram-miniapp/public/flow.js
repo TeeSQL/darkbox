@@ -554,8 +554,10 @@ async function grantMicForVisuals(event) {
 
 function syncKeyboardState() {
   const viewport = window.visualViewport;
+  // Only top-align for a REAL on-screen keyboard (viewport shrinks). Focus alone
+  // (e.g. desktop, or tapping the mic) must not re-align, or the composer hops.
   const keyboardOpen = document.activeElement === input && viewport && viewport.height < window.innerHeight * 0.82;
-  document.body.classList.toggle('keyboard-open', Boolean(keyboardOpen || document.activeElement === input));
+  document.body.classList.toggle('keyboard-open', Boolean(keyboardOpen));
 }
 
 navButtons.forEach((button) => {

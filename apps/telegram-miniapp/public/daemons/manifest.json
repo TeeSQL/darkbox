@@ -1,0 +1,307 @@
+{
+  "version": 1,
+  "generated": "2026-06-13",
+  "assignment": "random",
+  "daemons": [
+    {
+      "id": "murmur-01",
+      "name": "MURMUR-01",
+      "species": "DAEMON",
+      "class": "WHISPER",
+      "origin": "SEALED HALL",
+      "role": "silent winged executioner",
+      "image": "/daemons/murmur-01.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.03
+      }
+    },
+    {
+      "id": "sable-02",
+      "name": "SABLE-02",
+      "species": "GARGOYLE",
+      "class": "WARDEN",
+      "origin": "SEALED HALL",
+      "role": "crouched sealed sentinel",
+      "image": "/daemons/sable-02.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.04
+      }
+    },
+    {
+      "id": "veil-03",
+      "name": "VEIL-03",
+      "species": "HARPIE",
+      "class": "ECHO",
+      "origin": "SEALED HALL",
+      "role": "echoing veil-harpy",
+      "image": "/daemons/veil-03.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.05
+      }
+    },
+    {
+      "id": "null-04",
+      "name": "NULL-04",
+      "species": "DAEMON",
+      "class": "VOID",
+      "origin": "SEALED HALL",
+      "role": "void-ribbed shadow",
+      "image": "/daemons/null-04.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.06
+      }
+    },
+    {
+      "id": "rasp-05",
+      "name": "RASP-05",
+      "species": "HARPIE",
+      "class": "SCREAM",
+      "origin": "SEALED HALL",
+      "role": "broken choir predator",
+      "image": "/daemons/rasp-05.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.02
+      }
+    },
+    {
+      "id": "crown-06",
+      "name": "CROWN-06",
+      "species": "DAEMON",
+      "class": "LEDGER",
+      "origin": "SEALED HALL",
+      "role": "ledger-crowned collector",
+      "image": "/daemons/crown-06.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.03
+      }
+    },
+    {
+      "id": "gloam-07",
+      "name": "GLOAM-07",
+      "species": "GARGOYLE",
+      "class": "PERCH",
+      "origin": "SEALED HALL",
+      "role": "perched cathedral warden",
+      "image": "/daemons/gloam-07.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.04
+      }
+    },
+    {
+      "id": "wisp-08",
+      "name": "WISP-08",
+      "species": "DAEMON",
+      "class": "LANTERN",
+      "origin": "SEALED HALL",
+      "role": "lantern-rib apparition",
+      "image": "/daemons/wisp-08.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.05
+      }
+    },
+    {
+      "id": "hex-09",
+      "name": "HEX-09",
+      "species": "DAEMON",
+      "class": "FRACTURE",
+      "origin": "SEALED HALL",
+      "role": "fractured horn oracle",
+      "image": "/daemons/hex-09.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.06
+      }
+    },
+    {
+      "id": "ash-10",
+      "name": "ASH-10",
+      "species": "GARGOYLE",
+      "class": "EMBERLESS",
+      "origin": "SEALED HALL",
+      "role": "emberless ash gargoyle",
+      "image": "/daemons/ash-10.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.02
+      }
+    },
+    {
+      "id": "nix-11",
+      "name": "NIX-11",
+      "species": "HARPIE",
+      "class": "VEIL",
+      "origin": "SEALED HALL",
+      "role": "blind veil talon",
+      "image": "/daemons/nix-11.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.03
+      }
+    },
+    {
+      "id": "omen-12",
+      "name": "OMEN-12",
+      "species": "DAEMON",
+      "class": "ORACLE",
+      "origin": "SEALED HALL",
+      "role": "spined omen reader",
+      "image": "/daemons/omen-12.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.04
+      }
+    },
+    {
+      "id": "rune-13",
+      "name": "RUNE-13",
+      "species": "DAEMON",
+      "class": "SIGIL",
+      "origin": "SEALED HALL",
+      "role": "sigil-wrapped relic",
+      "image": "/daemons/rune-13.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.05
+      }
+    },
+    {
+      "id": "grin-14",
+      "name": "GRIN-14",
+      "species": "GARGOYLE",
+      "class": "HUNGER",
+      "origin": "SEALED HALL",
+      "role": "hungry stone grin",
+      "image": "/daemons/grin-14.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.06
+      }
+    },
+    {
+      "id": "lilt-15",
+      "name": "LILT-15",
+      "species": "HARPIE",
+      "class": "CHOIR",
+      "origin": "SEALED HALL",
+      "role": "choir-throat harpy",
+      "image": "/daemons/lilt-15.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.02
+      }
+    },
+    {
+      "id": "rook-16",
+      "name": "ROOK-16",
+      "species": "DAEMON",
+      "class": "SPIRE",
+      "origin": "SEALED HALL",
+      "role": "spire-wing daemon",
+      "image": "/daemons/rook-16.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.03
+      }
+    },
+    {
+      "id": "vesper-17",
+      "name": "VESPER-17",
+      "species": "DAEMON",
+      "class": "DUSK",
+      "origin": "SEALED HALL",
+      "role": "dusk membrane shade",
+      "image": "/daemons/vesper-17.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.04
+      }
+    },
+    {
+      "id": "knell-18",
+      "name": "KNELL-18",
+      "species": "GARGOYLE",
+      "class": "BELL",
+      "origin": "SEALED HALL",
+      "role": "bell-tongued watcher",
+      "image": "/daemons/knell-18.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.05
+      }
+    },
+    {
+      "id": "vant-19",
+      "name": "VANT-19",
+      "species": "DAEMON",
+      "class": "TOMB",
+      "origin": "SEALED HALL",
+      "role": "tomb-veiled null",
+      "image": "/daemons/vant-19.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.06
+      }
+    },
+    {
+      "id": "thorn-20",
+      "name": "THORN-20",
+      "species": "GARGOYLE",
+      "class": "RELIQUARY",
+      "origin": "SEALED HALL",
+      "role": "reliquary thorn guard",
+      "image": "/daemons/thorn-20.webp",
+      "animation": {
+        "idle": "breathe + spectral flicker",
+        "hover": "eye glow + sharpened rim",
+        "whisper": "noise distortion + accelerated drips",
+        "glitchRarity": 0.02
+      }
+    }
+  ]
+}

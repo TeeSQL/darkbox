@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" class="bestiary-html">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#060608" />
+    <title>DAEMONHALL — Internal Bestiary</title>
+    <meta name="description" content="Internal DAEMONHALL daemon pool." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="bestiary-page">
+    <main class="bestiary-shell" aria-label="Internal DAEMONHALL bestiary">
+      <section class="daemon-gallery bestiary-gallery" aria-label="Sealed daemon gallery">
+        <div class="gallery-head">
+          <p class="terminal-kicker">internal sealed bestiary</p>
+          <h1>20 daemons waiting in the hall</h1>
+          <p>random assignment pool · no generation delay · archive labels rendered in-app</p>
+        </div>
+        <div class="daemon-grid" id="daemon-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="daemon-preview" aria-label="Selected daemon shader preview">
+        <div class="preview-copy">
+          <p class="terminal-kicker">shader trial</p>
+          <h2 id="daemon-stage-title">select a daemon</h2>
+          <p id="daemon-stage-meta">// IDLE: BREATHE + FLICKER // HOVER: EYES GLOW // WHISPER: DISTORT //</p>
+          <button id="daemon-mic" class="mic-preview-button" type="button">wake with mic</button>
+          <span id="daemon-mic-status">mic asleep · preview uses idle flicker</span>
+        </div>
+        <div id="daemon-stage" class="daemon-stage" aria-hidden="true"></div>
+      </section>
+    </main>
+    <script src="/src/daemon-gallery.ts" type="module"></script>
+  </body>
+</html>

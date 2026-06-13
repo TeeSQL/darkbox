@@ -20,6 +20,7 @@ const revealFingerprintEl = document.querySelector('#reveal-fingerprint');
 const daemonNameEl = document.querySelector('#daemon-name');
 const daemonEpithetEl = document.querySelector('#daemon-epithet');
 const daemonOriginEl = document.querySelector('#daemon-origin');
+const daemonPortraitEl = document.querySelector('#daemon-portrait');
 const waitDaemonNameEl = document.querySelector('#wait-daemon-name');
 const waitStatusEl = document.querySelector('#wait-status');
 const waitMurmurEl = document.querySelector('#wait-murmur');
@@ -56,6 +57,28 @@ const epithets = [
 ];
 const statuses = ['running', 'listening', 'circling', 'hungry', 'quiet', 'committed', 'still believing', 'overclocked'];
 const leaderboardNames = ['fomod', 'hopiumd', 'greedd', 'panicd', 'rugd', 'copiumd', 'lateforkd', 'doubtd'];
+const daemonPortraits = [
+  '/daemons/murmur-01.webp',
+  '/daemons/sable-02.webp',
+  '/daemons/veil-03.webp',
+  '/daemons/null-04.webp',
+  '/daemons/rasp-05.webp',
+  '/daemons/crown-06.webp',
+  '/daemons/gloam-07.webp',
+  '/daemons/wisp-08.webp',
+  '/daemons/hex-09.webp',
+  '/daemons/ash-10.webp',
+  '/daemons/nix-11.webp',
+  '/daemons/omen-12.webp',
+  '/daemons/rune-13.webp',
+  '/daemons/grin-14.webp',
+  '/daemons/lilt-15.webp',
+  '/daemons/rook-16.webp',
+  '/daemons/vesper-17.webp',
+  '/daemons/knell-18.webp',
+  '/daemons/vant-19.webp',
+  '/daemons/thorn-20.webp',
+];
 
 const murmurs = [
   '▸ something moved behind the wall',
@@ -158,6 +181,7 @@ function buildDaemon() {
     epithet,
     origin,
     fingerprint: fp,
+    portrait: pick(daemonPortraits, whisper, 5),
     status: pick(statuses, whisper, 3),
     murmur: pick(murmurs, whisper, 4),
   };
@@ -170,6 +194,10 @@ function paintDaemon() {
   if (daemonNameEl) daemonNameEl.textContent = daemon.name;
   if (daemonEpithetEl) daemonEpithetEl.textContent = daemon.epithet;
   if (daemonOriginEl) daemonOriginEl.textContent = daemon.origin;
+  if (daemonPortraitEl) {
+    daemonPortraitEl.src = daemon.portrait;
+    daemonPortraitEl.alt = `${daemon.name} private daemon portrait`;
+  }
   if (waitDaemonNameEl) waitDaemonNameEl.textContent = daemon.name;
   if (waitStatusEl) waitStatusEl.textContent = daemon.status;
   if (waitMurmurEl) waitMurmurEl.textContent = daemon.murmur;
@@ -305,7 +333,7 @@ input.addEventListener('input', handleInput);
 mic.addEventListener('click', startVoice);
 continueButton.addEventListener('click', handleContinue);
 openPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterPact(); });
-sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
+sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterReveal(); });
 sendDaemonButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
 restartButton?.addEventListener('click', restartFlow);
 openHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); paintDaemon(); stage.classList.add('hall-open'); });

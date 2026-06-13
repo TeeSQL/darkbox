@@ -590,6 +590,7 @@ Internal Three.js effect target:
 - Hover/selected: brighter lavender rim/glow and sharper contrast.
 - Whisper/microphone: microphone RMS increases shader displacement, chromatic split, glow, and glitch-slice probability.
 - Keep this internal until the effect is approved; do not place the gallery or shader stage on the main onboarding page.
+- Internal gallery is a debug/review surface, not a ritual screen: it must remain normally scrollable on desktop and inside Telegram (`body.bestiary-page`, `.bestiary-shell`, and `.bestiary-gallery` override fullscreen/overflow rules). Do not reuse locked full-screen onboarding overflow behavior here.
 
 ---
 

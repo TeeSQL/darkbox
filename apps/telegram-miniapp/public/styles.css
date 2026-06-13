@@ -2729,3 +2729,54 @@ body,
 .answer-seal {
   box-shadow: none !important;
 }
+
+/* Screenshot QA: keep private reveal complete in one viewport. */
+.stage[data-loop="daemon-reveal"] .terminal {
+  top: 47% !important;
+  width: min(720px, calc(100vw - 48px)) !important;
+}
+.stage[data-loop="daemon-reveal"] .daemon-reveal {
+  padding-top: 18px !important;
+  padding-bottom: 22px !important;
+}
+.stage[data-loop="daemon-reveal"] .daemon-name {
+  font-size: clamp(40px, 6.2vw, 64px) !important;
+}
+.stage[data-loop="daemon-reveal"] .daemon-origin {
+  margin-top: 12px !important;
+}
+.stage[data-loop="daemon-reveal"] .daemon-proof {
+  margin-top: 14px !important;
+}
+.stage[data-loop="daemon-reveal"] .action-dock {
+  margin-top: 16px !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="daemon-reveal"] .terminal {
+    top: 45% !important;
+    width: calc(100vw - 48px) !important;
+  }
+  .stage[data-loop="daemon-reveal"] .daemon-reveal {
+    padding-top: 8px !important;
+    padding-bottom: 14px !important;
+  }
+  .stage[data-loop="daemon-reveal"] .portrait-form {
+    width: 134px !important;
+    height: 168px !important;
+    margin-top: 8px !important;
+    margin-bottom: 10px !important;
+  }
+  .stage[data-loop="daemon-reveal"] .daemon-name {
+    font-size: clamp(38px, 12vw, 50px) !important;
+  }
+  .stage[data-loop="daemon-reveal"] .daemon-epithet {
+    margin-top: 8px !important;
+    font-size: 9px !important;
+    letter-spacing: 0.09em !important;
+  }
+  .stage[data-loop="daemon-reveal"] .daemon-origin {
+    margin-top: 10px !important;
+    font-size: 10px !important;
+    line-height: 1.55 !important;
+  }
+}

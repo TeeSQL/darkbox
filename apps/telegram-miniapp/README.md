@@ -2,7 +2,8 @@
 
 Telegram Mini App experiment for DarkBox onboarding probes: browser microphone support and Blink cross-chain stablecoin deposit UX.
 
-- Bot: `@darkbox_mic_lab_bot`
+- Primary bot: `@daemonhall_bot` (menu button: **Enter Daemon Hall**)
+- Legacy experiment bot: `@darkbox_mic_lab_bot`
 - Public URL: `https://darkbox-mic.repo.box/`
 - Runtime: static files served from repo.box VPS Caddy
 - Local source: `apps/telegram-miniapp/`

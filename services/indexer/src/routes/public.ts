@@ -96,9 +96,16 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       status: string;
       resolved_outcome: string | null;
       created_at_ts: string;
+      latest_yes_price: string | null;
+      latest_no_price: string | null;
+      latest_trade_price: string | null;
+      latest_trade_outcome: string | null;
+      latest_trade_ts: string | null;
     }>(
       `SELECT market_id, game_id, question, metadata_uri, close_time, resolve_by,
-              resolver_type, status, resolved_outcome, created_at_ts
+              resolver_type, status, resolved_outcome, created_at_ts,
+              latest_yes_price, latest_no_price, latest_trade_price,
+              latest_trade_outcome, latest_trade_ts
        FROM markets ORDER BY created_at_ts DESC`,
     );
     return stripForbidden(result.rows);
@@ -119,9 +126,16 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
         resolved_outcome: string | null;
         resolution_hash: string | null;
         created_at_ts: string;
+        latest_yes_price: string | null;
+        latest_no_price: string | null;
+        latest_trade_price: string | null;
+        latest_trade_outcome: string | null;
+        latest_trade_ts: string | null;
       }>(
         `SELECT market_id, game_id, question, metadata_uri, close_time, resolve_by,
-                resolver_type, status, resolved_outcome, resolution_hash, created_at_ts
+                resolver_type, status, resolved_outcome, resolution_hash, created_at_ts,
+                latest_yes_price, latest_no_price, latest_trade_price,
+                latest_trade_outcome, latest_trade_ts
          FROM markets WHERE market_id = $1`,
         [req.params.marketId.toLowerCase()],
       );
@@ -139,12 +153,14 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       ens_name: string;
       rank: number;
       realized_pnl: string;
+      unrealized_pnl: string;
+      total_pnl: string;
       pnl_pct: string;
       equity: string;
       net_deposits: string;
     }>(
       `SELECT DISTINCT ON (shadow_account)
-         agent_id, ens_name, rank, realized_pnl, pnl_pct, equity, net_deposits
+         agent_id, ens_name, rank, realized_pnl, unrealized_pnl, total_pnl, pnl_pct, equity, net_deposits
        FROM leaderboard_snapshots
        ORDER BY shadow_account, snapshot_time DESC`,
     );
@@ -154,7 +170,9 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       agentId: row.agent_id,
       ensName: row.ens_name,
       rank: row.rank,
-      pnl: row.realized_pnl,
+      pnl: row.total_pnl,
+      realizedPnl: row.realized_pnl,
+      unrealizedPnl: row.unrealized_pnl,
       pnlPct: row.pnl_pct,
       equity: row.equity,
       netDeposits: row.net_deposits,

@@ -203,7 +203,7 @@ async function main() {
     address: bridge,
     abi: darkBoxBridgeAbi,
     functionName: "deposit",
-    args: [gameId, usdc, depositAmount, userAccount.address, `0x${"00".repeat(32)}`],
+    args: [gameId, depositAmount, userAccount.address, `0x${"00".repeat(32)}`],
   });
   const depositReceipt = await publicClient.waitForTransactionReceipt({
     hash: depositHash,
@@ -227,7 +227,6 @@ async function main() {
     { chainId: publicChainId, bridgeAddress: bridge },
     {
       kind: "deposit_event",
-      asset: usdc,
       from: userAccount.address,
       beneficiary: decoded.args.beneficiary,
       amount: decoded.args.amount,
@@ -262,7 +261,7 @@ async function main() {
     controller,
     confirmations,
   });
-  const withdrawable = await burner.withdrawableBalance(shadowAccount, usdc);
+  const withdrawable = await burner.withdrawableBalance(shadowAccount);
   log(`    withdrawableBalance=${withdrawable}`);
   if (withdrawable < depositAmount) throw new Error("mint did not credit shadow account");
 
@@ -273,9 +272,10 @@ async function main() {
     gameId,
     owner: userAccount.address,
     shadowAccount,
-    asset: usdc,
     amount: withdrawAmount,
     recipient,
+    destinationChainId: BigInt(publicChainId),
+    destinationBridge: bridge,
     nonce: BigInt(nowSec), // any unused nonce
     deadline: BigInt(nowSec + 3600),
     shadowChainId: BigInt(shadowChainId),
@@ -330,9 +330,10 @@ async function main() {
       a.gameId,
       a.owner,
       a.shadowAccount,
-      a.asset,
       a.amount,
       a.recipient,
+      a.destinationChainId,
+      a.destinationBridge,
       a.nonce,
       a.deadline,
       a.userCommandHash,
@@ -349,7 +350,7 @@ async function main() {
     functionName: "balanceOf",
     args: [recipient],
   });
-  const remainingShadow = await burner.withdrawableBalance(shadowAccount, usdc);
+  const remainingShadow = await burner.withdrawableBalance(shadowAccount);
   log(`\n=== RESULT ===`);
   log(`recipient USDC balance: ${recipientBalance} (expected >= ${withdrawAmount})`);
   log(`remaining shadow withdrawable: ${remainingShadow} (expected ${depositAmount - withdrawAmount})`);

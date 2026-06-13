@@ -25,9 +25,10 @@ export const withdrawCommandSchema = z.object({
   gameId: bytes32Schema,
   owner: addressSchema,
   shadowAccount: bytes32Schema,
-  asset: addressSchema,
   amount: uint256Schema,
   recipient: addressSchema,
+  destinationChainId: uint256Schema,
+  destinationBridge: addressSchema,
   nonce: uint256Schema,
   deadline: uint256Schema,
   shadowChainId: uint256Schema,
@@ -39,9 +40,10 @@ export const withdrawalAuthorizationSchema = z.object({
   gameId: bytes32Schema,
   owner: addressSchema,
   shadowAccount: bytes32Schema,
-  asset: addressSchema,
   amount: uint256Schema,
   recipient: addressSchema,
+  destinationChainId: uint256Schema,
+  destinationBridge: addressSchema,
   userCommandHash: bytes32Schema,
   shadowBurnRef: bytes32Schema,
   nonce: uint256Schema,
@@ -70,10 +72,9 @@ export const submitWithdrawalResponseSchema = z.object({
 });
 export type SubmitWithdrawalResponse = z.infer<typeof submitWithdrawalResponseSchema>;
 
-/** `POST /api/deposit-intents` request (spec section 6.5). */
+/** `POST /api/deposit-intents` request (spec section 6.5). USDC-only: no asset. */
 export const createDepositIntentSchema = z.object({
   beneficiary: addressSchema,
-  asset: addressSchema,
   minAmount: uint256Schema,
   expectedFrom: addressSchema.optional(),
   expiresAt: z.number().int().positive(),

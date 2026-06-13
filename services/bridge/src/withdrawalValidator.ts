@@ -13,7 +13,14 @@ export type WithdrawValidationError =
   | "expired_deadline"
   | "mapping_mismatch"
   | "zero_amount"
-  | "wrong_shadow_chain";
+  | "wrong_shadow_chain"
+  | "unsupported_destination";
+
+/** A public escrow the service operates (e.g. Base or Arc). */
+export interface SupportedDestination {
+  chainId: bigint;
+  bridge: Address;
+}
 
 export interface WithdrawValidationContext {
   domain: BridgeDomainParams;
@@ -26,6 +33,13 @@ export interface WithdrawValidationContext {
    * deterministic derivation (spec 1.1) but can be overridden by a registry.
    */
   resolveShadowAccount?: (owner: Address) => Hex;
+  /**
+   * Destinations the service can pay out to (Base + Arc for MVP). When set, the
+   * command's (destinationChainId, destinationBridge) must be one of them, so
+   * garbage destinations are rejected before any shadow burn. The public bridge
+   * enforces the same binding on-chain via `destinationChainId == block.chainid`.
+   */
+  supportedDestinations?: readonly SupportedDestination[];
 }
 
 export interface WithdrawValidationOk {
@@ -66,6 +80,15 @@ export async function validateWithdrawCommand(
 
   if (command.shadowChainId !== ctx.shadowChainId) {
     return { ok: false, error: "wrong_shadow_chain" };
+  }
+
+  if (ctx.supportedDestinations && ctx.supportedDestinations.length > 0) {
+    const ok = ctx.supportedDestinations.some(
+      (d) =>
+        d.chainId === command.destinationChainId &&
+        d.bridge.toLowerCase() === command.destinationBridge.toLowerCase(),
+    );
+    if (!ok) return { ok: false, error: "unsupported_destination" };
   }
 
   let recovered: Address;

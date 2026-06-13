@@ -6,8 +6,7 @@ import type { DepositIntent, DepositObservation } from "./types.js";
  * (spec section 6.5). Matching is FIFO by intent creation time; one intent
  * matches at most one operation and vice versa.
  *
- * An intent matches only if ALL hold:
- *  - asset matches
+ * An intent matches only if ALL hold (USDC-only: asset is implicit):
  *  - amount >= minAmount
  *  - observed at/before expiresAt
  *  - expectedFrom, when set, equals the sender
@@ -23,7 +22,6 @@ export function matchIntent(
 ): DepositIntent | undefined {
   for (const intent of openIntents) {
     if (intent.state !== DepositIntentState.Open) continue;
-    if (intent.asset.toLowerCase() !== observation.asset.toLowerCase()) continue;
     if (observation.amount < intent.minAmount) continue;
     if (observedAt > intent.expiresAt) continue;
     if (

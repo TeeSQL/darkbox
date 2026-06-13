@@ -10,7 +10,6 @@ contract ShadowBridgeControllerTest is Test {
 
     address internal coordinator = makeAddr("coordinator");
     address internal owner = makeAddr("owner");
-    address internal asset = makeAddr("shadowUSDC");
 
     bytes32 internal constant GAME_ID = keccak256("game-1");
     bytes32 internal shadowAccount;
@@ -57,35 +56,35 @@ contract ShadowBridgeControllerTest is Test {
         bytes32 opId = _depositOpId("op-1");
         vm.prank(coordinator);
         vm.expectEmit(true, true, true, true);
-        emit IShadowBridgeController.ShadowMinted(opId, shadowAccount, asset, 100e6);
-        ctrl.mintShadow(opId, owner, shadowAccount, asset, 100e6);
+        emit IShadowBridgeController.ShadowMinted(opId, shadowAccount, 100e6);
+        ctrl.mintShadow(opId, owner, shadowAccount, 100e6);
 
-        assertEq(ctrl.balanceOf(shadowAccount, asset), 100e6);
+        assertEq(ctrl.balanceOf(shadowAccount), 100e6);
         assertEq(ctrl.shadowOf(owner), shadowAccount); // auto-mapped
     }
 
     function test_MintIdempotentPerDepositOpId() public {
         bytes32 opId = _depositOpId("op-1");
         vm.startPrank(coordinator);
-        ctrl.mintShadow(opId, owner, shadowAccount, asset, 100e6);
+        ctrl.mintShadow(opId, owner, shadowAccount, 100e6);
         vm.expectRevert(ShadowBridgeController.AlreadyMinted.selector);
-        ctrl.mintShadow(opId, owner, shadowAccount, asset, 100e6);
+        ctrl.mintShadow(opId, owner, shadowAccount, 100e6);
         vm.stopPrank();
-        assertEq(ctrl.balanceOf(shadowAccount, asset), 100e6); // only once
+        assertEq(ctrl.balanceOf(shadowAccount), 100e6); // only once
     }
 
     function test_MintCoordinatorOnly() public {
         vm.prank(owner);
         vm.expectRevert(ShadowBridgeController.NotCoordinator.selector);
-        ctrl.mintShadow(_depositOpId("op-1"), owner, shadowAccount, asset, 1e6);
+        ctrl.mintShadow(_depositOpId("op-1"), owner, shadowAccount, 1e6);
     }
 
     function test_MintRejectsMappingMismatch() public {
         vm.startPrank(coordinator);
-        ctrl.mintShadow(_depositOpId("op-1"), owner, shadowAccount, asset, 1e6);
+        ctrl.mintShadow(_depositOpId("op-1"), owner, shadowAccount, 1e6);
         // same owner, different shadow account -> mismatch
         vm.expectRevert(ShadowBridgeController.MappingMismatch.selector);
-        ctrl.mintShadow(_depositOpId("op-2"), owner, keccak256("other-shadow"), asset, 1e6);
+        ctrl.mintShadow(_depositOpId("op-2"), owner, keccak256("other-shadow"), 1e6);
         vm.stopPrank();
     }
 
@@ -93,7 +92,7 @@ contract ShadowBridgeControllerTest is Test {
 
     function _seed(uint256 amount) internal {
         vm.prank(coordinator);
-        ctrl.mintShadow(_depositOpId("seed"), owner, shadowAccount, asset, amount);
+        ctrl.mintShadow(_depositOpId("seed"), owner, shadowAccount, amount);
     }
 
     function test_BurnForWithdrawalHappyPath() public {
@@ -101,10 +100,10 @@ contract ShadowBridgeControllerTest is Test {
         bytes32 withdrawalId = keccak256("wd-1");
         vm.prank(coordinator);
         vm.expectEmit(true, true, true, true);
-        emit IShadowBridgeController.ShadowBurned(withdrawalId, shadowAccount, asset, 40e6);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 40e6, withdrawalId);
+        emit IShadowBridgeController.ShadowBurned(withdrawalId, shadowAccount, 40e6);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 40e6, withdrawalId);
 
-        assertEq(ctrl.balanceOf(shadowAccount, asset), 60e6);
+        assertEq(ctrl.balanceOf(shadowAccount), 60e6);
         assertTrue(ctrl.withdrawalProcessed(withdrawalId));
     }
 
@@ -113,34 +112,34 @@ contract ShadowBridgeControllerTest is Test {
         bytes32 withdrawalId = keccak256("wd-1");
         vm.prank(coordinator);
         vm.expectRevert(ShadowBridgeController.InsufficientAvailable.selector);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 101e6, withdrawalId);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 101e6, withdrawalId);
     }
 
     function test_BurnExcludesLockedFromWithdrawable() public {
         _seed(100e6);
         // 70 locked in open orders -> only 30 withdrawable
         vm.prank(coordinator);
-        ctrl.setLocked(shadowAccount, asset, 70e6);
-        assertEq(ctrl.withdrawableBalance(shadowAccount, asset), 30e6);
+        ctrl.setLocked(shadowAccount, 70e6);
+        assertEq(ctrl.withdrawableBalance(shadowAccount), 30e6);
 
         bytes32 withdrawalId = keccak256("wd-1");
         vm.prank(coordinator);
         vm.expectRevert(ShadowBridgeController.InsufficientAvailable.selector);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 31e6, withdrawalId);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 31e6, withdrawalId);
 
         // 30 is fine
         vm.prank(coordinator);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 30e6, withdrawalId);
-        assertEq(ctrl.balanceOf(shadowAccount, asset), 70e6);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 30e6, withdrawalId);
+        assertEq(ctrl.balanceOf(shadowAccount), 70e6);
     }
 
     function test_BurnRevertsOnReusedWithdrawalId() public {
         _seed(100e6);
         bytes32 withdrawalId = keccak256("wd-1");
         vm.startPrank(coordinator);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 10e6, withdrawalId);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 10e6, withdrawalId);
         vm.expectRevert(ShadowBridgeController.AlreadyWithdrawn.selector);
-        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, asset, 10e6, withdrawalId);
+        ctrl.burnForWithdrawal(withdrawalId, owner, shadowAccount, 10e6, withdrawalId);
         vm.stopPrank();
     }
 
@@ -148,21 +147,21 @@ contract ShadowBridgeControllerTest is Test {
         _seed(100e6);
         vm.prank(owner);
         vm.expectRevert(ShadowBridgeController.NotCoordinator.selector);
-        ctrl.burnForWithdrawal(keccak256("wd-1"), owner, shadowAccount, asset, 10e6, keccak256("wd-1"));
+        ctrl.burnForWithdrawal(keccak256("wd-1"), owner, shadowAccount, 10e6, keccak256("wd-1"));
     }
 
     function test_BurnRevertsOnMappingMismatch() public {
         _seed(100e6);
         vm.prank(coordinator);
         vm.expectRevert(ShadowBridgeController.MappingMismatch.selector);
-        ctrl.burnForWithdrawal(keccak256("wd-1"), owner, keccak256("wrong-shadow"), asset, 10e6, keccak256("wd-1"));
+        ctrl.burnForWithdrawal(keccak256("wd-1"), owner, keccak256("wrong-shadow"), 10e6, keccak256("wd-1"));
     }
 
     function test_WithdrawableBalanceView() public {
         _seed(100e6);
-        assertEq(ctrl.withdrawableBalance(shadowAccount, asset), 100e6);
+        assertEq(ctrl.withdrawableBalance(shadowAccount), 100e6);
         vm.prank(coordinator);
-        ctrl.setLocked(shadowAccount, asset, 100e6);
-        assertEq(ctrl.withdrawableBalance(shadowAccount, asset), 0);
+        ctrl.setLocked(shadowAccount, 100e6);
+        assertEq(ctrl.withdrawableBalance(shadowAccount), 0);
     }
 }

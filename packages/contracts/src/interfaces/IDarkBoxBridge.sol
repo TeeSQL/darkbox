@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 /// @notice Public bridge/escrow interface (spec section 9).
+/// @dev USDC-only MVP: the single settlement asset is fixed at construction
+///      (`usdc()`), so deposit/withdraw carry no asset parameter.
 interface IDarkBoxBridge {
     event AgentRegistered(
         bytes32 indexed gameId,
@@ -17,18 +19,16 @@ interface IDarkBoxBridge {
     event DepositReceived(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
+        address indexed beneficiary,
         uint256 amount,
-        address beneficiary,
         bytes32 depositRef
     );
 
     event WithdrawalExecuted(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
+        address indexed recipient,
         uint256 amount,
-        address recipient,
         uint256 nonce,
         bytes32 userCommandHash,
         bytes32 shadowBurnRef
@@ -37,13 +37,13 @@ interface IDarkBoxBridge {
     event EmergencyWithdrawal(
         bytes32 indexed gameId,
         address indexed owner,
-        address indexed asset,
+        address indexed recipient,
         uint256 amount,
-        address recipient,
         bytes32 reason
     );
 
-    receive() external payable;
+    /// @notice The single configured settlement asset (USDC).
+    function usdc() external view returns (address);
 
     function registerAgent(
         bytes32 gameId,
@@ -55,17 +55,16 @@ interface IDarkBoxBridge {
         bytes32 revealSaltHash
     ) external;
 
-    function deposit(bytes32 gameId, address asset, uint256 amount, address beneficiary, bytes32 depositRef)
-        external
-        payable;
+    function deposit(bytes32 gameId, uint256 amount, address beneficiary, bytes32 depositRef) external;
 
     function withdraw(
         bytes32 gameId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount,
         address recipient,
+        uint256 destinationChainId,
+        address destinationBridge,
         uint256 nonce,
         uint256 deadline,
         bytes32 userCommandHash,
@@ -76,7 +75,6 @@ interface IDarkBoxBridge {
     function emergencyWithdraw(
         bytes32 gameId,
         address owner,
-        address asset,
         uint256 amount,
         address recipient,
         bytes32 reason

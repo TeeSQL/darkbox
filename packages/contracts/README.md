@@ -5,15 +5,20 @@ Solidity contracts for DarkBox deposits + withdrawals (spec:
 
 ## Contracts
 
-- `src/DarkBoxBridge.sol` — public escrow. Custodies real USDC/ETH, records
-  deposits (`receive()`, `deposit(...)`), and releases funds only against a
-  signing-service EIP-712 `WithdrawalAuthorization` with an unused per-owner
-  nonce. Admin-only `emergencyWithdraw`, `setSigner`, and split deposit/
-  withdrawal pause flags. Self-contained EIP-712 + ECDSA (no external deps).
+USDC-only MVP: the single settlement asset is fixed at construction; there are
+no asset parameters, no native ETH, and no multi-asset support.
+
+- `src/DarkBoxBridge.sol` — public escrow. Custodies the configured USDC,
+  records deposits (`deposit(gameId, amount, beneficiary, depositRef)`), and
+  releases funds only against a signing-service EIP-712 `WithdrawalAuthorization`
+  with an unused per-owner nonce. Admin-only `emergencyWithdraw`, `setSigner`,
+  and split deposit/withdrawal pause flags. Self-contained EIP-712 + ECDSA (no
+  external deps).
 - `src/ShadowBridgeController.sol` — shadow-side registry + ledger. Canonical
   owner↔shadow-account mapping, idempotent `mintShadow(depositOpId, ...)`,
   `burnForWithdrawal(...)` that consumes only withdrawable available balance
-  (`balance - locked`), and a `withdrawableBalance` view.
+  (`balance - locked`), and a `withdrawableBalance(shadowAccount)` view. The
+  ledger tracks a single asset (shadow USDC).
 - `src/mocks/MockERC20.sol` — minimal ERC20 standing in for public USDC in tests.
 
 ## Setup & test

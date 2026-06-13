@@ -1,17 +1,15 @@
 import { encodeAbiParameters, keccak256, stringToHex, type Address, type Hex } from "viem";
 
-export const NATIVE_ASSET: Address = "0x0000000000000000000000000000000000000000";
-
 /**
  * Canonical fields that uniquely identify a single public deposit operation
- * (spec section 6.4):
+ * (spec section 6.4). USDC-only MVP: the asset is implicit (the configured
+ * USDC), so it is not part of the key.
  *
- *   chainId:bridgeAddress:asset:txHash:logIndex:from:beneficiary:amount
+ *   chainId:bridgeAddress:txHash:logIndex:from:beneficiary:amount
  */
 export interface DepositOperationKey {
   chainId: number;
   bridgeAddress: Address;
-  asset: Address;
   txHash: Hex;
   logIndex: number;
   from: Address;
@@ -24,7 +22,6 @@ export function depositOperationString(key: DepositOperationKey): string {
   return [
     key.chainId,
     key.bridgeAddress.toLowerCase(),
-    key.asset.toLowerCase(),
     key.txHash.toLowerCase(),
     key.logIndex,
     key.from.toLowerCase(),

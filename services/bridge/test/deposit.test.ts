@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   DepositIntentState,
   DepositState,
-  NATIVE_ASSET,
   deriveShadowAccount,
 } from "@darkbox/shared";
 import type { Address, Hex } from "viem";
@@ -14,7 +13,6 @@ import type { DepositIntent } from "../src/types.js";
 import { FakeShadowChain } from "./fakes.js";
 
 const GAME_ID: Hex = `0x${"11".repeat(32)}`;
-const USDC: Address = "0x00000000000000000000000000000000000000c0";
 const BRIDGE: Address = "0x00000000000000000000000000000000000000aa";
 const ALICE: Address = "0x00000000000000000000000000000000000000b0";
 const ctx = { chainId: 8453, bridgeAddress: BRIDGE };
@@ -22,7 +20,6 @@ const ctx = { chainId: 8453, bridgeAddress: BRIDGE };
 function erc20Transfer(overrides: Partial<RawDepositEvent> = {}): RawDepositEvent {
   return {
     kind: "erc20_transfer",
-    asset: USDC,
     from: ALICE,
     amount: 100_000_000n,
     txHash: `0x${"ab".repeat(32)}`,
@@ -43,24 +40,24 @@ function setup() {
   return { store, shadow, coord };
 }
 
-test("normalizes an ERC20 transfer into a canonical observation with idempotency key", () => {
+test("normalizes a USDC transfer into a canonical observation with idempotency key", () => {
   const obs = normalizeDepositEvent(ctx, erc20Transfer());
-  assert.equal(obs.asset, USDC);
   assert.equal(obs.beneficiary, ALICE); // defaults to sender
   assert.match(obs.depositOpId, /^0x[0-9a-f]{64}$/);
 });
 
-test("native receive normalizes to asset address(0) crediting the sender", () => {
+test("an explicit deposit event credits the declared beneficiary", () => {
+  const BENE: Address = "0x00000000000000000000000000000000000000e0";
   const obs = normalizeDepositEvent(ctx, {
-    kind: "native_receive",
+    kind: "deposit_event",
     from: ALICE,
-    amount: 1_000_000_000_000_000_000n,
+    beneficiary: BENE,
+    amount: 5_000_000n,
     txHash: `0x${"cd".repeat(32)}`,
     logIndex: 1,
-    confirmations: 5,
+    confirmations: 3,
   });
-  assert.equal(obs.asset, NATIVE_ASSET);
-  assert.equal(obs.beneficiary, ALICE);
+  assert.equal(obs.beneficiary, BENE);
 });
 
 test("confirmed deposit auto-maps the shadow account and mints once", async () => {
@@ -73,7 +70,7 @@ test("confirmed deposit auto-maps the shadow account and mints once", async () =
   const expectedShadow = deriveShadowAccount(GAME_ID, ALICE);
   assert.equal(record.shadowAccount, expectedShadow);
   assert.equal(store.getMappingByOwner(ALICE)?.shadowAccount, expectedShadow);
-  assert.equal(shadow.balances.get(`${expectedShadow}:${USDC}`.toLowerCase()), 100_000_000n);
+  assert.equal(shadow.balances.get(expectedShadow.toLowerCase()), 100_000_000n);
 });
 
 test("duplicate observation of the same operation mints exactly once", async () => {
@@ -85,7 +82,7 @@ test("duplicate observation of the same operation mints exactly once", async () 
 });
 
 test("crash between mint tx and DB write recovers via findExistingMint (no double mint)", async () => {
-  const { store, shadow, coord } = setup();
+  const { shadow, coord } = setup();
   const obs = normalizeDepositEvent(ctx, erc20Transfer());
 
   // Simulate: mint landed on-chain but the DB never recorded ShadowMinted.
@@ -93,7 +90,6 @@ test("crash between mint tx and DB write recovers via findExistingMint (no doubl
     depositOpId: obs.depositOpId,
     owner: ALICE,
     shadowAccount: deriveShadowAccount(GAME_ID, ALICE),
-    asset: USDC,
     amount: obs.amount,
   });
   assert.equal(shadow.mints.size, 1);
@@ -117,7 +113,6 @@ test("a matching deposit intent re-routes the beneficiary (FIFO)", async () => {
   const intent: DepositIntent = {
     intentId: `0x${"01".repeat(32)}`,
     beneficiary: BENE,
-    asset: USDC,
     minAmount: 50_000_000n,
     expiresAt: 2000,
     createdAt: 100,
@@ -131,7 +126,7 @@ test("a matching deposit intent re-routes the beneficiary (FIFO)", async () => {
   assert.equal(record.owner, BENE);
   assert.equal(store.getIntent(intent.intentId)?.state, DepositIntentState.Matched);
   const shadowAccount = deriveShadowAccount(GAME_ID, BENE);
-  assert.equal(shadow.balances.get(`${shadowAccount}:${USDC}`.toLowerCase()), 100_000_000n);
+  assert.equal(shadow.balances.get(shadowAccount.toLowerCase()), 100_000_000n);
 });
 
 test("an expired intent does not match; the sender is credited", async () => {
@@ -140,7 +135,6 @@ test("an expired intent does not match; the sender is credited", async () => {
   store.putIntent({
     intentId: `0x${"02".repeat(32)}`,
     beneficiary: BENE,
-    asset: USDC,
     minAmount: 50_000_000n,
     expiresAt: 1000,
     createdAt: 100,
@@ -157,7 +151,6 @@ test("an intent with too-small amount does not match", async () => {
   store.putIntent({
     intentId: `0x${"03".repeat(32)}`,
     beneficiary: BENE,
-    asset: USDC,
     minAmount: 200_000_000n, // higher than the 100 USDC transfer
     expiresAt: 5000,
     createdAt: 100,
@@ -166,4 +159,35 @@ test("an intent with too-small amount does not match", async () => {
   const obs = normalizeDepositEvent(ctx, erc20Transfer());
   const record = await coord.process(obs, 1500);
   assert.equal(record.owner, ALICE);
+});
+
+// --- multichain (Base + Arc) ---
+
+test("Base and Arc deposits have distinct op ids but mint the same canonical shadow USDC", async () => {
+  const { shadow, coord } = setup();
+  const ARC_BRIDGE: Address = "0x0000000000000000000000000000000000000a11";
+  const baseCtx = { chainId: 8453, bridgeAddress: BRIDGE };
+  const arcCtx = { chainId: 504, bridgeAddress: ARC_BRIDGE };
+
+  // Same tx coordinates on two different chains must NOT collide (spec 6.4).
+  const raw = erc20Transfer();
+  const baseObs = normalizeDepositEvent(baseCtx, raw);
+  const arcObs = normalizeDepositEvent(arcCtx, raw);
+  assert.notEqual(baseObs.depositOpId, arcObs.depositOpId);
+
+  await coord.process(baseObs, 1000);
+  await coord.process(arcObs, 1000);
+
+  // Two distinct mints, both crediting the one canonical shadow account.
+  assert.equal(shadow.mints.size, 2);
+  const shadowAccount = deriveShadowAccount(GAME_ID, ALICE);
+  assert.equal(shadow.balances.get(shadowAccount.toLowerCase()), 200_000_000n);
+});
+
+test("the same deposit observed twice on one chain still mints once", async () => {
+  const { shadow, coord } = setup();
+  const obs = normalizeDepositEvent({ chainId: 8453, bridgeAddress: BRIDGE }, erc20Transfer());
+  await coord.process(obs, 1000);
+  await coord.process(obs, 1000);
+  assert.equal(shadow.mints.size, 1);
 });

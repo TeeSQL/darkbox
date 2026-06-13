@@ -2,5 +2,8 @@
 out/
 cache/
 broadcast/
-# Vendored dependency (fetched via `pnpm setup` / forge install)
-lib/
+# forge-std is fetched via `forge install` and not vendored.
+lib/forge-std/
+# NOTE: lib/frontier/ is intentionally NOT ignored — it is the vendored real
+# Frontier orderbook source (see lib/frontier/PROVENANCE.md) that the DarkBox
+# prediction-market integration deploys and tests against.

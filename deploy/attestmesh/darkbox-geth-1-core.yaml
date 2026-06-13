@@ -73,6 +73,11 @@ services:
       - PUBLIC_CHAIN_ID=${PUBLIC_CHAIN_ID}
       - GAME_ID=${GAME_ID}
       - BRIDGE_ADDRESS=${BRIDGE_ADDRESS}
+      # Hidden-chain contract addresses — placeholders baked NOW so the overseer
+      # can inject them via a pure env refresh after the one-shot deployer runs
+      # (no compose-hash churn / re-allowlist). Empty until then.
+      - MARKET_FACTORY_ADDRESS=${MARKET_FACTORY_ADDRESS}
+      - USDC_ADDRESS=${SYNTHETIC_USDC_ADDRESS}
 
   # ── Agent runtime ───────────────────────────────────────────────────────────
   agents:
@@ -133,6 +138,20 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
+
+  # ── One-shot contract deployer ──────────────────────────────────────────────
+  # Runs DeployDarkBox onto chain 88813 over localhost:8545 (slimmed EIP-170 book
+  # + 1% taker fee), emits the market/factory/book/synthetic-USDC addresses to its
+  # logs, then exits (restart: "no"). DEPLOYER_KEY = GETH1_NODEKEY — a fresh
+  # private-chain-only, genesis-prefunded key (NOT the cluster-owner/mainnet key).
+  deployer:
+    image: ghcr.io/teesql/darkbox-deployer:latest
+    restart: "no"
+    network_mode: "service:sidecar"
+    depends_on: [ geth-1 ]
+    environment:
+      - RPC_URL=http://localhost:8545
+      - DEPLOYER_KEY=${GETH1_NODEKEY}
 
 volumes:
   agentsock:

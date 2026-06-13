@@ -1328,3 +1328,81 @@ textarea::-webkit-scrollbar { display: none; }
     left: calc(50% + 92px) !important;
   }
 }
+
+/* Daemon reveal portrait: sealed rectangular pane, alive behind glass. */
+.daemon-reveal .portrait-form {
+  width: clamp(170px, 34vw, 280px);
+  height: clamp(210px, 42vw, 340px);
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(215,215,223,0.16);
+  background:
+    radial-gradient(80% 48% at 50% 18%, rgba(139,123,255,0.13), transparent 70%),
+    linear-gradient(180deg, rgba(215,215,223,0.045), rgba(7,7,11,0.96) 44%, rgba(5,5,8,0.98));
+  box-shadow:
+    inset 0 0 44px rgba(215,215,223,0.055),
+    inset 0 -46px 70px rgba(0,0,0,0.48),
+    0 0 56px rgba(139,123,255,0.075);
+  animation: portraitPaneBreathe 5.8s ease-in-out infinite;
+}
+.daemon-reveal .portrait-form::before,
+.daemon-reveal .portrait-form::after {
+  display: none;
+}
+.daemon-reveal .daemon-portrait {
+  inset: 4%;
+  width: 92%;
+  height: 92%;
+  object-fit: contain;
+  opacity: 0.9;
+  transform: translate3d(0, 5px, 0) scale(1.06);
+  filter: grayscale(0.1) contrast(1.12) brightness(0.82) drop-shadow(0 0 24px rgba(139,123,255,0.18));
+  animation: portraitDrift 7.4s ease-in-out infinite;
+}
+.daemon-reveal .portrait-glass {
+  border-radius: inherit;
+  background:
+    linear-gradient(105deg, transparent 0 36%, rgba(255,255,255,0.055) 44%, transparent 52% 100%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 9px),
+    radial-gradient(70% 40% at 50% 8%, rgba(215,215,223,0.08), transparent 72%);
+  box-shadow: inset 0 0 52px rgba(215,215,223,0.045), inset 0 -34px 64px rgba(0,0,0,0.42);
+  animation: glassPulse 4.8s ease-in-out infinite;
+}
+.daemon-reveal .portrait-glass::before,
+.daemon-reveal .portrait-glass::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(215,215,223,0.18), transparent);
+  opacity: 0.55;
+}
+.daemon-reveal .portrait-glass::before { top: 16%; animation: scanWander 6.2s ease-in-out infinite; }
+.daemon-reveal .portrait-glass::after { bottom: 18%; animation: scanWander 7.8s ease-in-out infinite reverse; }
+@keyframes portraitPaneBreathe {
+  0%,100% { transform: translateY(0) scale(0.992); border-color: rgba(215,215,223,0.13); }
+  50% { transform: translateY(-3px) scale(1.012); border-color: rgba(139,123,255,0.30); }
+}
+@keyframes portraitDrift {
+  0%,100% { transform: translate3d(-2px, 7px, 0) scale(1.055); opacity: 0.86; }
+  45% { transform: translate3d(3px, 0, 0) scale(1.09); opacity: 0.94; }
+  70% { transform: translate3d(0, 4px, 0) scale(1.07); opacity: 0.9; }
+}
+@keyframes glassPulse {
+  0%,100% { opacity: 0.58; }
+  50% { opacity: 0.9; }
+}
+@keyframes scanWander {
+  0%,100% { transform: translateY(0); opacity: 0.28; }
+  50% { transform: translateY(18px); opacity: 0.58; }
+}
+@media (max-width: 760px) {
+  .daemon-reveal .portrait-form {
+    width: 154px;
+    height: 196px;
+    border-radius: 15px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+  }
+}

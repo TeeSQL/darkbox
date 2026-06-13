@@ -151,6 +151,30 @@ async function fetchIndexerJson(path: string): Promise<unknown> {
   }
 }
 
+async function handlePublicIndexerProxy(req: IncomingMessage, res: ServerResponse, pathname: string, search: string) {
+  if (req.method !== 'GET') return send(res, 405, 'method not allowed');
+  if (!pathname.startsWith('/public/')) return send(res, 404, 'not found');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const upstreamPath = `${pathname}${search}`;
+    const response = await fetch(`${indexerPublicUrl}${upstreamPath}`, { signal: controller.signal });
+    const body = await response.text();
+    res.writeHead(response.status, {
+      'Content-Type': response.headers.get('content-type') ?? 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    });
+    res.end(body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 502, { error: 'indexer_proxy_unavailable', message });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.length ? value : fallback;
 }
@@ -469,6 +493,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/api/dynamic-flow/quote' && req.method === 'POST') return handleDynamicFlowQuote(req, res);
   if (url.pathname === '/api/dynamic-flow/prepare' && req.method === 'POST') return handleDynamicFlowPrepare(req, res);
   if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
+  if (url.pathname.startsWith('/public/')) return handlePublicIndexerProxy(req, res, url.pathname, url.search);
 
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;
   const safePath = normalize(requested).replace(/^([/\\])+/, '');

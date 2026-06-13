@@ -11,6 +11,8 @@ export default defineConfig({
         web: resolve(__dirname, 'web.html'),
         daemons: resolve(__dirname, 'daemons.html'),
         dynamicFlow: resolve(__dirname, 'dynamic-flow.html'),
+        admin: resolve(__dirname, 'admin.html'),
+        rawData: resolve(__dirname, 'raw-data.html'),
       },
     },
   },

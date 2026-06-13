@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseAgentObservation, type AgentObservation, type AgentTurnOutput } from '@darkbox/shared';
+import { parseAgentObservation, type AgentObservation, type AgentTurnOutput, type TradeAction } from '@darkbox/shared';
 import { makeFixtureObservation } from './fixture.js';
 import { createRandomStrategy, type RandomAgentKind, type StrategyModule } from './random.js';
 import { validateTurnOutput } from './validate.js';
@@ -236,6 +236,19 @@ interface RecentBillboard {
   createdAt: string;
 }
 
+interface PaperPosition {
+  marketId: string;
+  outcome: 'YES' | 'NO';
+  size: number;
+  avgEntry: number;
+  realizedPnl: number;
+}
+
+interface PaperPortfolio {
+  cash: number;
+  positions: Record<string, PaperPosition>;
+}
+
 interface RunnerState {
   startedAt: string;
   completedTurns: number;
@@ -245,6 +258,132 @@ interface RunnerState {
   latenciesMs: number[];
   recentBillboards: RecentBillboard[];
   ethGlobalSignals: string[];
+  portfolios: Record<string, PaperPortfolio>;
+}
+
+const STARTING_CASH = 100;
+const TAKE_PROFIT_ABSOLUTE = 0.08;
+const TAKE_PROFIT_PCT = 0.15;
+
+function trimDecimal(value: number): string {
+  return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+}
+
+function formatDecimal(value: number): string {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return trimDecimal(safe);
+}
+
+function formatSignedDecimal(value: number): string {
+  const safe = Number.isFinite(value) ? value : 0;
+  return trimDecimal(safe);
+}
+
+function portfolioFor(state: RunnerState, agentId: string): PaperPortfolio {
+  state.portfolios[agentId] ??= { cash: STARTING_CASH, positions: {} };
+  return state.portfolios[agentId]!;
+}
+
+function positionKey(marketId: string, outcome: 'YES' | 'NO'): string {
+  return `${marketId}:${outcome}`;
+}
+
+function parseMark(value: string | null | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? clamp(parsed, 0.01, 0.99) : fallback;
+}
+
+function marketProbabilities(markets: PublicMarket[]): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const market of markets) result[market.market_id ?? 'unknown-market'] = 0.5;
+  return result;
+}
+
+function observationProbabilities(observation: AgentObservation): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const market of observation.markets) result[market.marketId] = parseMark(market.lastPrice ?? market.bestBid ?? market.bestAsk, 0.5);
+  return result;
+}
+
+function outcomeMark(marketMarks: Record<string, number>, marketId: string, outcome: 'YES' | 'NO'): number {
+  const yes = clamp(marketMarks[marketId] ?? 0.5, 0.01, 0.99);
+  return outcome === 'YES' ? yes : 1 - yes;
+}
+
+function portfolioEquity(portfolio: PaperPortfolio, marketMarks: Record<string, number>): number {
+  return Object.values(portfolio.positions).reduce((equity, position) => equity + position.size * outcomeMark(marketMarks, position.marketId, position.outcome), portfolio.cash);
+}
+
+function portfolioContext(portfolio: PaperPortfolio, marketMarks: Record<string, number>): string[] {
+  const positions = Object.values(portfolio.positions)
+    .filter((position) => position.size > 0.0001)
+    .map((position) => {
+      const mark = outcomeMark(marketMarks, position.marketId, position.outcome);
+      const unrealizedPnl = (mark - position.avgEntry) * position.size;
+      const pnlPct = position.avgEntry > 0 ? (mark - position.avgEntry) / position.avgEntry : 0;
+      return { ...position, mark, unrealizedPnl, pnlPct };
+    })
+    .sort((a, b) => Math.abs(b.unrealizedPnl) - Math.abs(a.unrealizedPnl));
+  const takeProfit = positions.filter((position) => position.mark - position.avgEntry >= TAKE_PROFIT_ABSOLUTE || position.pnlPct >= TAKE_PROFIT_PCT);
+  return [
+    `PORTFOLIO=${JSON.stringify({ cash: formatDecimal(portfolio.cash), equity: formatDecimal(portfolioEquity(portfolio, marketMarks)), positions: positions.slice(0, 8).map((position) => ({ marketId: position.marketId, outcome: position.outcome, size: formatDecimal(position.size), avgEntry: formatDecimal(position.avgEntry), mark: formatDecimal(position.mark), unrealizedPnl: formatSignedDecimal(position.unrealizedPnl), realizedPnl: formatSignedDecimal(position.realizedPnl) })) })}`,
+    takeProfit.length
+      ? `TAKE_PROFIT_SIGNALS=${JSON.stringify(takeProfit.slice(0, 5).map((position) => ({ marketId: position.marketId, outcome: position.outcome, size: formatDecimal(position.size), avgEntry: formatDecimal(position.avgEntry), mark: formatDecimal(position.mark), unrealizedPnl: formatSignedDecimal(position.unrealizedPnl), suggestion: 'sell/reduce some inventory above your cost basis' })))}`
+      : 'TAKE_PROFIT_SIGNALS=[]',
+    'Portfolio rule: you are aware of your own inventory, average entry, marks, cash, equity, realized and unrealized PnL. Manage the book like a trader, not a one-shot commenter.',
+    'Take-profit rule: if you bought YES/NO cheaply and the current mark or bid is materially higher, reduce or sell part of that position. Realized profit beats heroic bagholding.',
+  ];
+}
+
+function applyPaperFill(portfolio: PaperPortfolio, action: TradeAction): void {
+  if (action.type !== 'make_order') return;
+  const price = clamp(Number(action.price), 0.01, 0.99);
+  const requestedSize = Math.max(0, Number(action.size));
+  if (!Number.isFinite(price) || !Number.isFinite(requestedSize) || requestedSize <= 0) return;
+  const key = positionKey(action.marketId, action.outcome);
+  const existing = portfolio.positions[key];
+
+  if (action.side === 'buy') {
+    const affordableSize = price > 0 ? Math.min(requestedSize, portfolio.cash / price) : requestedSize;
+    if (affordableSize <= 0.0001) return;
+    portfolio.cash -= affordableSize * price;
+    if (!existing) {
+      portfolio.positions[key] = { marketId: action.marketId, outcome: action.outcome, size: affordableSize, avgEntry: price, realizedPnl: 0 };
+      return;
+    }
+    const totalCost = existing.avgEntry * existing.size + price * affordableSize;
+    existing.size += affordableSize;
+    existing.avgEntry = totalCost / existing.size;
+    return;
+  }
+
+  if (!existing || existing.size <= 0) return;
+  const closedSize = Math.min(requestedSize, existing.size);
+  portfolio.cash += closedSize * price;
+  existing.realizedPnl += (price - existing.avgEntry) * closedSize;
+  existing.size -= closedSize;
+  if (existing.size <= 0.0001) delete portfolio.positions[key];
+}
+
+function applyPaperPortfolio(portfolio: PaperPortfolio, output: AgentTurnOutput, observation: AgentObservation): void {
+  for (const action of output.tradeActions) {
+    if (action.type === 'take_order') {
+      const order = observation.orders.find((candidate) => candidate.orderId === action.orderId);
+      if (!order) continue;
+      applyPaperFill(portfolio, {
+        type: 'make_order',
+        marketId: order.marketId,
+        side: order.side === 'sell' ? 'buy' : 'sell',
+        outcome: order.outcome,
+        price: order.price,
+        size: action.size,
+        timeInForce: 'IOC',
+      });
+      continue;
+    }
+    applyPaperFill(portfolio, action);
+  }
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -299,15 +438,33 @@ function loadEthGlobalSignals(): string[] {
   ];
 }
 
-async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[], personality: DaemonPersonality): Promise<AgentObservation> {
+async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[], personality: DaemonPersonality, portfolio: PaperPortfolio): Promise<AgentObservation> {
   const [markets, leaderboard] = await Promise.all([
     fetchJson<PublicMarket[]>(`${indexerUrl}/public/markets`),
     fetchJson<LeaderboardEntry[]>(`${indexerUrl}/public/leaderboard`),
   ]);
 
-  if (!markets?.length) return parseAgentObservation(makeFixtureObservation(agentId, turn));
+  if (!markets?.length) {
+    const fixture = makeFixtureObservation(agentId, turn);
+    const marks = observationProbabilities(fixture);
+    return parseAgentObservation({
+      ...fixture,
+      balances: [{ agentId, available: formatDecimal(portfolio.cash), equity: formatDecimal(portfolioEquity(portfolio, marks)) }],
+      billboardSinceLastTurn: [...fixture.billboardSinceLastTurn, ...recentBillboards.filter((message) => message.agentId !== agentId).slice(-20)],
+      sharedContext: [
+        ...fixture.sharedContext,
+        'NOISE_MODE=true: quote the market and take risk; do not hold just because this is a smoke fixture.',
+        'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+        ...portfolioContext(portfolio, marks),
+        ...personalityContext(personality),
+        ...ethGlobalSignals,
+      ],
+    });
+  }
 
   const now = new Date().toISOString();
+  const marks = marketProbabilities(markets);
+  const equity = portfolioEquity(portfolio, marks);
   return parseAgentObservation({
     agentId,
     turn,
@@ -321,7 +478,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
       lastPrice: '0.50',
     })),
     orders: [],
-    balances: [{ agentId, available: '100', equity: '100' }],
+    balances: [{ agentId, available: formatDecimal(portfolio.cash), equity: formatDecimal(equity) }],
     billboardSinceLastTurn: recentBillboards.filter((message) => message.agentId !== agentId).slice(-20),
     marketProposals: [],
     sharedContext: [
@@ -331,6 +488,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
       'NOISE_MODE=true: quote the empty market and take risk; do not hold just because the live book is thin.',
       'Seed pricing for empty books: fair value starts around 0.50, quote 0.35-0.65 with small sizes unless you have a stronger view.',
       'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+      ...portfolioContext(portfolio, marks),
       ...personalityContext(personality),
       ...ethGlobalSignals,
     ],
@@ -377,7 +535,8 @@ async function runAgentTurn(params: {
   const startedMs = Date.now();
 
   try {
-    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals, agent.personality);
+    const portfolio = portfolioFor(state, agent.agentId);
+    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals, agent.personality, portfolio);
     const output = await strategy.decide(observation);
     const latencyMs = Date.now() - startedMs;
     state.latenciesMs.push(latencyMs);
@@ -409,6 +568,7 @@ async function runAgentTurn(params: {
     agent.completed += 1;
     state.completedTurns += 1;
     if (!validation.ok) state.errors += 1;
+    if (validation.ok) applyPaperPortfolio(portfolio, eventOutput, observation);
     if (validation.ok && eventOutput.billboardPost?.message) {
       state.recentBillboards.push({
         messageId: `${config.runId}-turn-${turn}-${agent.agentId}`,
@@ -478,6 +638,7 @@ async function main(): Promise<void> {
     latenciesMs: [],
     recentBillboards: [],
     ethGlobalSignals: loadEthGlobalSignals(),
+    portfolios: {},
   };
 
   const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => ({ agentId: agent.agentId, personality: agent.personality })), jsonlPath, summaryPath };

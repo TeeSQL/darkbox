@@ -79,6 +79,14 @@
   .brow .pulse{color:var(--mut);text-align:right;white-space:nowrap}
   .brow .pulse .pct{color:var(--silver)}
   .board-note{margin-top:18px;font-size:11px;color:var(--mut);line-height:1.7;text-align:center}
+  .daemon-wait-portrait{position:relative;width:min(100%,360px);aspect-ratio:2/3;margin:24px auto 22px;border:1px solid var(--hair);background:#101016;overflow:hidden;isolation:isolate;box-shadow:0 18px 46px rgba(0,0,0,.32);animation:daemonWaitBreath 5.6s ease-in-out infinite}
+  .daemon-wait-portrait img{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;background:#101016;filter:contrast(1.04) brightness(1.03) saturate(1.02)}
+  .daemon-wait-portrait:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(90deg,rgba(255,72,126,.12),transparent 16%,transparent 84%,rgba(93,94,255,.12)),repeating-linear-gradient(180deg,rgba(255,255,255,.026) 0 1px,transparent 1px 8px);opacity:.32;mix-blend-mode:screen;animation:daemonWaitScan 6.8s linear infinite}
+  .daemon-wait-portrait:after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border:1px solid rgba(231,227,217,.08);box-shadow:inset 0 0 42px rgba(0,0,0,.34),inset 0 0 28px rgba(139,123,255,.10);animation:daemonWaitAura 5.6s ease-in-out infinite}
+  @keyframes daemonWaitBreath{0%,100%{box-shadow:0 18px 46px rgba(0,0,0,.32),0 0 0 rgba(139,123,255,0)}50%{box-shadow:0 18px 48px rgba(0,0,0,.36),0 0 34px rgba(139,123,255,.16)}}
+  @keyframes daemonWaitAura{0%,100%{opacity:.62}50%{opacity:.94}}
+  @keyframes daemonWaitScan{from{background-position:0 0,0 0}to{background-position:18px 0,0 56px}}
+  @media (prefers-reduced-motion:reduce){.daemon-wait-portrait,.daemon-wait-portrait:before,.daemon-wait-portrait:after{animation:none}}
 
   /* command bar — pinned to the bottom of every screen */
   .cmdbar{position:fixed;left:0;right:0;bottom:0;z-index:30;border-top:1px solid var(--hair);background:rgba(10,10,15,.82);backdrop-filter:blur(10px);padding:16px 26px;display:flex;align-items:center;justify-content:space-between;gap:16px}
@@ -102,6 +110,7 @@
     .cmdbar .hint{text-align:center}
     .cmdbar .actions{flex-direction:column-reverse}
     .btn-primary,.btn-ghost{justify-content:center;text-align:center;clip-path:none}
+    .daemon-wait-portrait{width:min(100%,320px)}
   }
 </style>
 </head>
@@ -170,6 +179,9 @@
   <div class="content"><div class="wrap">
     <div class="eyebrow">the hall is closed</div>
     <h2 class="headline">your daemon is inside.</h2>
+    <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
+      <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="hopiumd daemon portrait" />
+    </div>
     <div class="panel">
       <div class="prow"><span class="k">YOUR DAEMON</span><span class="v">hopiumd</span></div>
       <div class="prow"><span class="k">YOUR BALANCE</span><span class="v">$13.45 <span class="tell">· only you</span></span></div>

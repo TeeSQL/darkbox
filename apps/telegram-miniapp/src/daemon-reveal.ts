@@ -4,6 +4,8 @@ type RevealPayload = { image?: string; name?: string; seed?: string };
 
 const stage = document.querySelector<HTMLElement>('#daemon-reveal-stage');
 const fallback = document.querySelector<HTMLImageElement>('#daemon-reveal-fallback');
+const waitPortrait = document.querySelector<HTMLElement>('.daemon-wait-portrait');
+const waitImage = document.querySelector<HTMLImageElement>('#daemon-wait-image');
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -14,6 +16,15 @@ let raf = 0;
 let started = false;
 let targetWake = 0.18;
 let loadedAspect = 1024 / 1536;
+
+let waitRenderer: THREE.WebGLRenderer | null = null;
+let waitScene: THREE.Scene | null = null;
+let waitCamera: THREE.OrthographicCamera | null = null;
+let waitMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | null = null;
+let waitLoader: THREE.TextureLoader | null = null;
+let waitRaf = 0;
+let waitStarted = false;
+let waitLoadedAspect = 1024 / 1536;
 
 const vertexShader = `
   varying vec2 vUv;
@@ -71,6 +82,55 @@ const fragmentShader = `
     color *= mix(0.56, 1.10, vignette);
     color += gate * creature * vec3(0.14, 0.09, 0.24);
     gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const waitVertexShader = `
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const waitFragmentShader = `
+  varying vec2 vUv;
+  uniform sampler2D uMap;
+  uniform float uTime;
+  uniform float uWake;
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(113.7, 271.9))) * 43758.5453123);
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    float breathe = 0.5 + 0.5 * sin(uTime * 1.05);
+    float drift = sin((uv.y * 9.0) + uTime * 0.72) * 0.0018;
+    float edgeMask =
+      smoothstep(0.10, 0.0, uv.x) +
+      smoothstep(0.90, 1.0, uv.x) +
+      smoothstep(0.08, 0.0, uv.y) +
+      smoothstep(0.92, 1.0, uv.y);
+
+    vec4 base = texture2D(uMap, uv + vec2(drift, 0.0));
+    vec4 red = texture2D(uMap, uv + vec2(0.003 + uWake * 0.003, 0.0));
+    vec4 blue = texture2D(uMap, uv - vec2(0.003 + uWake * 0.003, 0.0));
+    float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+    float presence = smoothstep(0.08, 0.55, luma);
+    float scan = smoothstep(0.965, 1.0, sin((uv.y + uTime * 0.018) * 720.0) * 0.5 + 0.5);
+    float grain = hash(floor(uv * vec2(220.0, 360.0)) + floor(uTime * 10.0)) - 0.5;
+    float pulse = 0.08 + breathe * (0.10 + uWake * 0.06);
+
+    vec3 chroma = vec3(red.r, base.g, blue.b) - base.rgb;
+    vec3 livingGlow = vec3(0.42, 0.36, 0.95) * presence * pulse;
+    vec3 edgeColor = vec3(0.92, 0.28, 0.55) * edgeMask * (0.08 + breathe * 0.12);
+    vec3 scanColor = vec3(0.72, 0.78, 1.0) * scan * presence * 0.035;
+    vec3 color = chroma * (0.52 + edgeMask) + livingGlow + edgeColor + scanColor + grain * 0.012;
+
+    float alpha = clamp(0.05 + presence * (0.10 + breathe * 0.08) + edgeMask * 0.12 + scan * 0.05, 0.0, 0.32);
+    gl_FragColor = vec4(color, alpha);
   }
 `;
 
@@ -160,10 +220,99 @@ function setImage(image: string) {
   });
 }
 
+function resizeWaitPortrait() {
+  if (!waitPortrait || !waitRenderer || !waitCamera || !waitMesh) return;
+  const rect = waitPortrait.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  waitRenderer.setSize(width, height, false);
+  const aspect = width / height;
+  waitCamera.left = -aspect;
+  waitCamera.right = aspect;
+  waitCamera.top = 1;
+  waitCamera.bottom = -1;
+  waitCamera.updateProjectionMatrix();
+
+  let imageWidth = 2 * waitLoadedAspect;
+  let imageHeight = 2;
+  if (imageWidth > aspect * 2) {
+    imageWidth = aspect * 2;
+    imageHeight = imageWidth / waitLoadedAspect;
+  }
+  waitMesh.scale.set(imageWidth, imageHeight, 1);
+}
+
+function animateWaitPortrait(time = 0) {
+  waitRaf = requestAnimationFrame(animateWaitPortrait);
+  if (!waitRenderer || !waitScene || !waitCamera || !waitMesh) return;
+  waitMesh.material.uniforms.uTime.value = time * 0.001;
+  waitMesh.material.uniforms.uWake.value += (targetWake - waitMesh.material.uniforms.uWake.value) * 0.035;
+  waitRenderer.render(waitScene, waitCamera);
+}
+
+function initWaitPortrait() {
+  if (!waitPortrait || waitStarted) return Boolean(waitRenderer);
+  waitStarted = true;
+  waitPortrait.classList.add('daemon-wait-alive');
+  try {
+    waitRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    waitRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    waitRenderer.setClearColor(0x000000, 0);
+    waitRenderer.domElement.className = 'daemon-wait-shader';
+    waitRenderer.domElement.setAttribute('aria-hidden', 'true');
+    waitPortrait.append(waitRenderer.domElement);
+    waitScene = new THREE.Scene();
+    waitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
+    waitCamera.position.z = 2;
+    waitLoader = new THREE.TextureLoader();
+    waitMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1, 1, 1),
+      new THREE.ShaderMaterial({
+        uniforms: { uMap: { value: null }, uTime: { value: 0 }, uWake: { value: targetWake } },
+        vertexShader: waitVertexShader,
+        fragmentShader: waitFragmentShader,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    waitScene.add(waitMesh);
+    resizeWaitPortrait();
+    window.addEventListener('resize', resizeWaitPortrait);
+    animateWaitPortrait();
+    waitPortrait.classList.add('webgl-alive');
+    return true;
+  } catch (error) {
+    console.warn('daemon wait portrait webgl unavailable', error);
+    waitPortrait.classList.add('css-alive');
+    return false;
+  }
+}
+
+function setWaitImage(image: string) {
+  if (!waitPortrait) return;
+  waitPortrait.classList.add('daemon-wait-alive');
+  if (!initWaitPortrait() || !waitLoader || !waitMesh) return;
+  waitLoader.load(image, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    const imageBitmap = texture.image as { width?: number; height?: number };
+    if (imageBitmap.width && imageBitmap.height) waitLoadedAspect = imageBitmap.width / imageBitmap.height;
+    if (waitMesh) waitMesh.material.uniforms.uMap.value = texture;
+    waitPortrait.classList.add('webgl-alive');
+    resizeWaitPortrait();
+  }, undefined, () => {
+    waitPortrait.classList.add('css-alive');
+  });
+}
+
 window.addEventListener('daemonhall:reveal', (event) => {
   const payload = (event as CustomEvent<RevealPayload>).detail || {};
   targetWake = 0.22 + (Math.abs(hashCode(payload.seed || payload.name || 'daemon')) % 24) / 100;
-  if (payload.image) setImage(payload.image);
+  if (payload.image) {
+    setImage(payload.image);
+    setWaitImage(payload.image);
+  }
 });
 
 function hashCode(seed: string) {
@@ -177,6 +326,8 @@ function hashCode(seed: string) {
 
 window.addEventListener('pagehide', () => {
   if (raf) cancelAnimationFrame(raf);
+  if (waitRaf) cancelAnimationFrame(waitRaf);
 });
 
 if (fallback?.src) setImage(fallback.getAttribute('src') || fallback.src);
+if (waitImage?.src) setWaitImage(waitImage.getAttribute('src') || waitImage.src);

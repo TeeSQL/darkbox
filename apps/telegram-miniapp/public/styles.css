@@ -1968,3 +1968,55 @@ textarea::-webkit-scrollbar { display: none; }
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Telegram fix: terminal header must use the real SVG logo, not a font-rendered wordmark. */
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 28px !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup {
+    width: min(48vw, 190px) !important;
+    height: auto !important;
+    aspect-ratio: 548 / 638 !important;
+    overflow: visible !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup::after,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup::after {
+    content: none !important;
+    display: none !important;
+  }
+  .stage[data-loop="terminal"] .single-logo,
+  .stage[data-loop="threshold-copy"] .single-logo {
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    top: 0 !important;
+    left: 0 !important;
+    object-fit: contain !important;
+    filter:
+      brightness(1.22)
+      contrast(1.12)
+      drop-shadow(0 0 18px rgba(215,215,223,0.22))
+      drop-shadow(0 10px 34px rgba(139,123,255,0.20)) !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 64% !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 18px !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup {
+    width: min(42vw, 160px) !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 65% !important;
+  }
+}

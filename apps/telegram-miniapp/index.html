@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260613-prototype-swap" />
+    <link rel="stylesheet" href="/styles.css?v=20260613-three-reveal" />
   </head>
   <body>
     <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
@@ -70,7 +70,31 @@
         </div></div>
         <div class="cmdbar">
           <span class="hint">this can't be undone.</span>
-          <div class="actions"><button class="btn-primary" data-go="v-wait">seal the pact <span class="ret">&#8629;</span></button></div>
+          <div class="actions"><button class="btn-primary" data-go="v-reveal">seal the pact <span class="ret">&#8629;</span></button></div>
+        </div>
+      </section>
+
+
+      <section class="view" id="v-reveal">
+        <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="reveal-countdown">SEALED</span></span></div>
+        <div class="content"><div class="wrap reveal-wrap">
+          <div class="eyebrow">visible only with your key</div>
+          <h2 class="headline">something took your shape.</h2>
+          <div class="daemon-reveal-panel" aria-label="Private daemon render">
+            <div id="daemon-reveal-stage" class="daemon-reveal-stage" aria-label="Your daemon preview">
+              <img id="daemon-reveal-fallback" class="daemon-reveal-fallback" src="/daemons/rasp-05.webp" alt="your daemon" />
+            </div>
+            <div class="daemon-reveal-copy">
+              <span class="k">YOUR DAEMON</span>
+              <strong id="reveal-daemon-name">hopiumd</strong>
+              <span id="reveal-daemon-meta">shader sealed · private preview</span>
+            </div>
+          </div>
+          <div class="sub"><span class="tell">only you see this render.</span><br />the public hall gets names and echoes, never the image behind your key.</div>
+        </div></div>
+        <div class="cmdbar">
+          <span class="hint">it is awake now.</span>
+          <div class="actions"><button class="btn-primary" data-go="v-wait">send it into the hall <span class="ret">&#8629;</span></button></div>
         </div>
       </section>
 
@@ -121,6 +145,7 @@
       </section>
     </main>
 
-    <script src="/flow.js?v=20260613-prototype-swap" type="module"></script>
+    <script src="/src/daemon-reveal.ts" type="module"></script>
+    <script src="/flow.js?v=20260613-three-reveal" type="module"></script>
   </body>
 </html>

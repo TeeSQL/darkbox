@@ -12,11 +12,14 @@ const landingCountdownEl = document.querySelector('#landing-countdown');
 const countdownEls = [
   document.querySelector('#whisper-countdown'),
   document.querySelector('#seal-countdown'),
+  document.querySelector('#reveal-countdown'),
   document.querySelector('#wait-countdown'),
   document.querySelector('#hall-countdown'),
 ].filter(Boolean);
 const fingerprintEl = document.querySelector('#fingerprint');
 const daemonNameEl = document.querySelector('#daemon-name');
+const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
+const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
 const daemonBalanceEl = document.querySelector('#daemon-balance');
 const daemonStatusEl = document.querySelector('#daemon-status');
 const daemonMurmurEl = document.querySelector('#daemon-murmur');
@@ -32,6 +35,15 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 let recognition;
 let listening = false;
 let selectedStake = 5;
+
+
+const daemonImages = [
+  '/daemons/murmur-01.webp', '/daemons/sable-02.webp', '/daemons/veil-03.webp', '/daemons/null-04.webp',
+  '/daemons/rasp-05.webp', '/daemons/crown-06.webp', '/daemons/gloam-07.webp', '/daemons/wisp-08.webp',
+  '/daemons/hex-09.webp', '/daemons/ash-10.webp', '/daemons/nix-11.webp', '/daemons/omen-12.webp',
+  '/daemons/rune-13.webp', '/daemons/grin-14.webp', '/daemons/lilt-15.webp', '/daemons/rook-16.webp',
+  '/daemons/vesper-17.webp', '/daemons/knell-18.webp', '/daemons/vant-19.webp', '/daemons/thorn-20.webp',
+];
 
 const names = ['hopiumd', 'fomod', 'rugd', 'greedd', 'panicd', 'copiumd', 'lateforkd', 'doubtd'];
 const statuses = ['circling', 'running', 'sleeping', 'listening', 'quiet', 'zombie'];
@@ -78,7 +90,11 @@ function renderPrivateState() {
   const ownName = pick(names, seed);
   const status = pick(statuses, seed, 2);
   if (fingerprintEl) fingerprintEl.textContent = fingerprint(seed);
+  const daemonImage = pick(daemonImages, seed, 5);
   if (daemonNameEl) daemonNameEl.textContent = ownName;
+  if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
+  if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(seed)}`;
+  window.dispatchEvent(new CustomEvent('daemonhall:reveal', { detail: { image: daemonImage, name: ownName, seed } }));
   if (daemonBalanceEl) daemonBalanceEl.innerHTML = `$${(selectedStake + (h % 900) / 100).toFixed(2)} <span class="tell">· only you</span>`;
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, seed, 3);

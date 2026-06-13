@@ -242,3 +242,78 @@ body.keyboard-open .cmdbar { position: fixed; }
   .brow { gap: 8px; font-size: 12px; }
   .brow .pulse { font-size: 11px; }
 }
+
+/* Private daemon reveal — Three.js shader stage with static image fallback. */
+.reveal-wrap { max-width: 520px; }
+.daemon-reveal-panel {
+  width: 100%;
+  margin-top: 24px;
+  border: 1px solid var(--hair);
+  background: var(--srf);
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: left;
+}
+.daemon-reveal-stage {
+  position: relative;
+  width: 100%;
+  min-height: min(54vh, 430px);
+  background: #101016;
+  border-bottom: 1px solid var(--hair);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.daemon-reveal-stage canvas,
+.daemon-reveal-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.daemon-reveal-stage canvas { z-index: 2; }
+.daemon-reveal-fallback {
+  z-index: 1;
+  object-fit: contain;
+  padding: 18px;
+  filter: contrast(1.08) brightness(0.86);
+}
+.daemon-reveal-stage.webgl-ready .daemon-reveal-fallback { opacity: 0; }
+.daemon-reveal-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,.025) 0 1px, transparent 1px 7px),
+    radial-gradient(70% 62% at 50% 42%, transparent 45%, rgba(0,0,0,.48) 100%);
+  mix-blend-mode: screen;
+  opacity: .38;
+}
+.daemon-reveal-copy {
+  display: grid;
+  gap: 4px;
+  padding: 15px 18px 17px;
+}
+.daemon-reveal-copy .k {
+  color: var(--mut);
+  font-size: 10px;
+  letter-spacing: .16em;
+}
+.daemon-reveal-copy strong {
+  color: var(--bone);
+  font-size: 22px;
+  line-height: 1.05;
+  font-family: var(--display);
+  font-style: italic;
+  text-transform: uppercase;
+}
+.daemon-reveal-copy span:last-child {
+  color: var(--mut);
+  font-size: 12px;
+}
+@media (max-width:560px) {
+  .daemon-reveal-stage { min-height: 360px; }
+  .daemon-reveal-fallback { padding: 12px; }
+}

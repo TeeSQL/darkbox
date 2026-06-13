@@ -1,10 +1,11 @@
 # DarkBox Telegram Mini App
 
-Telegram Mini App experiment for DarkBox onboarding probes: browser microphone support and Blink cross-chain stablecoin deposit UX.
+Telegram Mini App experiment for DarkBox onboarding probes: browser microphone support, Blink cross-chain stablecoin deposit UX, and Dynamic / Fireblocks Flow deposit UX.
 
 - Primary bot: `@daemonhall_bot` (menu button: **Enter Daemon Hall**)
-- Legacy experiment bot: `@darkbox_mic_lab_bot`
+- Legacy experiment bot: `@darkbox_mic_lab_bot` (testmic bot; currently points at `/dynamic-flow.html` for the Dynamic Flow demo)
 - Public URL: `https://darkbox-mic.repo.box/`
+- Dynamic Flow test URL: `https://darkbox-mic.repo.box/dynamic-flow.html`
 - Runtime: static files served from repo.box VPS Caddy
 - Local source: `apps/telegram-miniapp/`
 - Build: `pnpm --filter @darkbox/telegram-miniapp build`
@@ -34,5 +35,26 @@ Blink merchant registration is approved:
 - Private key: ignored local secret, loaded through `BLINK_MERCHANT_PRIVATE_KEY_PATH`
 
 Do not put the private key in client code or public env vars. For a real DarkBox deposit flow, replace the manual destination address with either the user's embedded wallet or a DarkBox deposit-intent/bridge address once attribution is finalized.
+
+## Dynamic Flow deposit probe
+
+The separate Dynamic Flow lab lives at `/dynamic-flow.html` so it can be opened from the legacy `@darkbox_mic_lab_bot` without touching the main Daemon Hall Mini App bot.
+
+The page calls `POST /api/dynamic-flow/intents` to create a short-lived DarkBox deposit intent and prepare Dynamic Flow checkout/transaction payloads.
+
+Current default route:
+
+- Destination chain: Base `8453`
+- Destination token: Base USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+- Destination wallet: DarkBoxBridge `0x55E84818FCEDc3E892A22b46715Ee2B4A947E138`
+- Memo: includes `depositIntentId`, `gameId`, `beneficiary`, and `depositRef`
+
+Live Dynamic Flow config is wired through the server env:
+
+- `DYNAMIC_ENVIRONMENT_ID`: Dynamic environment id
+- `DYNAMIC_FLOW_CHECKOUT_ID`: reusable Flow deposit checkout id
+- `DYNAMIC_API_TOKEN`: optional for transaction creation; required only for checkout/admin management
+
+If the environment id or checkout id are missing, the endpoint returns a dry-run payload instead of calling Dynamic.
 
 Bot token is intentionally ignored under `.secrets/telegram-bot-token`.

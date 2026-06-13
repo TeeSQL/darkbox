@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { signBlinkDepositRequest, type BlinkSignerRequest } from './blink-signer.js';
@@ -17,6 +18,13 @@ const blinkAllowedToken = process.env.BLINK_ALLOWED_TOKEN ?? undefined;
 const blinkMaxAmount = process.env.BLINK_MAX_AMOUNT_USD ? Number(process.env.BLINK_MAX_AMOUNT_USD) : undefined;
 const appUrl = process.env.MINIAPP_URL ?? `http://localhost:${port}`;
 const indexerPublicUrl = (process.env.INDEXER_PUBLIC_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
+const dynamicEnvironmentId = process.env.DYNAMIC_ENVIRONMENT_ID ?? '';
+const dynamicApiToken = process.env.DYNAMIC_API_TOKEN ?? '';
+const dynamicBaseUrl = (process.env.DYNAMIC_BASE_URL ?? 'https://app.dynamicauth.com/api/v0').replace(/\/$/, '');
+const dynamicCheckoutId = process.env.DYNAMIC_FLOW_CHECKOUT_ID ?? '';
+const dynamicBridgeAddress = process.env.DYNAMIC_FLOW_DESTINATION_ADDRESS ?? blinkAllowedAddress ?? '0x55E84818FCEDc3E892A22b46715Ee2B4A947E138';
+const dynamicSettlementChainId = process.env.DYNAMIC_FLOW_CHAIN_ID ?? '8453';
+const dynamicSettlementToken = process.env.DYNAMIC_FLOW_USDC_TOKEN ?? blinkAllowedToken ?? '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 const mimeTypes: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -53,6 +61,60 @@ async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   return Buffer.concat(chunks).toString('utf8');
+}
+
+function sendJson(res: ServerResponse, status: number, body: unknown) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+  });
+  res.end(JSON.stringify(body));
+}
+
+function isEvmAddress(value: unknown): value is string {
+  return typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
+function bytes32From(value: string) {
+  return `0x${createHash('sha256').update(value).digest('hex')}`;
+}
+
+function makeDepositIntent(input: { gameId: string; beneficiary: string; amount: number; memo: string; telegramOwner: string }) {
+  const nonce = randomBytes(8).toString('hex');
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+  const depositIntentId = `dbx-dyn-${Date.now().toString(36)}-${nonce}`;
+  const depositRef = bytes32From(`${depositIntentId}:${input.gameId}:${input.beneficiary}:${input.amount}`);
+  return {
+    depositIntentId,
+    depositRef,
+    gameId: input.gameId,
+    beneficiary: input.beneficiary,
+    telegramOwner: input.telegramOwner,
+    amount: input.amount,
+    amountUsd: input.amount.toFixed(2),
+    destination: {
+      chainName: 'EVM',
+      chainId: dynamicSettlementChainId,
+      tokenAddress: dynamicSettlementToken,
+      symbol: 'USDC',
+      tokenDecimals: 6,
+      bridgeAddress: dynamicBridgeAddress,
+    },
+    memo: {
+      kind: 'darkbox_dynamic_flow_deposit',
+      depositIntentId,
+      depositRef,
+      gameId: input.gameId,
+      beneficiary: input.beneficiary,
+      telegramOwner: input.telegramOwner,
+      note: input.memo,
+    },
+    createdAt,
+    expiresAt,
+  };
 }
 
 async function callTelegram(method: string, payload: unknown) {
@@ -140,6 +202,65 @@ function normalizeLeaderboard(raw: unknown) {
   });
 }
 
+async function handleDynamicFlowIntent(req: IncomingMessage, res: ServerResponse) {
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch {
+    return sendJson(res, 400, { error: 'invalid_json' });
+  }
+
+  const amount = Number(body.amount);
+  const beneficiary = String(body.beneficiary ?? '').trim();
+  const gameId = String(body.gameId ?? 'darkbox-nyc-finalist').trim();
+  const memo = String(body.memo ?? '').slice(0, 240);
+  const telegramOwner = String(body.telegramOwner ?? 'web-test-user').slice(0, 120);
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 25) {
+    return sendJson(res, 400, { error: 'amount must be between 0 and 25 for the test app' });
+  }
+  if (!isEvmAddress(beneficiary)) return sendJson(res, 400, { error: 'beneficiary must be an EVM address' });
+  if (!gameId || gameId.length > 80) return sendJson(res, 400, { error: 'gameId is required and must be short' });
+  if (!isEvmAddress(dynamicBridgeAddress) || !isEvmAddress(dynamicSettlementToken)) {
+    return sendJson(res, 503, { error: 'dynamic destination/token config is invalid' });
+  }
+
+  const intent = makeDepositIntent({ amount, beneficiary, gameId, memo, telegramOwner });
+  const checkoutConfig = {
+    mode: 'deposit',
+    settlementConfig: { strategy: 'cheapest', settlements: [{ chainName: 'EVM', chainId: dynamicSettlementChainId, tokenAddress: dynamicSettlementToken, symbol: 'USDC', tokenDecimals: 6 }] },
+    destinationConfig: { destinations: [{ chainName: 'EVM', type: 'address', identifier: dynamicBridgeAddress }] },
+    depositConfig: { minimum: '1.00', presets: ['1.00', '5.00', '10.00'] },
+    enableOrchestration: true,
+  };
+  const transactionPayload = { amount: intent.amountUsd, currency: 'USD', expiresIn: 900, memo: intent.memo };
+
+  if (!dynamicEnvironmentId || !dynamicCheckoutId) {
+    return sendJson(res, 200, {
+      mode: 'dry-run',
+      reason: 'DYNAMIC_ENVIRONMENT_ID and DYNAMIC_FLOW_CHECKOUT_ID are not configured on the test app API yet.',
+      intent,
+      dynamic: { createCheckout: checkoutConfig, createTransaction: transactionPayload, expectedEndpoint: '/sdk/{environmentId}/checkouts/{checkoutId}/transactions' },
+      coordinatorMapping: { matchBy: ['memo.depositIntentId', 'memo.depositRef', 'settled Base USDC amount', 'destination bridge address'], creditCallShape: 'DepositCoordinator credits beneficiary after Dynamic webhook or bridge watcher confirms settlement.' },
+    });
+  }
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (dynamicApiToken) headers.Authorization = `Bearer ${dynamicApiToken}`;
+    const response = await fetch(`${dynamicBaseUrl}/sdk/${dynamicEnvironmentId}/checkouts/${dynamicCheckoutId}/transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(transactionPayload),
+    });
+    const dynamicBody = await response.json().catch(async () => ({ raw: await response.text() }));
+    if (!response.ok) return sendJson(res, 502, { mode: 'live', error: 'dynamic_transaction_failed', status: response.status, intent, dynamic: dynamicBody });
+    return sendJson(res, 200, { mode: 'live', intent, dynamic: dynamicBody });
+  } catch (error) {
+    return sendJson(res, 502, { mode: 'live', error: error instanceof Error ? error.message : String(error), intent });
+  }
+}
+
 async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) {
   try {
     const [gameResult, marketsResult, activityResult, leaderboardResult] = await Promise.allSettled([
@@ -200,9 +321,9 @@ async function handleWebhook(req: IncomingMessage, res: ServerResponse) {
   if (msg?.chat?.id && (msg.text?.startsWith('/start') || msg.text?.startsWith('/mic'))) {
     await callTelegram('sendMessage', {
       chat_id: msg.chat.id,
-      text: 'Open the DarkBox mic lab to test whether Telegram Mini Apps can access your microphone.',
+      text: 'Open the DarkBox Dynamic Flow lab to create a test deposit intent.',
       reply_markup: {
-        inline_keyboard: [[{ text: 'Open mic lab', web_app: { url: appUrl } }]],
+        inline_keyboard: [[{ text: 'Open Dynamic Flow lab', web_app: { url: `${appUrl}/dynamic-flow.html` } }]],
       },
     });
   }
@@ -257,6 +378,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/healthz') return send(res, 200, 'ok');
   if (url.pathname === '/telegram/webhook' && req.method === 'POST') return handleWebhook(req, res);
   if (url.pathname === '/api/blink/sign-payment' && req.method === 'POST') return handleBlinkSigner(req, res);
+  if (url.pathname === '/api/dynamic-flow/intents' && req.method === 'POST') return handleDynamicFlowIntent(req, res);
   if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
 
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;

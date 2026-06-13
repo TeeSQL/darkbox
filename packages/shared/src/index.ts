@@ -11,3 +11,5 @@ export interface LeaderboardEntry {
 }
 
 export * from './agent/runtime.js';
+export * from './agent/turn-log.js';
+export * from './indexer.js';

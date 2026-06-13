@@ -1,0 +1,20 @@
+{
+  "name": "@darkbox/indexer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/services/indexer/src/server.js",
+  "types": "dist/services/indexer/src/server.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/services/indexer/src/server.js",
+    "check:public-leaks": "tsx src/check-public-leaks.ts"
+  },
+  "dependencies": {
+    "@darkbox/shared": "workspace:*",
+    "zod": "^4.2.1"
+  }
+}

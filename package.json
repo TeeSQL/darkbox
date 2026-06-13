@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev": "docker compose up --build",
+    "fetch:ethglobal": "tsx scripts/fetch-ethglobal-projects.ts",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },

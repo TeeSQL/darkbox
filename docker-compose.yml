@@ -17,13 +17,51 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  darkbox-ethglobal-ingest:
+    build:
+      context: .
+      dockerfile: infra/ethglobal-ingest/Dockerfile
+    networks: [egress_net]
+    profiles: [ingest]
+    environment:
+      ETHGLOBAL_EVENT_SLUG: newyork2026
+    volumes:
+      - ./data:/app/data
+
+  darkbox-ethglobal-watch:
+    build:
+      context: .
+      dockerfile: infra/ethglobal-ingest/Dockerfile
+    networks: [egress_net, hidden_net]
+    depends_on: [darkbox-indexer]
+    profiles: [ingest-watch]
+    restart: unless-stopped
+    environment:
+      ETHGLOBAL_EVENT_SLUG: newyork2026
+      ETHGLOBAL_REFRESH_SECONDS: 900
+      INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+    volumes:
+      - ./data:/app/data
+    command: >
+      sh -lc 'while true; do
+        pnpm fetch:ethglobal --event "$${ETHGLOBAL_EVENT_SLUG}" || true;
+        wget -qO- --method=POST "$${INDEXER_INTERNAL_URL}/resolution/check?event=$${ETHGLOBAL_EVENT_SLUG}" || true;
+        sleep "$${ETHGLOBAL_REFRESH_SECONDS}";
+      done'
+
   darkbox-indexer:
-    build: ./services/indexer
+    build:
+      context: .
+      dockerfile: services/indexer/Dockerfile
     networks: [hidden_net, public_net]
     depends_on: [darkbox-node, darkbox-db]
     environment:
       HIDDEN_RPC_URL: http://darkbox-node:8545
       DATABASE_URL: postgres://darkbox:darkbox_dev_only@darkbox-db:5432/darkbox
+      DATA_DIR: /app/data
+      ETHGLOBAL_EVENT_SLUG: newyork2026
+    volumes:
+      - ./data:/app/data:ro
     expose:
       - "8080"
 

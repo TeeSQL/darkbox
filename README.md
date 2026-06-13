@@ -53,3 +53,5 @@ Each runtime service is intended to build into a separate Docker container for C
 ## Status
 
 Early technical specification and architecture skeleton.
+
+- Market resolution is offchain/admin-agent driven: every 15 minutes the ETHGlobal watcher refreshes data and asks the hidden indexer to resolve eligible ETHGlobal/Daemonhall metric markets with an audit dossier.

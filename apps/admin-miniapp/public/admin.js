@@ -105,36 +105,63 @@ function renderJsonBlock(result) {
 }
 
 async function loadOverview() {
-  const [snapshot, health, agentFeed] = await Promise.all([
+  const [sourceInfo, snapshot, health, agentFeed, game, marketsPublic, leaderboardPublic, activityPublic] = await Promise.all([
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'source-info')),
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'snapshot')),
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'health')),
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'agent-feed')),
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'game')),
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'markets')),
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'leaderboard')),
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'activity')),
   ]);
   const snapshotData = snapshot.ok && snapshot.data && typeof snapshot.data === 'object' ? snapshot.data : {};
   const activity = snapshotData.activity || {};
   const markets = Array.isArray(snapshotData.markets) ? snapshotData.markets : [];
-  const game = snapshotData.game || {};
+  const leaderboard = Array.isArray(snapshotData.leaderboard) ? snapshotData.leaderboard : [];
+  const gameData = snapshotData.game || {};
   const feedData = agentFeed.ok && agentFeed.data && typeof agentFeed.data === 'object' ? agentFeed.data : {};
+  const sourceData = sourceInfo.ok && sourceInfo.data && typeof sourceInfo.data === 'object' ? sourceInfo.data : {};
 
   const healthEl = $('#admin-health');
   if (healthEl) {
     const bits = [
       `<span class="admin-dot ${health.ok ? 'ok' : 'bad'}"></span>${health.ok ? 'indexer online' : 'indexer unavailable'}`,
       `<span>${escapeHtml(snapshot.ok ? 'snapshot online' : 'snapshot unavailable')}</span>`,
+      `<span>${escapeHtml(sourceData.sourceLabel || 'source unlabeled')}</span>`,
       `<span>${escapeHtml(agentFeed.ok ? 'agent feed online' : 'agent feed unavailable')}</span>`,
       `<span>${new Date().toLocaleTimeString()}</span>`,
     ];
     healthEl.innerHTML = bits.join('');
   }
   const set = (selector, value) => { const el = $(selector); if (el) el.textContent = value; };
-  set('#admin-game-status', game.status || game.revealStatus || '—');
-  set('#admin-game-note', game.title || 'indexer game payload');
+  set('#admin-game-status', gameData.status || gameData.revealStatus || '—');
+  set('#admin-game-note', gameData.title || 'indexer game payload');
   set('#admin-market-count', compactNumber(activity.activeMarkets ?? markets.length));
   set('#admin-market-note', `${markets.length} market payloads loaded`);
   set('#admin-agent-count', compactNumber(activity.activeAgents ?? feedData.agents ?? feedData.agentCount ?? 0));
   set('#admin-agent-note', feedData.runId ? `run ${feedData.runId}` : 'feed summary / operator-safe aggregate');
   set('#admin-trade-count', compactNumber(activity.totalTrades ?? 0));
-  set('#admin-trade-note', `volume ${activity.totalVolume ?? '0'}`);
+  set('#admin-trade-note', `volume ${activity.totalVolume ?? activity.totalVolumeUsdc ?? '0'}`);
+
+  const publicEl = $('#admin-public-surface');
+  if (publicEl) {
+    const rows = [
+      ['health', health],
+      ['game', game],
+      ['markets', marketsPublic],
+      ['leaderboard', leaderboardPublic],
+      ['activity', activityPublic],
+    ];
+    publicEl.innerHTML = rows.map(([label, result]) => `
+      <div class="admin-row">
+        <span class="rank">${result.ok ? '✓' : '!'}</span>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(result.ok ? '200' : result.pending ? 'pending' : String(result.status || 'err'))}</span>
+        <span>${escapeHtml(resultSummary(result))}</span>
+      </div>
+    `).join('');
+  }
 
   const marketsEl = $('#admin-markets');
   if (marketsEl) {
@@ -146,6 +173,18 @@ async function loadOverview() {
         <span>${escapeHtml(String(market.trades ?? 0))} trades</span>
       </div>
     `).join('') : '<div class="admin-empty">no markets loaded</div>';
+  }
+
+  const leaderboardEl = $('#admin-leaderboard');
+  if (leaderboardEl) {
+    leaderboardEl.innerHTML = leaderboard.length ? leaderboard.map((entry, index) => `
+      <div class="admin-row">
+        <span class="rank">${escapeHtml(entry.rank ?? index + 1)}</span>
+        <strong>${escapeHtml(entry.displayName || entry.ensName || entry.agentId || `Agent ${index + 1}`)}</strong>
+        <span>${escapeHtml(entry.ensName || '')}</span>
+        <span>${escapeHtml(`PnL ${entry.pnl ?? entry.pnlUsdc ?? '0'}`)}</span>
+      </div>
+    `).join('') : '<div class="admin-empty">leaderboard loaded; no public rows yet</div>';
   }
 
   const feedEl = $('#admin-agent-feed');

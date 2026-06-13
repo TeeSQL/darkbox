@@ -10,7 +10,7 @@ const appUrl = process.env.ADMIN_MINIAPP_URL ?? `http://localhost:${port}`;
 const token = process.env.ADMIN_TELEGRAM_BOT_TOKEN ?? '';
 const webhookSecret = process.env.ADMIN_TELEGRAM_WEBHOOK_SECRET ?? '';
 const accessToken = process.env.ADMIN_ACCESS_TOKEN ?? '';
-const indexerPublicUrl = (process.env.ADMIN_INDEXER_PUBLIC_URL ?? process.env.INDEXER_PUBLIC_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
+const indexerPublicUrl = (process.env.ADMIN_INDEXER_PUBLIC_URL ?? process.env.INDEXER_PUBLIC_URL ?? 'https://d52dd8da602484730a36c648ae09672b6e2b1334-8080.dstack-base-prod5.phala.network').replace(/\/$/, '');
 const agentFeedPath = process.env.ADMIN_AGENT_FEED_PATH ?? process.env.AGENT_FEED_PATH ?? '';
 const sourceLabel = process.env.ADMIN_SOURCE_LABEL ?? 'unlabeled admin source';
 
@@ -238,8 +238,9 @@ async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) 
         activeMarkets: getNumber(activityRaw.activeMarkets ?? activityRaw.active_markets, marketsRaw.length),
         activeAgents: getNumber(activityRaw.activeAgents ?? activityRaw.active_agents, 0),
         totalTrades: getNumber(activityRaw.totalTrades ?? activityRaw.total_trades, 0),
-        totalVolume: String(activityRaw.totalVolume ?? activityRaw.total_volume ?? '0'),
-        totalDeposits: String(activityRaw.totalDeposits ?? activityRaw.total_deposits ?? '0'),
+        totalVolume: String(activityRaw.totalVolume ?? activityRaw.total_volume ?? activityRaw.total_volume_usdc ?? '0'),
+        totalVolumeUsdc: String(activityRaw.totalVolumeUsdc ?? activityRaw.total_volume_usdc ?? activityRaw.totalVolume ?? activityRaw.total_volume ?? '0'),
+        totalDeposits: String(activityRaw.totalDeposits ?? activityRaw.total_deposits ?? activityRaw.total_deposits_count ?? '0'),
       } : { activeMarkets: marketsRaw.length, activeAgents: 0, totalTrades: 0, totalVolume: '0', totalDeposits: '0' },
       markets: marketsRaw.map(normalizeMarket),
       leaderboard: leaderboardResult.status === 'fulfilled' ? normalizeLeaderboard(leaderboardResult.value) : [],
@@ -285,7 +286,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', appUrl);
   if (url.pathname === '/healthz') return send(res, 200, 'ok');
   if (!handleAuth(req, res, url)) return;
-  if (url.pathname === '/api/source-info' && req.method === 'GET') return sendJson(res, 200, { app: 'daemonhall-admin', sourceLabel, authEnabled: Boolean(accessToken), indexerConfigured: Boolean(indexerPublicUrl), agentFeedConfigured: Boolean(agentFeedPath), generatedAt: new Date().toISOString() });
+  if (url.pathname === '/api/source-info' && req.method === 'GET') return sendJson(res, 200, { app: 'daemonhall-admin', sourceLabel, authEnabled: Boolean(accessToken), indexerConfigured: Boolean(indexerPublicUrl), indexerPublicUrl, publicPaths: ['/public/health', '/public/game', '/public/markets', '/public/leaderboard', '/public/activity'], agentFeedConfigured: Boolean(agentFeedPath), generatedAt: new Date().toISOString() });
   if (url.pathname === '/telegram/webhook' && req.method === 'POST') return handleWebhook(req, res);
   if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
   if (url.pathname === '/agent-feed.json' && req.method === 'GET') return handleAgentFeed(req, res);

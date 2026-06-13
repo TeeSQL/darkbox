@@ -1,0 +1,65 @@
+# AttestMesh node compose — DarkBox member 5: debug/bastion (public SSH entry).
+#
+# A throwaway operator entry point: sidecar + an sshd container sharing the sidecar
+# netns. An operator SSHes in from OUTSIDE and is then ON the mesh — curl/cast every
+# member at 10.13.x.x, or `ssh root@<member_mesh_ip>` into the core/geth-2/gateway
+# members (which run mesh-only sshd sidecars). The signer is intentionally NOT
+# ssh-reachable (curl its API over the mesh instead).
+#
+# INGRESS: the dstack gateway has no raw-TCP path — it only SNI-routes TLS-passthrough
+# on the `s`-suffix host (the same mechanism the wg mesh uses on 51900). So the
+# sidecar publishes 2222 and the sshd container fronts sshd with stunnel
+# (STUNNEL_ACCEPT_PORT=2222) terminating TLS there → 127.0.0.1:22. Public endpoint:
+#   <bastion_app_id>-2222s.dstack-base-prod5.phala.network:443
+# Operators connect with an SSH ProxyCommand that does the TLS+SNI (verify=0 — the
+# ingress cert is a throwaway for SNI routing; SSH's own host key + key-only auth is
+# the real security):
+#   Host darkbox-bastion
+#     ProxyCommand socat - OPENSSL:<bastion_app_id>-2222s.dstack-base-prod5.phala.network:443,verify=0,snihost=<bastion_app_id>-2222s.dstack-base-prod5.phala.network
+#     User root
+#
+# SECURITY: the sshd container does NOT mount agentsock, so a shell can't reach the
+# sidecar's CSK gRPC. The bastion is a high-value foothold (it can curl every
+# member's internal HTTP) — tear it down when not actively debugging, and strip all
+# sshd before the mesh holds real funds.
+services:
+  sidecar:
+    image: ghcr.io/attestmesh/cluster-mesh-agent:latest
+    restart: unless-stopped
+    environment:
+      # MEMBER_CONTRACT intentionally unset — self-discovered from /Info app_id (Path A).
+      - CHAIN_ID=${CHAIN_ID}
+      - RPC_URL=${RPC_URL}
+      - BUNDLER_URL=${BUNDLER_URL}
+      - GAS_POLICY_ID=${GAS_POLICY_ID}
+      - INDEXER_REGISTRY_ADDR=${INDEXER_REGISTRY_ADDR}
+      - GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+      - DSTACK_SOCKET=/var/run/dstack.sock
+      - AGENT_GRPC_SOCKET=/var/run/attestmesh/agent.sock
+      - HEALTH_HTTP_ADDR=0.0.0.0:9090
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=info,cluster_mesh_agent=debug
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - agentsock:/var/run/attestmesh
+    ports:
+      - "9090:9090"     # sidecar healthz
+      - "51900:51900"   # wg-over-TCP bootstrap
+      - "2222:2222"     # SSH-over-TLS (stunnel); public via <app_id>-2222s.<domain>:443
+    cap_add: [ NET_ADMIN ]
+    devices: [ /dev/net/tun ]
+
+  sshd:
+    image: ghcr.io/teesql/darkbox-sshd-debug:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"   # share sidecar netns → on the mesh + owns the published 2222
+    depends_on: [ sidecar ]
+    # DELIBERATELY no agentsock mount — a shell here must not reach the CSK gRPC.
+    environment:
+      - DEBUG_NODE_NAME=darkbox-bastion
+      - STUNNEL_ACCEPT_PORT=2222
+      # Operator public keys, base64-encoded, sealed via -e. No key material in repo/image.
+      - AUTHORIZED_KEYS_B64=${AUTHORIZED_KEYS_B64}
+
+volumes:
+  agentsock:

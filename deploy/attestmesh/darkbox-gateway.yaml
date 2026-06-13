@@ -72,5 +72,17 @@ services:
       # Typed-whisper MVP doesn't need the transcriber; wire it when audio lands:
       # - TRANSCRIBER_URL=${TRANSCRIBER_URL}
 
+  # ── Debug sshd sidecar (mesh-only; ssh from the bastion over the wg mesh) ─────
+  sshd:
+    image: ghcr.io/teesql/darkbox-sshd-debug:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    # No public port (reached via `ssh root@<gateway mesh IP>` from the bastion) and
+    # DELIBERATELY no agentsock mount — a shell must not reach the CSK gRPC.
+    environment:
+      - DEBUG_NODE_NAME=darkbox-gateway
+      - AUTHORIZED_KEYS_B64=${AUTHORIZED_KEYS_B64}
+
 volumes:
   agentsock:

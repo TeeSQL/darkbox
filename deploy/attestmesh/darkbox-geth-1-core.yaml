@@ -144,6 +144,18 @@ services:
   # volume, so leaving it in would re-deploy a second orphaning contract set on
   # every core redeploy. Re-add it only to (re)deploy contracts on a fresh chain.
 
+  # ── Debug sshd sidecar (mesh-only; ssh from the bastion over the wg mesh) ─────
+  sshd:
+    image: ghcr.io/teesql/darkbox-sshd-debug:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    # No public port (reached via `ssh root@<core mesh IP>` from the bastion) and
+    # DELIBERATELY no agentsock mount — a shell must not reach the CSK gRPC.
+    environment:
+      - DEBUG_NODE_NAME=darkbox-core
+      - AUTHORIZED_KEYS_B64=${AUTHORIZED_KEYS_B64}
+
 volumes:
   agentsock:
   gethdata:

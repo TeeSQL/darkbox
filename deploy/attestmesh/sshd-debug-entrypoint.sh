@@ -8,7 +8,12 @@ set -eu
 
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
-if [ -n "${AUTHORIZED_KEYS:-}" ]; then
+# Keys arrive base64-encoded (AUTHORIZED_KEYS_B64) so the sealed -e file stays
+# one-line-per-var (env files don't carry the newlines between pubkeys); plain
+# AUTHORIZED_KEYS is a fallback.
+if [ -n "${AUTHORIZED_KEYS_B64:-}" ]; then
+  echo "$AUTHORIZED_KEYS_B64" | base64 -d > /root/.ssh/authorized_keys
+elif [ -n "${AUTHORIZED_KEYS:-}" ]; then
   printf '%s\n' "$AUTHORIZED_KEYS" > /root/.ssh/authorized_keys
 else
   # Fail-closed: no keys ⇒ no logins (combined with prohibit-password).

@@ -46,6 +46,18 @@ services:
       - CHAIN_ID=88813
       - NODE_ROLE=signer
 
+  # ── Debug sshd sidecar (mesh-only; ssh from the bastion over the wg mesh) ─────
+  sshd:
+    image: ghcr.io/teesql/darkbox-sshd-debug:latest
+    restart: unless-stopped
+    network_mode: "service:sidecar"
+    depends_on: [ sidecar ]
+    # No public port (reached via `ssh root@<geth-2 mesh IP>` from the bastion) and
+    # DELIBERATELY no agentsock mount — a shell must not reach the CSK gRPC.
+    environment:
+      - DEBUG_NODE_NAME=darkbox-geth-2
+      - AUTHORIZED_KEYS_B64=${AUTHORIZED_KEYS_B64}
+
 volumes:
   agentsock:
   gethdata:

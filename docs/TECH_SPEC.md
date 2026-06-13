@@ -17,10 +17,11 @@ The central product thesis:
 ### 2.1 User Goals
 
 - Easy entry: deposit USDC without thinking about chain complexity.
-- Clear game loop: fund agent, write instructions, watch leaderboard.
+- Clear game loop: whisper instructions first, choose/receive agent identity, finalize auth/deposit, watch leaderboard.
 - Strong spectator appeal: public rankings update while the actual market remains hidden.
 - Trustworthy finale: reveal proves the hidden game was executed correctly.
 - Memorable hackathon story: agents competing silently inside a black box.
+- Atmospheric onboarding: the landing page should be a playable 3D dark room / underground labyrinth where users find terminals and whisper instructions to their agents.
 
 ### 2.2 Technical Goals
 
@@ -62,6 +63,11 @@ The central product thesis:
   - resolution rules
   - list of eligible teams/projects if known
   - final reveal policy
+- Shared external context feed visible to all agents:
+  - hackathon project submissions list
+  - project/team metadata
+  - ETH/USDC price if WETH/ETH is included in the trading surface
+  - keep this intentionally small for MVP; sponsor/prize schedules, social data, and GitHub activity are stretch goals only.
 
 ### 3.2 Hidden During Game
 
@@ -138,31 +144,7 @@ A core deployment constraint: every independent runtime component must be packag
 
 The CVM should be treated as a sealed mini-cluster. No service should rely on host-level state except mounted encrypted volumes and explicitly injected secrets.
 
-
-### 4A.0 Repository Layout
-
-```text
-apps/
-  frontend/        Public web UI.
-
-services/
-  indexer/         Chain indexer + internal/external APIs.
-  agents/          Agent runtime, prompts, wallets, brain.
-  bridge/          Deposit/withdrawal coordinator.
-  ens/             ENS subname and record writer.
-  reveal/          Reveal bundle and replay exporter.
-
-infra/
-  node/            Hidden Reth/Geth node container/config.
-
-packages/
-  shared/          Shared types, schemas, constants, API contracts.
-
-docs/
-  TECH_SPEC.md     Architecture/specification.
-```
-
-This layout separates deployable containers from shared libraries. Everything under `apps/`, `services/`, and `infra/node` should be containerizable. `packages/shared` is imported by services/apps but is not deployed independently.
+Local Docker Compose is the source of truth for component boundaries. The goal is: if it runs locally in Compose, the same component graph can be deployed into the CVM with minimal changes.
 
 ### 4A.1 Container Topology
 
@@ -272,6 +254,15 @@ Core indexed tables/views:
 - leaderboard_snapshots
 - agent_actions
 - settlement_claims
+- external_context_snapshots
+
+Visibility decision:
+
+- Trading agents receive the full internal orderbook/indexer view, including markets, orders, fills, positions, prices, balances, replay-relevant events, and shared external context.
+- Agent observations must be mediated by the machine/indexer. Agents do not get open internet access; they receive their own prompt/history plus the shared curated context feed.
+- Human users receive only aggregate account state: available balance, estimated deployed portfolio value, total estimated equity, leaderboard rank, and PnL.
+- Live PnL should use last-trade marking for MVP. Midpoint/fair-value marking can be added later as secondary display, but last trade is simpler and less gameable in thin markets.
+- Leaderboard snapshots should be timed rather than every block for MVP, e.g. every 10–30 seconds plus final authoritative state at reveal.
 
 Trusted internal consumers:
 
@@ -301,8 +292,11 @@ External endpoints may include only:
 - `GET /public/game`
 - `GET /public/leaderboard`
 - `GET /public/agent/:ensName`
+- `GET /public/external-context`
 - `GET /public/reveal/status`
 - `GET /public/reveal/bundle` after reveal
+
+`/public/external-context` is not hidden market state. It is the shared public-information feed that all agents can also consume. For MVP it should include the hackathon project submissions list and project/team metadata. If WETH/ETH is included, it should also include ETH/USDC price. Sponsor/prize schedule, social data, and GitHub activity are stretch goals.
 
 No endpoint should accidentally expose raw transaction logs, orderbook state, positions, or hidden market details before reveal.
 
@@ -474,24 +468,19 @@ Risks:
 - Less product-specific than Blink/Privy/Dynamic.
 - Needs careful integration to avoid being bounty garnish.
 
-### 5.3 Final MVP Path
+### 5.3 Recommended MVP Path
 
-Use a public USDC escrow contract as the source of truth and keep the hidden chain on synthetic credits.
+Pick one primary funding integration:
 
-MVP decision:
+- If Blink supports our target flow cleanly: use Blink.
+- Else if Privy universal deposits are fastest: use Privy.
+- Else use Dynamic if server wallets help agent signing too.
 
-- Canonical asset: USDC.
-- Canonical escrow chain: Base unless a selected sponsor flow strictly requires another settlement chain.
-- Canonical fallback: direct Base USDC deposit into the escrow contract.
-- Sponsor integration: pick exactly one adapter for UX/bounty fit after SDK validation; do not integrate multiple funding providers.
-- Hidden-chain balance: 1:1 synthetic game credit minted by the coordinator after confirmed public deposit.
-- Withdrawals: disabled during live play; pre-freeze refunds and post-reveal Merkle claims only.
-
-See [Deposits + Withdrawals Specification](DEPOSITS_WITHDRAWALS_SPEC.md) for the complete lifecycle, bridge API, escrow interface, refund rules, Docker/CVM config, and settlement flow.
+Do not integrate all of them. The deposit story should be one clean path, plus maybe one fallback manual Base USDC deposit for demo reliability.
 
 ### 5.4 Public Entry Contract
 
-A public contract records entry commitments, deposits, refunds, final roots, and claims.
+A public contract records entry commitments and deposits.
 
 Responsibilities:
 
@@ -506,7 +495,6 @@ Candidate interface:
 
 ```solidity
 function registerAgent(
-    bytes32 gameId,
     bytes32 agentId,
     string calldata ensName,
     bytes32 instructionHash,
@@ -514,31 +502,13 @@ function registerAgent(
     bytes32 revealSaltHash
 ) external;
 
-function depositForAgent(bytes32 gameId, bytes32 agentId, uint256 amount, bytes32 fundingRef) external;
-
-function registerAndDeposit(
-    bytes32 gameId,
-    bytes32 agentId,
-    string calldata ensName,
-    bytes32 instructionHash,
-    bytes32 runtimeHash,
-    bytes32 revealSaltHash,
-    uint256 amount,
-    bytes32 fundingRef
-) external;
+function depositForAgent(bytes32 agentId, uint256 amount) external;
 
 function freezeRegistration(bytes32 gameId) external;
 
-function publishFinalRoot(
-    bytes32 gameId,
-    bytes32 hiddenChainRoot,
-    bytes32 revealBundleHash,
-    bytes32 settlementRoot
-) external;
+function publishFinalRoot(bytes32 gameId, bytes32 hiddenChainRoot, bytes32 revealBundleHash) external;
 
-function refund(bytes32 gameId, bytes32 agentId) external;
-
-function claim(bytes32 gameId, bytes32 agentId, address recipient, uint256 amount, bytes32[] calldata proof) external;
+function claim(bytes32 agentId, bytes calldata proof) external;
 ```
 
 ## 6. ENS Identity and Commitment Layer
@@ -566,7 +536,17 @@ Possible namespace:
 
 If the project cannot control `darkbox.eth`, use a hackathon-owned ENS name or testnet-equivalent namespace.
 
+The ENS/display name should be chosen or assigned when the user starts playing, immediately after the initial whisper flow and before/alongside deposit finalization. It should appear in the leaderboard from the beginning so the agent has a stable public identity throughout onboarding, funding, gameplay, and reveal.
+
 ### 6.3 ENS Records
+
+Primary ENS use case: encrypted agent instructions and commitment/reveal pointers.
+
+During the game, the ENS record should point to a manifest URI/hash. The manifest should include agent identity, encrypted current-instructions blob URI/hash, instruction commitment hash, public key or encryption scheme, game/rules version, and reveal policy.
+
+Each mid-game instruction update creates a new encrypted blob and commitment version. Public observers can verify that instructions were committed, but cannot read plaintext before reveal. The sealed runtime/CVM can decrypt or access plaintext through the configured key path.
+
+After reveal, ENS can point to the final reveal bundle. Plaintext instructions may be published fully or selectively depending on the game rules and user consent.
 
 Pre-game records:
 
@@ -582,7 +562,9 @@ During-game records:
 
 - Mostly unchanged.
 - Optional `text:darkbox.status`: active/eliminated/frozen.
-- Do not publish private state.
+- `text:darkbox.instructionsEncrypted`: URI/hash of the latest encrypted instruction blob.
+- `text:darkbox.instructionVersion`: monotonic instruction update version.
+- Do not publish plaintext instructions or private market state.
 
 Post-reveal records:
 
@@ -717,6 +699,20 @@ For the hackathon, it is acceptable if the hidden chain is operator-run, as long
   - Internal settlement accounting.
   - Resolver.
 
+### 7.4B Asset Model
+
+Canonical accounting unit: USDC.
+
+MVP rules:
+
+- Base USDC is the required deposit/settlement asset.
+- Minimum deposit: $10.
+- PnL leaderboard is normalized to USDC.
+- WETH/ETH support is a stretch goal trading asset. It creates more market surface and may help the Uniswap/bounty story, but it must not block MVP.
+- If users deposit ETH, mirror it internally as WETH.
+- If WETH/ETH is included, add ETH/USDC price to the shared external context feed.
+- Multi-asset support must not block the MVP: USDC-only fallback must always work.
+
 ### 7.5 State Ingress
 
 Public deposits are mirrored into the hidden chain by the coordinator.
@@ -782,7 +778,15 @@ MVP can support:
 
 ### 8.2 Market Factory
 
-Agents can create derivative markets.
+Agents can create derivative markets in the same hidden game universe as the canonical market.
+
+Derivative topology:
+
+- One CVM / hidden chain for the whole game.
+- One canonical main market: hackathon winner.
+- Derivatives are connected markets inside the same hidden chain/orderbook, not separate CVMs.
+- They share the same information boundary: hidden trading state, public leaderboard only.
+- Derivatives may reference the main market, project/team metadata, or other objectively resolvable hackathon facts.
 
 Market examples:
 
@@ -801,12 +805,33 @@ Factory responsibilities:
 - Charge market creation fee if needed.
 - Store market creator.
 
+### 8.2B Open YES/NO Market Creation
+
+Open market creation should use a collateral-backed YES/NO split/merge primitive.
+
+Flow:
+
+- Creator deposits USDC collateral.
+- Market contract mints paired outcome claims: YES and NO.
+- One YES plus one NO can merge back into 1 USDC before resolution.
+- After resolution, winning outcome tokens redeem 1:1 for USDC; losing outcome tokens redeem 0.
+- A creator or trader expresses a view by keeping one side and selling the other into the CLOB.
+
+Frontier integration:
+
+- `createMarket(question, resolver, closeTime, metadataURI)` creates a binary market.
+- `split(amount)` mints YES + NO backed by USDC.
+- `merge(amount)` burns YES + NO and returns USDC.
+- Route YES/USDC and NO/USDC through Frontier books or an equivalent paired-book wrapper.
+- Resolution writes the winning outcome and unlocks redemption.
+
 ### 8.3 Market Creation Controls
 
 To avoid spam or unresolvable junk:
 
-- Require creation fee.
+- Require creation fee or creator bond.
 - Require human-readable resolution criteria.
+- Require resolver, expiry, source of truth, and close time.
 - Limit max markets per agent.
 - Optional allowlist for derivative market types.
 - Use resolver templates:
@@ -814,6 +839,14 @@ To avoid spam or unresolvable junk:
   - top N contains X
   - boolean oracle result
   - manual judge result
+- Markets should be solvable **by** the end of the game, not necessarily only at the end. Early-resolvable markets are allowed and encouraged.
+- Add an admin/model review gate before or shortly after market creation to catch ambiguous, duplicate, spammy, or unresolvable markets.
+
+Nullification mechanism:
+
+- If invalid before trading: nullify and refund creator collateral.
+- If invalid after trading starts: freeze the book, cancel open orders, unwind/redeem paired YES+NO collateral pro-rata, and record nullification in the replay.
+- Nullification should be rare, explicit, and visible in the final reveal.
 
 ### 8.4 Resolution
 
@@ -826,7 +859,7 @@ Derivative markets can resolve via:
 - post-reveal adjudication,
 - Chainlink/attested external data if available.
 
-MVP should keep derivative markets simple enough to resolve at reveal.
+MVP should keep derivative markets simple enough to resolve by final reveal, or earlier when objective data is already available.
 
 ## 9. Agent Runtime Layer
 
@@ -834,21 +867,20 @@ MVP should keep derivative markets simple enough to resolve at reveal.
 
 Agents can:
 
-- Read their own balance/equity.
-- Read public game metadata.
-- Read their private instructions.
+- Read the full internal indexer/orderbook view provided by the machine: markets, orders, fills, positions, prices, balances, replay-relevant events, and curated shared context.
+- Read their own private instructions and instruction history.
 - Submit trading transactions.
-- Create derivative markets.
+- Create derivative markets through guarded templates.
 - Cancel/replace their own orders if Frontier supports it.
 
 Agents cannot:
 
-- Query full chain state.
-- Read orderbook state.
-- See trades/positions except what is reflected in their balance.
+- Query arbitrary RPC or raw host services outside the approved indexer/API boundary.
+- Access public internet directly.
+- See any data source not provided uniformly by the machine/context feed.
 - Send messages to users or public chat.
 - Exfiltrate hidden state.
-- Access arbitrary network endpoints unless whitelisted.
+- Create unbounded/unresolvable markets outside the allowed templates.
 
 ### 9.2 Agent Observation API
 
@@ -872,7 +904,7 @@ Each agent step receives a constrained observation object:
 }
 ```
 
-No hidden chain RPC data is exposed.
+Agents do not access raw hidden-chain RPC directly. They receive rich trading state through the internal indexer API so the game can log, constrain, and replay exactly what the machine made available.
 
 ### 9.3 Agent Action Schema
 
@@ -946,6 +978,35 @@ Recommended MVP:
 - No public messages.
 - Logs stay sealed until reveal.
 - If model provider requires remote API, treat provider as trusted for MVP or use local model/TEE provider if possible.
+
+## 9B. 3D Landing Page / Terminal Game
+
+The public landing page should be a playable Three.js experience rather than a conventional SaaS landing page.
+
+Core loop:
+
+1. User enters a dark room / underground labyrinth.
+2. User can move a character through the space.
+3. Other players may appear as silhouettes, distant figures, or proximity/audio presences, but without exposing their portfolios, orders, or strategies.
+4. User finds an open terminal.
+5. User whispers instructions to their agent before hard auth/payment finalization, so the experience hooks them emotionally first.
+6. After the whisper, the user chooses or receives an agent ENS/display name and screenshot-ready agent card.
+7. User finalizes auth/deposit using wallet connection, with name+password as an optional hackathon-friendly fallback if needed.
+8. The whisper becomes the committed/encrypted instruction bundle used by the agent runtime.
+9. User exits back to the spectator view / leaderboard while the agent acts inside the hidden box.
+
+Design metaphor:
+
+- The 3D world is the public metaphor for hidden execution: people can see/hint at each other, but cannot inspect the sealed market state.
+- "Dark underground labyrinth" is more atmospheric; "landscape of boxes" is clearer. Preferred hybrid: an underground maze of sealed boxes/rooms where opened/revealed boxes visibly change after the game ends.
+- Terminals are the bridge from human intent to hidden agent execution.
+
+Constraints:
+
+- The 3D layer is onboarding, identity, atmosphere, and instruction entry.
+- It should not become the full manual trading UI.
+- Complex trading remains agent-driven and terminal-mediated.
+- The frontend must never talk directly to the hidden node or privileged indexer API.
 
 ## 10. Confidential AI / Attestation Layer
 
@@ -1318,9 +1379,9 @@ Mitigations:
 
 ### Settlement
 
-- What exact dispute window do we want after reveal: zero for demo, or short challenge window for credibility?
-- Which signer/multisig publishes `settlementRoot` for the MVP?
-- Are protocol/demo fees zero, or do we reserve a small fee field in the settlement artifact?
+- Are gains/losses real USDC or demo credits until final payout?
+- Do we need a dispute window?
+- Are losing balances burned/transferred automatically or only after claim?
 
 ## 18. Recommended Final Shape for Hackathon
 

@@ -9,3 +9,5 @@ export * from "./signingService.js";
 export * from "./depositCoordinator.js";
 export * from "./withdrawalCoordinator.js";
 export * from "./reconciliation.js";
+export * from "./chain/abis.js";
+export * from "./chain/adapters.js";

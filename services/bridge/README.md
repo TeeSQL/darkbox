@@ -49,3 +49,22 @@ pnpm --filter @darkbox/bridge test     # node --test via tsx, no live chain
 pnpm --filter @darkbox/shared test     # EIP-712 + idempotency unit tests
 ```
 
+## End-to-end smoke test (live chains)
+
+`scripts/smoke.ts` runs the full vertical against deployed contracts using the
+viem-backed adapters in `src/chain/`: deposit USDC → shadow mint → withdrawable
+balance → signed `WithdrawCommand` → forced burn → signing-service
+authorization → public `withdraw(...)`, asserting escrow/shadow accounting
+reconciles.
+
+- **Local rehearsal (no secrets):** `./scripts/smoke-local.sh` boots one anvil,
+  deploys everything, and runs the flow.
+- **Testnet:** copy `.env.smoke.example` → `.env.smoke`, set `PUBLIC_RPC_URL`
+  and a funded `DEPLOYER_PRIVATE_KEY`, then `./scripts/smoke-testnet.sh`. The
+  public bridge + a mintable test USDC deploy to the testnet; the shadow
+  controller runs on a local anvil (no shadow testnet exists yet). Only the one
+  deployer key needs testnet gas.
+
+Deploy scripts: `packages/contracts/script/Deploy.s.sol` (`DeployPublic`,
+`DeployShadow`).
+

@@ -110,6 +110,13 @@ interface AgentState {
   completed: number;
 }
 
+interface RecentBillboard {
+  messageId: string;
+  agentId: string;
+  message: string;
+  createdAt: string;
+}
+
 interface RunnerState {
   startedAt: string;
   completedTurns: number;
@@ -117,6 +124,8 @@ interface RunnerState {
   activeWorkers: number;
   desiredWorkers: number;
   latenciesMs: number[];
+  recentBillboards: RecentBillboard[];
+  ethGlobalSignals: string[];
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -137,7 +146,41 @@ function statusToRuntime(status: string | undefined): 'open' | 'paused' | 'resol
   return 'open';
 }
 
-async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number): Promise<AgentObservation> {
+function loadEthGlobalSignals(): string[] {
+  const candidates = [
+    path.resolve(process.cwd(), 'data/ethglobal/newyork2026/projects.compact.json'),
+    path.resolve(process.cwd(), 'data/ethglobal/cannes2026/projects.compact.json'),
+  ];
+  for (const filePath of candidates) {
+    try {
+      const bundle = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { event?: string; fetchedAt?: string; count?: number; projects?: Array<Record<string, unknown>> };
+      const projects = Array.isArray(bundle.projects) ? bundle.projects : [];
+      if (projects.length === 0) continue;
+      const text = (project: Record<string, unknown>) => JSON.stringify(project).toLowerCase();
+      const countTerm = (term: string) => projects.filter((project) => text(project).includes(term)).length;
+      const blink = countTerm('blink');
+      const privy = countTerm('privy');
+      const lifi = countTerm('li.fi') + countTerm('lifi');
+      const ai = countTerm(' ai ') + countTerm('agent');
+      const demoReady = projects.filter((project) => project.demoVideoReady === true).length;
+      return [
+        `ETHGlobal public cache: event=${bundle.event ?? 'unknown'} projects=${projects.length} fetchedAt=${bundle.fetchedAt ?? 'unknown'}.`,
+        `ETHGlobal signal counts: blink_mentions=${blink}, privy_mentions=${privy}, lifi_mentions=${lifi}, ai_or_agent_mentions=${ai}, demo_video_ready=${demoReady}.`,
+        'Potential market idea: Will at least 5 submitted projects use Blink?',
+        'Potential market idea: Will an AI/agent project win or place?',
+        'Use these public ETHGlobal signals to seek profit. Counts are evidence, not certainty.',
+      ];
+    } catch {
+      // Try next cache file.
+    }
+  }
+  return [
+    'ETHGlobal public cache unavailable or empty. Prefer proposing markets about Blink adoption, finalists, winner odds, demo readiness, and bounty narratives.',
+    'Potential market idea: Will at least 5 submitted projects use Blink?',
+  ];
+}
+
+async function makeLiveObservation(indexerUrl: string, agentId: string, turn: number, recentBillboards: RecentBillboard[], ethGlobalSignals: string[]): Promise<AgentObservation> {
   const [markets, leaderboard] = await Promise.all([
     fetchJson<PublicMarket[]>(`${indexerUrl}/public/markets`),
     fetchJson<LeaderboardEntry[]>(`${indexerUrl}/public/leaderboard`),
@@ -160,7 +203,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
     })),
     orders: [],
     balances: [{ agentId, available: '100', equity: '100' }],
-    billboardSinceLastTurn: [],
+    billboardSinceLastTurn: recentBillboards.filter((message) => message.agentId !== agentId).slice(-20),
     marketProposals: [],
     sharedContext: [
       `live_indexer=${indexerUrl}`,
@@ -169,6 +212,7 @@ async function makeLiveObservation(indexerUrl: string, agentId: string, turn: nu
       'NOISE_MODE=true: quote the empty market and take risk; do not hold just because the live book is thin.',
       'Seed pricing for empty books: fair value starts around 0.50, quote 0.35-0.65 with small sizes unless you have a stronger view.',
       'No live orderbook submission is wired into this runner yet; outputs are validated and logged but not submitted onchain.',
+      ...ethGlobalSignals,
     ],
   });
 }
@@ -213,7 +257,7 @@ async function runAgentTurn(params: {
   const startedMs = Date.now();
 
   try {
-    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn);
+    const observation = await makeLiveObservation(config.indexerUrl, agent.agentId, turn, state.recentBillboards, state.ethGlobalSignals);
     const output = await strategy.decide(observation);
     const latencyMs = Date.now() - startedMs;
     state.latenciesMs.push(latencyMs);
@@ -245,6 +289,15 @@ async function runAgentTurn(params: {
     agent.completed += 1;
     state.completedTurns += 1;
     if (!validation.ok) state.errors += 1;
+    if (validation.ok && eventOutput.billboardPost?.message) {
+      state.recentBillboards.push({
+        messageId: `${config.runId}-turn-${turn}-${agent.agentId}`,
+        agentId: agent.agentId,
+        message: eventOutput.billboardPost.message,
+        createdAt: new Date().toISOString(),
+      });
+      if (state.recentBillboards.length > 60) state.recentBillboards.splice(0, state.recentBillboards.length - 60);
+    }
   } catch (error) {
     const latencyMs = Date.now() - startedMs;
     const message = error instanceof Error ? error.message : String(error);
@@ -302,15 +355,17 @@ async function main(): Promise<void> {
     activeWorkers: 0,
     desiredWorkers: config.minWorkers,
     latenciesMs: [],
+    recentBillboards: [],
+    ethGlobalSignals: loadEthGlobalSignals(),
   };
 
-  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, agents: agents.map((agent) => agent.agentId), jsonlPath, summaryPath };
+  const started = { type: 'run_started', at: state.startedAt, runId: config.runId, strategy: strategy.name, scheduler: 'bounded-worker-pool', config, ethGlobalSignals: state.ethGlobalSignals, agents: agents.map((agent) => agent.agentId), jsonlPath, summaryPath };
   appendJsonl(jsonlPath, started);
   fs.appendFileSync(summaryPath, `[${started.at}] started run=${config.runId} strategy=${strategy.name} agents=${agents.length} scheduler=bounded-worker-pool minWorkers=${config.minWorkers} maxWorkers=${config.maxWorkers} targetTpm=${config.targetTurnsPerMinute}\n`);
   writeJson(latestPath, started);
   console.log(JSON.stringify(started, null, 2));
 
-  while (config.turns === 0 || state.completedTurns < config.turns * config.agentCount) {
+  while (config.turns === 0 || state.completedTurns + state.errors < config.turns * config.agentCount) {
     state.desiredWorkers = computeDesiredWorkers(config, state);
     const now = Date.now();
     const due = agents

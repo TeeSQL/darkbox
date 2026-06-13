@@ -240,6 +240,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .eyebrow { margin-bottom: 13px; color: var(--mut); font-size: 11px; letter-spacing: 0.22em; }
 .headline { color: var(--silver); font-size: clamp(1.4rem, 7vw, 2.05rem); line-height: 1.22; letter-spacing: 0.005em; }
 .sub { margin-top: 15px; color: var(--mut); font-size: 13px; line-height: 1.7; }
+/* Reserve the status line's tallest (initial) height so swapping the message on
+   mic click can't shrink it and re-center the column — keeps the composer fixed. */
+#whisper-status { min-height: 5.2em; }
 .tell { color: var(--violet); }
 .whisper { width: 100%; margin-top: 28px; text-align: left; }
 .whisper-field {

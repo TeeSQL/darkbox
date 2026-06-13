@@ -1,11 +1,11 @@
-import type { Address, Hex } from "viem";
+import type { Hex } from "viem";
 
 /**
- * Per-asset accounting snapshot the reconciliation worker compares (spec 12.1).
- * All amounts are in the asset's base units.
+ * USDC accounting snapshot the reconciliation worker compares (spec 12.1).
+ * All amounts are in USDC base units (6 decimals). USDC-only MVP: there is a
+ * single asset, so accounting is not keyed by asset.
  */
-export interface AssetAccounting {
-  asset: Address;
+export interface UsdcAccounting {
   confirmedDeposits: bigint;
   shadowMinted: bigint;
   confirmedShadowBurned: bigint;
@@ -25,20 +25,19 @@ export interface InvariantResult {
 export type FreezeFlow = "deposits" | "withdrawals" | null;
 
 export interface ReconciliationReport {
-  asset: Address;
   results: InvariantResult[];
   ok: boolean;
   freeze: FreezeFlow;
 }
 
 /**
- * Evaluates the section 12.1 invariants for one asset. Pending mints are
+ * Evaluates the section 12.1 invariants for the USDC ledger. Pending mints are
  * allowed to lag, so the deposits==mints check is "eventually" satisfied and
  * only flagged when mints EXCEED confirmed deposits (which is never legitimate).
  *
  * Never auto-corrects; callers log/alert and freeze the affected flow.
  */
-export function reconcileAsset(acc: AssetAccounting): ReconciliationReport {
+export function reconcileUsdc(acc: UsdcAccounting): ReconciliationReport {
   const results: InvariantResult[] = [];
 
   // mints must never exceed confirmed deposits (deposits may temporarily exceed
@@ -74,7 +73,7 @@ export function reconcileAsset(acc: AssetAccounting): ReconciliationReport {
     freeze = mintViolation ? "deposits" : "withdrawals";
   }
 
-  return { asset: acc.asset, results, ok, freeze };
+  return { results, ok, freeze };
 }
 
 /** Cross-references that each id maps one-to-one (spec 12.1, last two lines). */

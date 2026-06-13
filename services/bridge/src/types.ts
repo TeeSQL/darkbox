@@ -12,7 +12,6 @@ export interface DepositObservation {
   /** Human-readable canonical operation string (stored for audit). */
   operationString: string;
   chainId: number;
-  asset: Address;
   amount: bigint;
   from: Address;
   /** Beneficiary owner (defaults to `from`, may be re-routed by an intent). */
@@ -27,7 +26,6 @@ export interface DepositObservation {
 export interface DepositRecord {
   depositOpId: Hex;
   operationString: string;
-  asset: Address;
   amount: bigint;
   from: Address;
   beneficiary: Address;
@@ -50,7 +48,6 @@ export interface AccountMapping {
 export interface DepositIntent {
   intentId: Hex;
   beneficiary: Address;
-  asset: Address;
   minAmount: bigint;
   expectedFrom?: Address;
   expiresAt: number;
@@ -66,7 +63,6 @@ export interface WithdrawalRecord {
   gameId: Hex;
   owner: Address;
   shadowAccount: Hex;
-  asset: Address;
   amount: bigint;
   recipient: Address;
   nonce: bigint;

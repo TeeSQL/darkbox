@@ -10,7 +10,6 @@ import {
 const baseKey: DepositOperationKey = {
   chainId: 8453,
   bridgeAddress: "0x00000000000000000000000000000000000000aa",
-  asset: "0x00000000000000000000000000000000000000c0",
   txHash: `0x${"ab".repeat(32)}`,
   logIndex: 3,
   from: "0x00000000000000000000000000000000000000b0",
@@ -18,10 +17,10 @@ const baseKey: DepositOperationKey = {
   amount: 1_000_000n,
 };
 
-test("deposit operation string is the canonical colon-joined form", () => {
+test("deposit operation string is the canonical colon-joined form (USDC-only: no asset)", () => {
   assert.equal(
     depositOperationString(baseKey),
-    `8453:0x00000000000000000000000000000000000000aa:0x00000000000000000000000000000000000000c0:0x${"ab".repeat(
+    `8453:0x00000000000000000000000000000000000000aa:0x${"ab".repeat(
       32,
     )}:3:0x00000000000000000000000000000000000000b0:0x00000000000000000000000000000000000000b0:1000000`,
   );

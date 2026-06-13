@@ -6,12 +6,10 @@ import {
 } from "../src/shadow.js";
 import type { NonceChecker, ShadowBurnVerifier } from "../src/signingService.js";
 
-const key = (shadow: Hex, asset: Address) =>
-  `${shadow.toLowerCase()}:${asset.toLowerCase()}`;
+const k = (shadow: Hex) => shadow.toLowerCase();
 
 interface BurnEntry {
   ref: Hex;
-  asset: Address;
   amount: bigint;
 }
 
@@ -19,7 +17,8 @@ interface BurnEntry {
  * In-memory model of the shadow bridge controller, mirroring its on-chain
  * semantics (idempotent mint, available-balance burn, used-nonce tracking).
  * Implements every shadow-side interface the bridge service depends on, so the
- * coordinators can be unit-tested without a live chain.
+ * coordinators can be unit-tested without a live chain. USDC-only: balances are
+ * keyed by shadow account (single asset).
  */
 export class FakeShadowChain
   implements ShadowMintSubmitter, ShadowBurnSubmitter, ShadowBurnVerifier, NonceChecker
@@ -31,11 +30,11 @@ export class FakeShadowChain
   usedNonces = new Set<string>();
 
   // --- test seam: simulate orders/collateral locking funds ---
-  setBalance(shadow: Hex, asset: Address, amount: bigint) {
-    this.balances.set(key(shadow, asset), amount);
+  setBalance(shadow: Hex, amount: bigint) {
+    this.balances.set(k(shadow), amount);
   }
-  setLocked(shadow: Hex, asset: Address, amount: bigint) {
-    this.locked.set(key(shadow, asset), amount);
+  setLocked(shadow: Hex, amount: bigint) {
+    this.locked.set(k(shadow), amount);
   }
   useNonce(owner: Address, nonce: bigint) {
     this.usedNonces.add(`${owner.toLowerCase()}:${nonce}`);
@@ -46,13 +45,12 @@ export class FakeShadowChain
     depositOpId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<{ txHash: Hex }> {
     const existing = this.mints.get(p.depositOpId.toLowerCase());
     if (existing) return { txHash: existing };
-    const k = key(p.shadowAccount, p.asset);
-    this.balances.set(k, (this.balances.get(k) ?? 0n) + p.amount);
+    const key = k(p.shadowAccount);
+    this.balances.set(key, (this.balances.get(key) ?? 0n) + p.amount);
     const txHash = keccak256(stringToHex(`mint:${p.depositOpId}`));
     this.mints.set(p.depositOpId.toLowerCase(), txHash);
     return { txHash };
@@ -62,39 +60,28 @@ export class FakeShadowChain
   }
 
   // --- ShadowBurnSubmitter ---
-  async withdrawableBalance(shadow: Hex, asset: Address): Promise<bigint> {
-    const k = key(shadow, asset);
-    const bal = this.balances.get(k) ?? 0n;
-    const lk = this.locked.get(k) ?? 0n;
+  async withdrawableBalance(shadow: Hex): Promise<bigint> {
+    const bal = this.balances.get(k(shadow)) ?? 0n;
+    const lk = this.locked.get(k(shadow)) ?? 0n;
     return bal > lk ? bal - lk : 0n;
   }
   async burnForWithdrawal(p: {
     withdrawalId: Hex;
     owner: Address;
     shadowAccount: Hex;
-    asset: Address;
     amount: bigint;
     userCommandHash: Hex;
   }): Promise<{ shadowBurnRef: Hex }> {
     const existing = this.burns.get(p.withdrawalId.toLowerCase());
     if (existing) return { shadowBurnRef: existing.ref };
-    const available = await this.withdrawableBalance(p.shadowAccount, p.asset);
+    const available = await this.withdrawableBalance(p.shadowAccount);
     if (available < p.amount) {
-      throw new InsufficientAvailableError(
-        p.shadowAccount,
-        p.asset,
-        p.amount,
-        available,
-      );
+      throw new InsufficientAvailableError(p.shadowAccount, p.amount, available);
     }
-    const k = key(p.shadowAccount, p.asset);
-    this.balances.set(k, (this.balances.get(k) ?? 0n) - p.amount);
+    const key = k(p.shadowAccount);
+    this.balances.set(key, (this.balances.get(key) ?? 0n) - p.amount);
     const ref = keccak256(stringToHex(`burn:${p.withdrawalId}`));
-    this.burns.set(p.withdrawalId.toLowerCase(), {
-      ref,
-      asset: p.asset,
-      amount: p.amount,
-    });
+    this.burns.set(p.withdrawalId.toLowerCase(), { ref, amount: p.amount });
     return { shadowBurnRef: ref };
   }
   async findExistingBurn(withdrawalId: Hex): Promise<Hex | null> {
@@ -105,14 +92,12 @@ export class FakeShadowChain
   async hasConfirmedBurn(p: {
     withdrawalId: Hex;
     shadowBurnRef: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<boolean> {
     const entry = this.burns.get(p.withdrawalId.toLowerCase());
     if (!entry) return false;
     return (
       entry.ref.toLowerCase() === p.shadowBurnRef.toLowerCase() &&
-      entry.asset.toLowerCase() === p.asset.toLowerCase() &&
       entry.amount === p.amount
     );
   }

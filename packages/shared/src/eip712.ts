@@ -32,13 +32,16 @@ export function bridgeDomain(params: BridgeDomainParams): TypedDataDomain {
   };
 }
 
-/** Canonical typed struct signed by the user (spec section 7.2). */
+/**
+ * Canonical typed struct signed by the user (spec section 7.2).
+ * USDC-only MVP: the settlement asset is fixed by the bridge, so there is no
+ * `asset` field — the amount is denominated in the configured USDC.
+ */
 export const WITHDRAW_COMMAND_TYPES = {
   WithdrawCommand: [
     { name: "gameId", type: "bytes32" },
     { name: "owner", type: "address" },
     { name: "shadowAccount", type: "bytes32" },
-    { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
     { name: "nonce", type: "uint256" },
@@ -53,7 +56,6 @@ export const WITHDRAWAL_AUTHORIZATION_TYPES = {
     { name: "gameId", type: "bytes32" },
     { name: "owner", type: "address" },
     { name: "shadowAccount", type: "bytes32" },
-    { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
     { name: "recipient", type: "address" },
     { name: "userCommandHash", type: "bytes32" },
@@ -67,7 +69,6 @@ export interface WithdrawCommand {
   gameId: Hex;
   owner: Address;
   shadowAccount: Hex;
-  asset: Address;
   amount: bigint;
   recipient: Address;
   nonce: bigint;
@@ -79,7 +80,6 @@ export interface WithdrawalAuthorization {
   gameId: Hex;
   owner: Address;
   shadowAccount: Hex;
-  asset: Address;
   amount: bigint;
   recipient: Address;
   userCommandHash: Hex;

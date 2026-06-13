@@ -15,12 +15,11 @@ export interface ShadowBurnVerifier {
   /**
    * Returns true iff a confirmed `ShadowBurned` (or sink
    * `ShadowWithdrawalLocked`) event exists with this `withdrawalId`, matching
-   * asset and amount.
+   * the amount (USDC-only: asset is implicit).
    */
   hasConfirmedBurn(params: {
     withdrawalId: Hex;
     shadowBurnRef: Hex;
-    asset: Address;
     amount: bigint;
   }): Promise<boolean>;
 }
@@ -129,11 +128,10 @@ export class SigningService {
 
     const withdrawalId = hashWithdrawCommand(this.cfg.domain, command);
 
-    // (3) confirmed shadow burn with matching withdrawalId/asset/amount
+    // (3) confirmed shadow burn with matching withdrawalId/amount
     const burnOk = await this.deps.burnVerifier.hasConfirmedBurn({
       withdrawalId,
       shadowBurnRef,
-      asset: command.asset,
       amount: command.amount,
     });
     if (!burnOk) throw new SignWithdrawalRejection("burn_not_confirmed");
@@ -155,7 +153,6 @@ export class SigningService {
       gameId: command.gameId,
       owner: command.owner,
       shadowAccount: command.shadowAccount,
-      asset: command.asset,
       amount: command.amount,
       recipient: command.recipient,
       userCommandHash: withdrawalId,
@@ -187,7 +184,6 @@ function sameCoreParams(
     prior.gameId.toLowerCase() === command.gameId.toLowerCase() &&
     getAddress(prior.owner) === getAddress(command.owner) &&
     prior.shadowAccount.toLowerCase() === command.shadowAccount.toLowerCase() &&
-    getAddress(prior.asset) === getAddress(command.asset) &&
     prior.amount === command.amount &&
     getAddress(prior.recipient) === getAddress(command.recipient) &&
     prior.nonce === command.nonce &&

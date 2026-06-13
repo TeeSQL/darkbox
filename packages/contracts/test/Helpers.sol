@@ -4,17 +4,16 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {DarkBoxBridge} from "../src/DarkBoxBridge.sol";
 
-/// @notice Shared EIP-712 signing helpers for bridge tests.
+/// @notice Shared EIP-712 signing helpers for bridge tests (USDC-only: no asset field).
 abstract contract BridgeEIP712Helper is Test {
     bytes32 internal constant WITHDRAWAL_AUTHORIZATION_TYPEHASH = keccak256(
-        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,address asset,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
+        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
     );
 
     struct Authorization {
         bytes32 gameId;
         address owner;
         bytes32 shadowAccount;
-        address asset;
         uint256 amount;
         address recipient;
         bytes32 userCommandHash;
@@ -30,7 +29,6 @@ abstract contract BridgeEIP712Helper is Test {
                 a.gameId,
                 a.owner,
                 a.shadowAccount,
-                a.asset,
                 a.amount,
                 a.recipient,
                 a.userCommandHash,

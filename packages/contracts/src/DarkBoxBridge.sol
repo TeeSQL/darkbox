@@ -5,24 +5,26 @@ import {IDarkBoxBridge, IERC20Minimal} from "./interfaces/IDarkBoxBridge.sol";
 import {ECDSA} from "./lib/ECDSA.sol";
 
 /// @title DarkBoxBridge
-/// @notice Public escrow that custodies real USDC/ETH, records deposits, and
-///         releases funds only against a signing-service `WithdrawalAuthorization`
-///         (which is itself only issued after a confirmed shadow-EVM burn).
-/// @dev Self-contained EIP-712; native asset sentinel is `address(0)`.
+/// @notice Public escrow that custodies the single configured USDC asset,
+///         records deposits, and releases funds only against a signing-service
+///         `WithdrawalAuthorization` (itself only issued after a confirmed
+///         shadow-EVM burn).
+/// @dev USDC-only MVP. Self-contained EIP-712. Native ETH and multi-asset
+///      support are intentionally absent; `usdc` is fixed at construction.
 contract DarkBoxBridge is IDarkBoxBridge {
-    /// @notice Native ETH sentinel for the `asset` field.
-    address public constant NATIVE = address(0);
-
     // --- EIP-712 domain ---
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    // WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,address asset,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)
+    // WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)
     bytes32 public constant WITHDRAWAL_AUTHORIZATION_TYPEHASH = keccak256(
-        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,address asset,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
+        "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
     );
 
     bytes32 public immutable DOMAIN_SEPARATOR;
+
+    /// @notice The single configured settlement asset (USDC).
+    address public immutable usdc;
 
     // --- Roles / config ---
     address public admin; // multisig/admin
@@ -34,9 +36,9 @@ contract DarkBoxBridge is IDarkBoxBridge {
     /// @notice Used withdrawal nonces, per owner (spec section 9).
     mapping(address => mapping(uint256 => bool)) public usedNonces;
 
-    /// @notice Escrow accounting per (owner, asset).
-    mapping(address => mapping(address => uint256)) public totalDeposited;
-    mapping(address => mapping(address => uint256)) public totalWithdrawn;
+    /// @notice Escrow USDC accounting per owner.
+    mapping(address => uint256) public totalDeposited;
+    mapping(address => uint256) public totalWithdrawn;
 
     // --- Errors ---
     error NotAdmin();
@@ -45,9 +47,7 @@ contract DarkBoxBridge is IDarkBoxBridge {
     error NonceAlreadyUsed();
     error AuthorizationExpired();
     error BadSigner();
-    error WrongMsgValue();
     error ZeroAmount();
-    error NativeTransferFailed();
 
     event SignerUpdated(address indexed previousSigner, address indexed newSigner);
     event AdminUpdated(address indexed previousAdmin, address indexed newAdmin);
@@ -59,10 +59,12 @@ contract DarkBoxBridge is IDarkBoxBridge {
         _;
     }
 
-    constructor(address _admin, address _signer) {
+    constructor(address _admin, address _signer, address _usdc) {
         require(_admin != address(0), "admin=0");
+        require(_usdc != address(0), "usdc=0");
         admin = _admin;
         signer = _signer;
+        usdc = _usdc;
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712_DOMAIN_TYPEHASH,
@@ -78,33 +80,18 @@ contract DarkBoxBridge is IDarkBoxBridge {
     // Deposits
     // ---------------------------------------------------------------------
 
-    /// @notice Direct ETH send path (spec 6.1.1). Beneficiary defaults to sender.
-    /// @dev gameId/depositRef are unknown for a raw send; the offchain watcher
-    ///      resolves them from config. Emitted as zero here.
-    receive() external payable {
-        if (depositsPaused) revert DepositsPaused();
-        emit DepositReceived(bytes32(0), msg.sender, NATIVE, msg.value, msg.sender, bytes32(0));
-    }
-
     /// @inheritdoc IDarkBoxBridge
-    function deposit(bytes32 gameId, address asset, uint256 amount, address beneficiary, bytes32 depositRef)
-        external
-        payable
-    {
+    /// @dev Pulls USDC from the caller (requires prior approve). Beneficiary
+    ///      defaults to `msg.sender`.
+    function deposit(bytes32 gameId, uint256 amount, address beneficiary, bytes32 depositRef) external {
         if (depositsPaused) revert DepositsPaused();
         if (amount == 0) revert ZeroAmount();
         address bene = beneficiary == address(0) ? msg.sender : beneficiary;
 
-        if (asset == NATIVE) {
-            if (msg.value != amount) revert WrongMsgValue();
-        } else {
-            if (msg.value != 0) revert WrongMsgValue();
-            // pull tokens from caller (requires prior approve)
-            _safeTransferFrom(asset, msg.sender, address(this), amount);
-        }
+        _safeTransferFrom(usdc, msg.sender, address(this), amount);
 
-        totalDeposited[bene][asset] += amount;
-        emit DepositReceived(gameId, msg.sender, asset, amount, bene, depositRef);
+        totalDeposited[bene] += amount;
+        emit DepositReceived(gameId, msg.sender, bene, amount, depositRef);
     }
 
     /// @notice Register an agent commitment (spec section 8). Emits canonical event only.
@@ -133,7 +120,6 @@ contract DarkBoxBridge is IDarkBoxBridge {
         bytes32 gameId,
         address owner,
         bytes32 shadowAccount,
-        address asset,
         uint256 amount,
         address recipient,
         uint256 nonce,
@@ -152,7 +138,6 @@ contract DarkBoxBridge is IDarkBoxBridge {
                 gameId,
                 owner,
                 shadowAccount,
-                asset,
                 amount,
                 recipient,
                 userCommandHash,
@@ -166,11 +151,11 @@ contract DarkBoxBridge is IDarkBoxBridge {
         if (recovered != signer) revert BadSigner();
 
         usedNonces[owner][nonce] = true;
-        totalWithdrawn[owner][asset] += amount;
+        totalWithdrawn[owner] += amount;
 
-        _payout(asset, recipient, amount);
+        _safeTransfer(usdc, recipient, amount);
 
-        emit WithdrawalExecuted(gameId, owner, asset, amount, recipient, nonce, userCommandHash, shadowBurnRef);
+        emit WithdrawalExecuted(gameId, owner, recipient, amount, nonce, userCommandHash, shadowBurnRef);
     }
 
     // ---------------------------------------------------------------------
@@ -181,14 +166,13 @@ contract DarkBoxBridge is IDarkBoxBridge {
     function emergencyWithdraw(
         bytes32 gameId,
         address owner,
-        address asset,
         uint256 amount,
         address recipient,
         bytes32 reason
     ) external onlyAdmin {
-        totalWithdrawn[owner][asset] += amount;
-        _payout(asset, recipient, amount);
-        emit EmergencyWithdrawal(gameId, owner, asset, amount, recipient, reason);
+        totalWithdrawn[owner] += amount;
+        _safeTransfer(usdc, recipient, amount);
+        emit EmergencyWithdrawal(gameId, owner, recipient, amount, reason);
     }
 
     // ---------------------------------------------------------------------
@@ -219,15 +203,6 @@ contract DarkBoxBridge is IDarkBoxBridge {
     // ---------------------------------------------------------------------
     // Internal helpers
     // ---------------------------------------------------------------------
-
-    function _payout(address asset, address to, uint256 amount) internal {
-        if (asset == NATIVE) {
-            (bool ok,) = payable(to).call{value: amount}("");
-            if (!ok) revert NativeTransferFailed();
-        } else {
-            _safeTransfer(asset, to, amount);
-        }
-    }
 
     function _safeTransfer(address token, address to, uint256 amount) internal {
         (bool ok, bytes memory data) =

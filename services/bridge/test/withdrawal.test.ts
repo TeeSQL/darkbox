@@ -41,7 +41,6 @@ function buildCommand(overrides: Partial<WithdrawCommand> = {}): WithdrawCommand
     gameId: GAME_ID,
     owner,
     shadowAccount: deriveShadowAccount(GAME_ID, owner),
-    asset: USDC,
     amount: 40_000_000n,
     recipient: RECIPIENT,
     nonce: 1n,
@@ -136,7 +135,7 @@ test("rejects a command whose shadowAccount does not match the mapping", async (
 test("full withdrawal happy path reaches service_signed with a valid authorization", async () => {
   const shadow = new FakeShadowChain();
   const command = buildCommand();
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
   const { coord, store } = makeCoordinator(shadow);
 
   const sig = await signCommand(command);
@@ -147,7 +146,7 @@ test("full withdrawal happy path reaches service_signed with a valid authorizati
   assert.ok(result.authorization);
 
   // burned available balance
-  assert.equal(shadow.balances.get(`${command.shadowAccount}:${USDC}`.toLowerCase()), 60_000_000n);
+  assert.equal(shadow.balances.get(command.shadowAccount.toLowerCase()), 60_000_000n);
 
   // signing service signature recovers to the signer over the authorization
   const recovered = await import("@darkbox/shared").then((m) =>
@@ -169,7 +168,7 @@ test("full withdrawal happy path reaches service_signed with a valid authorizati
 test("withdrawal exceeding available balance is rejected as insufficient", async () => {
   const shadow = new FakeShadowChain();
   const command = buildCommand({ amount: 200_000_000n });
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
   const { coord } = makeCoordinator(shadow);
   const sig = await signCommand(command);
 
@@ -184,8 +183,8 @@ test("withdrawal exceeding available balance is rejected as insufficient", async
 test("withdrawal against locked balance is rejected (no liquidation)", async () => {
   const shadow = new FakeShadowChain();
   const command = buildCommand({ amount: 40_000_000n });
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
-  shadow.setLocked(command.shadowAccount, USDC, 70_000_000n); // only 30 free
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
+  shadow.setLocked(command.shadowAccount, 70_000_000n); // only 30 free
   const { coord } = makeCoordinator(shadow);
   const sig = await signCommand(command);
 
@@ -200,7 +199,7 @@ test("withdrawal against locked balance is rejected (no liquidation)", async () 
 test("resubmitting a completed command returns the existing authorization (idempotent)", async () => {
   const shadow = new FakeShadowChain();
   const command = buildCommand();
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
   const { coord } = makeCoordinator(shadow);
   const sig = await signCommand(command);
 
@@ -232,12 +231,11 @@ test("signing service refuses when the nonce is already used", async () => {
   const command = buildCommand();
   const withdrawalId = hashWithdrawCommand(domain, command);
   // simulate a confirmed burn + already-used nonce
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
   const { shadowBurnRef } = await shadow.burnForWithdrawal({
     withdrawalId,
     owner: command.owner,
     shadowAccount: command.shadowAccount,
-    asset: command.asset,
     amount: command.amount,
     userCommandHash: withdrawalId,
   });
@@ -255,13 +253,12 @@ test("signing service refuses when the nonce is already used", async () => {
 test("signing service allows identical re-issue with a fresh deadline", async () => {
   const shadow = new FakeShadowChain();
   const command = buildCommand();
-  shadow.setBalance(command.shadowAccount, USDC, 100_000_000n);
+  shadow.setBalance(command.shadowAccount, 100_000_000n);
   const withdrawalId = hashWithdrawCommand(domain, command);
   const { shadowBurnRef } = await shadow.burnForWithdrawal({
     withdrawalId,
     owner: command.owner,
     shadowAccount: command.shadowAccount,
-    asset: command.asset,
     amount: command.amount,
     userCommandHash: withdrawalId,
   });

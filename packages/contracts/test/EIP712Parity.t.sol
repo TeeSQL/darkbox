@@ -17,7 +17,6 @@ contract EIP712ParityTest is Test {
     bytes32 constant GAME_ID = bytes32(uint256(0x1111111111111111111111111111111111111111111111111111111111111111));
     bytes32 constant SHADOW = bytes32(uint256(0x2222222222222222222222222222222222222222222222222222222222222222));
     address constant OWNER = 0x00000000000000000000000000000000000000B0;
-    address constant ASSET = 0x00000000000000000000000000000000000000C0;
     address constant RECIPIENT = 0x00000000000000000000000000000000000000d0;
     bytes32 constant USER_CMD_HASH =
         bytes32(uint256(0x3333333333333333333333333333333333333333333333333333333333333333));
@@ -28,8 +27,8 @@ contract EIP712ParityTest is Test {
     uint256 constant DEADLINE = 1_893_456_000;
     uint256 constant SHADOW_CHAIN_ID = 1337;
 
-    bytes32 constant EXPECTED_CMD = 0x7f4a1fbeca3e14721fbcf6a8b09f5ae7740055e91df095246fcf55590f940767;
-    bytes32 constant EXPECTED_AUTH = 0xa9dbfe194baf4892ce0715e58cf275df00b7bc3616ccbe67b2b7d5f4518a32ec;
+    bytes32 constant EXPECTED_CMD = 0xfe50710d78078e6226bf9d45a1bdbd18fc2e58fd8afbc2d26b1425648a85f860;
+    bytes32 constant EXPECTED_AUTH = 0x0f090d5e98ad8babae1e03d33e03cd92ae734309735ebd69dca89628887f38b1;
 
     function _domainSeparator() internal pure returns (bytes32) {
         return keccak256(
@@ -45,12 +44,10 @@ contract EIP712ParityTest is Test {
 
     function test_WithdrawCommandDigestMatchesViem() public pure {
         bytes32 typeHash = keccak256(
-            "WithdrawCommand(bytes32 gameId,address owner,bytes32 shadowAccount,address asset,uint256 amount,address recipient,uint256 nonce,uint256 deadline,uint256 shadowChainId)"
+            "WithdrawCommand(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,uint256 nonce,uint256 deadline,uint256 shadowChainId)"
         );
         bytes32 structHash = keccak256(
-            abi.encode(
-                typeHash, GAME_ID, OWNER, SHADOW, ASSET, AMOUNT, RECIPIENT, NONCE, DEADLINE, SHADOW_CHAIN_ID
-            )
+            abi.encode(typeHash, GAME_ID, OWNER, SHADOW, AMOUNT, RECIPIENT, NONCE, DEADLINE, SHADOW_CHAIN_ID)
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
         assertEq(digest, EXPECTED_CMD);
@@ -58,7 +55,7 @@ contract EIP712ParityTest is Test {
 
     function test_WithdrawalAuthorizationDigestMatchesViem() public pure {
         bytes32 typeHash = keccak256(
-            "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,address asset,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
+            "WithdrawalAuthorization(bytes32 gameId,address owner,bytes32 shadowAccount,uint256 amount,address recipient,bytes32 userCommandHash,bytes32 shadowBurnRef,uint256 nonce,uint256 deadline)"
         );
         bytes32 structHash = keccak256(
             abi.encode(
@@ -66,7 +63,6 @@ contract EIP712ParityTest is Test {
                 GAME_ID,
                 OWNER,
                 SHADOW,
-                ASSET,
                 AMOUNT,
                 RECIPIENT,
                 USER_CMD_HASH,

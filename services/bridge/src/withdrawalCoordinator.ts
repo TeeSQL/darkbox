@@ -97,7 +97,6 @@ export class WithdrawalCoordinator {
       gameId: command.gameId,
       owner: command.owner,
       shadowAccount: command.shadowAccount,
-      asset: command.asset,
       amount: command.amount,
       recipient: command.recipient,
       nonce: command.nonce,
@@ -120,7 +119,6 @@ export class WithdrawalCoordinator {
           withdrawalId,
           owner: command.owner,
           shadowAccount: command.shadowAccount,
-          asset: command.asset,
           amount: command.amount,
           userCommandHash: withdrawalId,
         });
@@ -189,7 +187,6 @@ export class WithdrawalCoordinator {
         gameId: record.gameId,
         owner: record.owner,
         shadowAccount: record.shadowAccount,
-        asset: record.asset,
         amount: record.amount,
         recipient: record.recipient,
         userCommandHash: record.withdrawalId,

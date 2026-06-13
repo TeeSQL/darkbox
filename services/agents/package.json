@@ -10,7 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "demo:random": "tsx src/cli.ts random --turns 5",
-    "demo:venice": "tsx src/cli.ts venice --turns 1"
+    "demo:venice": "tsx src/cli.ts venice --turns 1",
+    "noise:venice": "tsx src/noise.ts --strategy venice",
+    "noise:random": "tsx src/noise.ts --strategy random"
   },
   "dependencies": {
     "@darkbox/shared": "workspace:*"

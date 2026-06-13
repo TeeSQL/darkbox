@@ -1691,3 +1691,240 @@ textarea::-webkit-scrollbar { display: none; }
     letter-spacing: 0.08em !important;
   }
 }
+
+/* Step fix: when terminal arrives, logo remains a header above it — never tiny/underlapping. */
+.stage[data-loop="threshold-copy"] .door,
+.stage[data-loop="terminal"] .door {
+  z-index: 6 !important;
+  opacity: 1 !important;
+  transform: translateY(-188px) scale(0.74) !important;
+  transform-origin: center center !important;
+}
+.stage[data-loop="threshold-copy"] .terminal,
+.stage[data-loop="terminal"] .terminal {
+  z-index: 4 !important;
+  top: 63% !important;
+}
+.stage[data-loop="threshold-copy"] .lockup,
+.stage[data-loop="terminal"] .lockup {
+  width: min(72vw, 360px) !important;
+}
+.stage[data-loop="threshold-copy"] .approach-light,
+.stage[data-loop="terminal"] .approach-light {
+  bottom: 50% !important;
+}
+@media (max-width: 760px) {
+  .stage[data-loop="threshold-copy"] .door,
+  .stage[data-loop="terminal"] .door {
+    transform: translateY(-214px) scale(0.72) !important;
+  }
+  .stage[data-loop="threshold-copy"] .lockup,
+  .stage[data-loop="terminal"] .lockup {
+    width: min(82vw, 330px) !important;
+  }
+  .stage[data-loop="threshold-copy"] .terminal,
+  .stage[data-loop="terminal"] .terminal {
+    top: 66% !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="threshold-copy"] .door,
+  .stage[data-loop="terminal"] .door {
+    transform: translateY(-188px) scale(0.66) !important;
+  }
+  .stage[data-loop="threshold-copy"] .terminal,
+  .stage[data-loop="terminal"] .terminal {
+    top: 68% !important;
+  }
+}
+
+/* Strong mobile terminal layout correction after screenshot QA. */
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    transform: translateY(-236px) scale(0.96) !important;
+    z-index: 8 !important;
+  }
+  .stage[data-loop="terminal"] .lockup,
+  .stage[data-loop="threshold-copy"] .lockup {
+    width: min(96vw, 430px) !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    left: 24px !important;
+    right: 24px !important;
+    width: auto !important;
+    top: 66% !important;
+    transform: translateY(-50%) !important;
+    min-height: 220px !important;
+    z-index: 5 !important;
+  }
+  .stage[data-loop="terminal"] .terminal-frame,
+  .stage[data-loop="threshold-copy"] .terminal-frame {
+    transform: translateY(0) scaleY(1) !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    transform: translateY(-204px) scale(0.86) !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 68% !important;
+  }
+}
+
+/* Terminal-state mobile layout: explicit header logo + centered terminal, no overlap math. */
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    position: fixed !important;
+    top: 42px !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transform: none !important;
+    opacity: 1 !important;
+    z-index: 8 !important;
+    pointer-events: none !important;
+  }
+  .stage[data-loop="terminal"] .lockup,
+  .stage[data-loop="threshold-copy"] .lockup {
+    width: min(72vw, 300px) !important;
+    aspect-ratio: 548 / 638 !important;
+  }
+  .stage[data-loop="terminal"] .single-logo,
+  .stage[data-loop="threshold-copy"] .single-logo {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    position: fixed !important;
+    left: 24px !important;
+    right: auto !important;
+    top: 60% !important;
+    width: calc(100vw - 48px) !important;
+    max-width: calc(100vw - 48px) !important;
+    min-height: 220px !important;
+    transform: translateY(-50%) !important;
+    z-index: 5 !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 24px !important;
+  }
+  .stage[data-loop="terminal"] .lockup,
+  .stage[data-loop="threshold-copy"] .lockup {
+    width: min(58vw, 230px) !important;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 63% !important;
+  }
+}
+
+/* Make terminal-state DAEMONHALL read as a logo, not a faint full-height emblem. */
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .single-logo-lockup,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup {
+    width: min(92vw, 380px) !important;
+    height: 150px !important;
+    aspect-ratio: auto !important;
+    overflow: hidden !important;
+  }
+  .stage[data-loop="terminal"] .single-logo,
+  .stage[data-loop="threshold-copy"] .single-logo {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    top: -132px !important;
+    left: 0 !important;
+    opacity: 1 !important;
+    filter:
+      brightness(1.35)
+      contrast(1.18)
+      drop-shadow(0 0 18px rgba(215,215,223,0.22))
+      drop-shadow(0 10px 34px rgba(139,123,255,0.20)) !important;
+  }
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 28px !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="terminal"] .single-logo-lockup,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup {
+    width: min(86vw, 340px) !important;
+    height: 128px !important;
+  }
+  .stage[data-loop="terminal"] .single-logo,
+  .stage[data-loop="threshold-copy"] .single-logo {
+    top: -118px !important;
+  }
+}
+
+/* Terminal-state readable wordmark header. Opening screen keeps the full SVG emblem. */
+@media (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 92px !important;
+    height: auto !important;
+  }
+  .stage[data-loop="terminal"] .single-logo,
+  .stage[data-loop="threshold-copy"] .single-logo {
+    opacity: 0 !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup {
+    width: min(88vw, 360px) !important;
+    height: 72px !important;
+    aspect-ratio: auto !important;
+    overflow: visible !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup::after,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup::after {
+    content: "DAEMONHALL";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f3f0ff;
+    font-family: Cinzel, Georgia, serif;
+    font-size: clamp(42px, 12vw, 58px);
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 0.92;
+    text-shadow:
+      0 0 16px rgba(215,215,223,0.20),
+      0 0 34px rgba(139,123,255,0.22),
+      0 10px 38px rgba(0,0,0,0.72);
+    white-space: nowrap;
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 62% !important;
+  }
+}
+@media (max-height: 760px) and (max-width: 760px) {
+  .stage[data-loop="terminal"] .door,
+  .stage[data-loop="threshold-copy"] .door {
+    top: 58px !important;
+  }
+  .stage[data-loop="terminal"] .single-logo-lockup::after,
+  .stage[data-loop="threshold-copy"] .single-logo-lockup::after {
+    font-size: clamp(34px, 10.5vw, 48px);
+  }
+  .stage[data-loop="terminal"] .terminal,
+  .stage[data-loop="threshold-copy"] .terminal {
+    top: 64% !important;
+  }
+}

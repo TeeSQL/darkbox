@@ -172,6 +172,7 @@
   .sealed-terminal-modal[hidden]{display:none}.sealed-terminal-modal{position:fixed;inset:0;z-index:70;display:grid;place-items:end center;padding:18px;background:rgba(0,0,0,.34)}
   .sealed-terminal-scrim{position:absolute;inset:0;border:0;background:transparent;cursor:default}.sealed-terminal-panel{position:relative;z-index:1;width:min(640px,100%);max-height:min(74vh,680px);border:1px solid var(--hair2);background:linear-gradient(180deg,rgba(16,16,22,.98),rgba(7,7,11,.98));box-shadow:0 24px 90px rgba(0,0,0,.62),0 0 42px rgba(139,123,255,.12);padding:18px;overflow:auto;text-align:left}.sealed-terminal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--hair);padding-bottom:12px}.terminal-kicker{color:var(--violet);font-size:10px;letter-spacing:.18em}.terminal-close{width:32px;height:32px;border:1px solid var(--hair);background:var(--srf2);color:var(--mut);font-size:20px;line-height:1;cursor:pointer}.sealed-terminal-panel h2{margin-top:15px;color:var(--bone);font-family:var(--display);font-style:italic;font-size:28px;line-height:1;text-transform:uppercase}.sealed-terminal-panel p{margin-top:8px;color:var(--mut);font-size:12px}.sealed-terminal-log{margin-top:16px;border:1px solid var(--hair);background:#07070b;font-size:12px;line-height:1.55}.terminal-line{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;padding:11px 12px;border-bottom:1px solid rgba(43,43,53,.72)}.terminal-line:last-child{border-bottom:0}.terminal-prompt{color:var(--violet)}.terminal-main{min-width:0;color:var(--silver)}.terminal-meta{display:block;margin-top:3px;color:var(--mut);font-size:10px;letter-spacing:.06em}.terminal-redacted{color:#ff8ba8}.terminal-empty{padding:16px;color:var(--mut);font-size:12px}
 </style>
+<link rel="stylesheet" href="/styles.css?v=20260613-ux-polish" />
 </head>
 <body>
 
@@ -186,9 +187,14 @@
   <div class="content">
     <h1 class="hero-wm">Daemon<br>Hall</h1>
     <div class="sealed"><span class="dot"></span>SEALED &nbsp;·&nbsp; BOXES OPEN IN 1D 09:40:16</div>
+    <div class="loop-strip" aria-label="Game loop">
+      <span>whisper orders</span>
+      <span>daemon joins the hall</span>
+      <span>cash is claimable Sunday afternoon</span>
+    </div>
   </div>
   <div class="cmdbar">
-    <span class="hint">a market sealed in the dark.</span>
+    <span class="hint">a silent room, then public chaos.</span>
     <div class="actions"><button class="btn-primary" data-go="v-whisper" data-open-mic="true">we can't hear you <span class="ret">&#8629;</span></button></div>
   </div>
 </section>
@@ -225,11 +231,12 @@
     <h2 class="headline">what you're agreeing to.</h2>
     <div class="steps">
       <div class="step"><span class="n">01</span><span class="x">your whisper is sealed</span></div>
-      <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span class="hash">0x9b813e…4d832d</span></span></div>
+      <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span id="fingerprint" class="hash">0x9b813e…4d832d</span></span></div>
       <div class="step"><span class="n">03</span><span class="x"><span class="tell">your key. your eyes only. not the house.</span></span></div>
-      <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — free to play</span></div>
+      <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — or add more before the hall opens</span></div>
+      <div class="step"><span class="n">05</span><span class="x">available cash is yours to claim Sunday afternoon</span></div>
     </div>
-    <div class="chips"><button class="chip on">$5 house</button><button class="chip">$25</button><button class="chip">$100</button></div>
+    <div class="chips"><button class="chip on" type="button" data-stake="5">$5 house</button><button class="chip" type="button" data-stake="25">$25</button><button class="chip" type="button" data-stake="100">$100</button></div>
     <div class="sub">prototype — no wallet, no backend.</div>
   </div></div>
   <div class="cmdbar">
@@ -265,26 +272,42 @@
 <section class="view" id="v-wait">
   <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span>SEALED · 1D 09:40:16</span></div>
   <div class="content"><div class="wrap wait-wrap">
-    <div class="wait-ledger" aria-label="Your private position summary">
-      <div class="wait-metric balance"><span class="k">BALANCE</span><strong>$13.45</strong><span class="tell">only you</span></div>
-      <div class="wait-metric pnl"><span class="k">PNL</span><strong>+$1.84</strong><span>unrealized</span></div>
+    <div class="wait-ledger" aria-label="Your private cash and performance summary">
+      <div class="wait-metric balance"><span class="k">AVAILABLE</span><strong id="daemon-balance">$13.45</strong><span class="tell">claimable Sunday afternoon</span></div>
+      <div class="wait-metric pnl"><span class="k">PNL</span><strong id="daemon-pnl">+$1.84</strong><span id="daemon-pnl-note">unrealized</span></div>
+    </div>
+    <div class="status-ribbon" aria-live="polite">
+      <span class="ribbon-dot"></span>
+      <span id="daemon-activity-line">your daemon is active after you close the phone.</span>
     </div>
     <div class="daemon-wait-card">
       <div class="wait-card-header">
         <span class="k">YOUR DAEMON</span>
-        <strong>hopiumd</strong>
-        <span class="wait-card-status">circling</span>
+        <strong id="daemon-name">hopiumd</strong>
+        <span id="daemon-status" class="wait-card-status">circling</span>
       </div>
       <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
         <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="hopiumd daemon portrait" />
       </div>
       <div class="wait-card-footer">
-        <span>▸ a daemon laughed without opening its mouth</span>
+        <span id="daemon-murmur">▸ a daemon laughed without opening its mouth</span>
+      </div>
+    </div>
+    <div class="after-card-grid" aria-label="Next actions">
+      <div class="action-card">
+        <span class="k">ADD HEAT</span>
+        <strong>put more behind it</strong>
+        <span id="stake-encourage">+$25 changes the way the room feels.</span>
+      </div>
+      <div class="action-card alert-card">
+        <span class="k">TELEGRAM PINGS</span>
+        <strong>demo alerts armed</strong>
+        <span>big wins and relevant new markets.</span>
       </div>
     </div>
   </div></div>
   <div class="cmdbar">
-    <span class="hint">it won't say what it's holding.</span>
+    <span class="hint">status, hall, whisper: one tap away.</span>
     <div class="actions">
       <button class="btn-ghost" data-go="v-whisper">whisper again</button>
       <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
@@ -298,7 +321,11 @@
   <div class="content"><div class="wrap" style="max-width:640px">
     <div class="eyebrow">muffled through stone</div>
     <h2 class="headline">something is happening in the hall.</h2>
-    <div class="sub">the numbers are echoes, not windows.</div>
+    <div class="sub">public signals only: size, trade count, new markets, coarse daemon pulse.</div>
+    <div class="event-strip" aria-label="Public hall signals">
+      <div class="event-card hot"><span class="k">BIG WIN</span><strong id="hall-big-win">rugd spiked +17%</strong><span>Telegram would ping.</span></div>
+      <div class="event-card"><span class="k">NEW MARKET</span><strong id="hall-new-market">consumer UX vs infra</strong><span id="hall-new-market-meta">opened minutes ago.</span></div>
+    </div>
     <div class="stats">
       <div class="stat"><div class="k">VOLUME</div><div class="v">$14.4k</div></div>
       <div class="stat"><div class="k">TRADES</div><div class="v">405</div></div>
@@ -323,11 +350,19 @@
         <div class="brow you"><span class="rank">3</span><span class="dn">hopiumd &#9666; you</span><span class="pulse"><span class="pct">+9.50%</span> · circling</span></div>
       </div>
     </div>
-    <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — positions, orders, and balances stay sealed until the boxes open.</div>
+    <div class="notification-stub" aria-label="Notification preferences">
+      <div>
+        <span class="k">REMIND ME IN TELEGRAM</span>
+        <strong>big wins + new relevant markets</strong>
+        <p>Demo preference only. Production wiring can subscribe the bot to public-safe events.</p>
+      </div>
+      <button id="notify-toggle" class="mini-toggle" type="button" aria-pressed="true">on</button>
+    </div>
+    <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — private details stay sealed until the boxes open.</div>
   </div></div>
   <div class="cmdbar">
     <span class="hint">you can feel the crowd you cannot read.</span>
-    <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; back</button></div>
+    <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; status</button><button class="btn-primary" data-go="v-whisper">new whisper <span class="ret">&#8629;</span></button></div>
   </div>
 </section>
 

@@ -27,12 +27,18 @@ const daemonPnlEl = document.querySelector('#daemon-pnl');
 const daemonPnlNoteEl = document.querySelector('#daemon-pnl-note');
 const daemonStatusEl = document.querySelector('#daemon-status');
 const daemonMurmurEl = document.querySelector('#daemon-murmur');
+const daemonActivityLineEl = document.querySelector('#daemon-activity-line');
+const stakeEncourageEl = document.querySelector('#stake-encourage');
 const metricVolumeEl = document.querySelector('#metric-volume');
 const metricTradesEl = document.querySelector('#metric-trades');
 const metricSealedEl = document.querySelector('#metric-sealed');
 const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
 const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
 const marketRowsEl = document.querySelector('#market-rows');
+const hallBigWinEl = document.querySelector('#hall-big-win');
+const hallNewMarketEl = document.querySelector('#hall-new-market');
+const hallNewMarketMetaEl = document.querySelector('#hall-new-market-meta');
+const notifyToggle = document.querySelector('#notify-toggle');
 const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
 const terminalButton = document.querySelector('#sealed-terminal-button');
 const terminalModal = document.querySelector('#sealed-terminal-modal');
@@ -43,6 +49,7 @@ const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const SEALED_LOG_KEY = 'daemonhall:sealed-receipts:v1';
 const VISUAL_SEED_KEY = 'daemonhall:visual-seed:v1';
 const PUBLIC_MARKET_SEED = 'daemonhall:public-markets:v1';
+const NOTIFY_PREF_KEY = 'daemonhall:notify-demo:v1';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
@@ -72,8 +79,14 @@ const murmurs = [
   '▸ a daemon laughed without opening its mouth',
   '▸ something moved behind the wall',
   '▸ the hall counted wrong, then counted again',
-  '▸ a sealed order learned patience',
+  '▸ a sealed instinct learned patience',
   '▸ no one outside saw what changed',
+];
+const activityLines = [
+  'your daemon keeps moving after you close the phone.',
+  'it is whisper-quiet here; the hall is not.',
+  'the room outside keeps making markets without showing its hands.',
+  'your daemon can react while your screen is dark.',
 ];
 const marketQuestions = [
   'Will a dark horse win the demo day?',
@@ -84,6 +97,11 @@ const marketQuestions = [
   'Will the crowd favorite finish top three?',
   'Will a tiny team beat a funded team?',
 ];
+const stakeEncouragement = {
+  5: 'house stake is live. add funds when you want more heat.',
+  25: '+$25 gives your daemon more room to move.',
+  100: '+$100 makes every public signal feel louder.',
+};
 
 function hashNumber(seed) {
   let h = 2166136261;
@@ -235,6 +253,8 @@ function renderPrivateState() {
   if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, visualSeed, 3);
+  if (daemonActivityLineEl) daemonActivityLineEl.textContent = pick(activityLines, visualSeed, 4);
+  if (stakeEncourageEl) stakeEncourageEl.textContent = stakeEncouragement[selectedStake] || 'add funds when you want more heat.';
   if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
   if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
   if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
@@ -249,12 +269,16 @@ function renderMarkets(seed) {
     const base = hashNumber(`${seed}:market:${question}`);
     const size = 650 + (base % 5200);
     const trades = 18 + (hashNumber(`${seed}:market:${question}:trades`) % 160);
-    return { question, size, trades, score: size };
+    const age = 4 + (hashNumber(`${seed}:market:${question}:age`) % 44);
+    return { question, size, trades, age, fresh: index > 2 && age < 24, score: size + (age < 12 ? 950 : 0) };
   }).sort((a, b) => b.score - a.score).slice(0, 5);
+  const newest = rows.slice().sort((a, b) => a.age - b.age)[0];
+  if (hallNewMarketEl && newest) hallNewMarketEl.textContent = newest.question;
+  if (hallNewMarketMetaEl && newest) hallNewMarketMetaEl.textContent = `opened ${newest.age}m ago.`;
   marketRowsEl.innerHTML = rows.map((row, index) => `
     <div class="market-row">
       <span class="rank">${index + 1}</span>
-      <span class="market-q">${escapeHtml(row.question)}</span>
+      <span class="market-q">${escapeHtml(row.question)}${row.fresh ? '<span class="market-badge">NEW</span>' : ''}</span>
       <span class="market-size">$${(row.size / 1000).toFixed(1)}k</span>
       <span class="market-trades">${row.trades} trades</span>
     </div>
@@ -273,6 +297,8 @@ function renderLeaderboard(seed, ownName) {
     }))
     .sort((a, b) => b.score - a.score)
     .map((row, index) => ({ ...row, rank: index + 1 }));
+  const winner = rows.find((row) => row.pulse.startsWith('+')) || rows[0];
+  if (hallBigWinEl && winner) hallBigWinEl.textContent = `${winner.name} ${winner.pulse}`;
   leaderboardRowsEl.innerHTML = rows.map((row) => `
     <div class="brow ${row.name === ownName ? 'you' : ''}">
       <span class="rank">${row.rank}</span>
@@ -280,6 +306,15 @@ function renderLeaderboard(seed, ownName) {
       <span class="pulse"><span class="pct">${row.pulse}</span> · ${row.status}</span>
     </div>
   `).join('');
+}
+
+function syncNotifyToggle() {
+  if (!notifyToggle) return;
+  let enabled = true;
+  try { enabled = localStorage.getItem(NOTIFY_PREF_KEY) !== '0'; }
+  catch (_) {}
+  notifyToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  notifyToggle.textContent = enabled ? 'on' : 'off';
 }
 
 function showView(id) {
@@ -536,6 +571,12 @@ voiceButton?.addEventListener('pointercancel', () => {
 voiceButton?.addEventListener('click', startVoice);
 terminalButton?.addEventListener('click', openSealedTerminal);
 terminalCloseButtons.forEach((button) => button.addEventListener('click', closeSealedTerminal));
+notifyToggle?.addEventListener('click', () => {
+  const enabled = notifyToggle.getAttribute('aria-pressed') !== 'true';
+  try { localStorage.setItem(NOTIFY_PREF_KEY, enabled ? '1' : '0'); }
+  catch (_) {}
+  syncNotifyToggle();
+});
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !terminalModal?.hasAttribute('hidden')) closeSealedTerminal();
 });
@@ -544,4 +585,5 @@ window.addEventListener('pagehide', () => recognition?.stop?.());
 
 tickCountdown();
 window.setInterval(tickCountdown, 1000);
+syncNotifyToggle();
 handleInput();

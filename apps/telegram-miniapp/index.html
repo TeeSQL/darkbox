@@ -24,10 +24,15 @@
         <div class="content landing-content">
           <h1 class="hero-wm">Daemon<br />Hall</h1>
           <div class="sealed"><span class="dot"></span><span>SEALED</span><span class="sep">·</span><span id="landing-countdown">BOXES OPEN SOON</span></div>
+          <div class="loop-strip" aria-label="Game loop">
+            <span>whisper orders</span>
+            <span>daemon joins the hall</span>
+            <span>cash is claimable Sunday afternoon</span>
+          </div>
         </div>
         <div class="cmdbar">
-          <span class="hint">a market sealed in the dark.</span>
-          <div class="actions"><a class="btn-ghost" href="/admin.html">admin</a><button class="btn-primary" data-go="v-whisper" data-open-mic="true">we can't hear you <span class="ret">&#8629;</span></button></div>
+          <span class="hint">a silent room, then public chaos.</span>
+          <div class="actions"><button class="btn-primary" data-go="v-whisper" data-open-mic="true">we can't hear you <span class="ret">&#8629;</span></button></div>
         </div>
       </section>
 
@@ -63,7 +68,8 @@
             <div class="step"><span class="n">01</span><span class="x">your whisper is sealed</span></div>
             <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span id="fingerprint" class="hash">0x9b813e...4d832d</span></span></div>
             <div class="step"><span class="n">03</span><span class="x"><span class="tell">your key. your eyes only. not the house.</span></span></div>
-            <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — free to play</span></div>
+            <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — or add more before the hall opens</span></div>
+            <div class="step"><span class="n">05</span><span class="x">available cash is yours to claim Sunday afternoon</span></div>
           </div>
           <div class="chips" aria-label="Stake selection">
             <button class="chip on" type="button" data-stake="5">$5 house</button>
@@ -104,9 +110,13 @@
       <section class="view" id="v-wait">
         <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="wait-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap wait-wrap">
-          <div class="wait-ledger" aria-label="Your private position summary">
-            <div class="wait-metric balance"><span class="k">BALANCE</span><strong id="daemon-balance">$5.00</strong><span class="tell">only you</span></div>
+          <div class="wait-ledger" aria-label="Your private cash and performance summary">
+            <div class="wait-metric balance"><span class="k">AVAILABLE</span><strong id="daemon-balance">$5.00</strong><span class="tell">claimable Sunday afternoon</span></div>
             <div class="wait-metric pnl"><span class="k">PNL</span><strong id="daemon-pnl">+$0.00</strong><span id="daemon-pnl-note">unrealized</span></div>
+          </div>
+          <div class="status-ribbon" aria-live="polite">
+            <span class="ribbon-dot"></span>
+            <span id="daemon-activity-line">your daemon is active after you close the phone.</span>
           </div>
           <div class="daemon-wait-card">
             <div class="wait-card-header">
@@ -121,9 +131,21 @@
               <span id="daemon-murmur">▸ a daemon laughed without opening its mouth</span>
             </div>
           </div>
+          <div class="after-card-grid" aria-label="Next actions">
+            <div class="action-card">
+              <span class="k">ADD HEAT</span>
+              <strong>put more behind it</strong>
+              <span id="stake-encourage">+$25 changes the way the room feels.</span>
+            </div>
+            <div class="action-card alert-card">
+              <span class="k">TELEGRAM PINGS</span>
+              <strong>demo alerts armed</strong>
+              <span>big wins and relevant new markets.</span>
+            </div>
+          </div>
         </div></div>
         <div class="cmdbar">
-          <span class="hint">it won't say what it's holding.</span>
+          <span class="hint">status, hall, whisper: one tap away.</span>
           <div class="actions">
             <button class="btn-ghost" data-go="v-whisper">whisper again</button>
             <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
@@ -136,7 +158,11 @@
         <div class="content"><div class="wrap hall-wrap">
           <div class="eyebrow">muffled through stone</div>
           <h2 class="headline">something is happening in the hall.</h2>
-          <div class="sub">the numbers are echoes, not windows.</div>
+          <div class="sub">public signals only: size, trade count, new markets, coarse daemon pulse.</div>
+          <div class="event-strip" aria-label="Public hall signals">
+            <div class="event-card hot"><span class="k">BIG WIN</span><strong id="hall-big-win">rugd spiked +17%</strong><span>Telegram would ping.</span></div>
+            <div class="event-card"><span class="k">NEW MARKET</span><strong id="hall-new-market">consumer UX vs infra</strong><span id="hall-new-market-meta">opened minutes ago.</span></div>
+          </div>
           <div class="stats">
             <div class="stat"><div class="k">VOLUME</div><div id="metric-volume" class="v">$14.4k</div></div>
             <div class="stat"><div class="k">TRADES</div><div id="metric-trades" class="v">405</div></div>
@@ -153,11 +179,19 @@
             <div class="brow head"><span class="rank">#</span><span class="dn">DAEMON</span><span class="pulse">PULSE</span></div>
             <div id="leaderboard-rows"></div>
           </div>
-          <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — positions, orders, and balances stay sealed until the boxes open.</div>
+          <div class="notification-stub" aria-label="Notification preferences">
+            <div>
+              <span class="k">REMIND ME IN TELEGRAM</span>
+              <strong>big wins + new relevant markets</strong>
+              <p>Demo preference only. Production wiring can subscribe the bot to public-safe events.</p>
+            </div>
+            <button id="notify-toggle" class="mini-toggle" type="button" aria-pressed="true">on</button>
+          </div>
+          <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — private details stay sealed until the boxes open.</div>
         </div></div>
         <div class="cmdbar">
           <span class="hint">you can feel the crowd you cannot read.</span>
-          <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; back</button></div>
+          <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; status</button><button class="btn-primary" data-go="v-whisper">new whisper <span class="ret">&#8629;</span></button></div>
         </div>
       </section>
     </main>

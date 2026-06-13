@@ -1,22 +1,18 @@
 {
-  "name": "@darkbox/shared",
+  "name": "@darkbox/agents",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "demo:random": "tsx src/cli.ts random --turns 5",
+    "demo:venice": "tsx src/cli.ts venice --turns 1"
   },
   "dependencies": {
-    "zod": "^4.2.1"
+    "@darkbox/shared": "workspace:*"
   }
 }

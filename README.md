@@ -2,7 +2,7 @@
 
 A sealed agent prediction-market arena built on Frontier CLOB/orderbook contracts.
 
-Participants deposit USDC, register an agent, and give that agent private instructions. During the hackathon, agents trade inside a hidden blockchain/CVM environment. The public sees only a PnL leaderboard. At the end, the box opens: chain history, commitments, agent actions, and settlement are revealed.
+Participants deposit assets, register an agent, and give that agent private instructions. During the hackathon, agents trade shadow assets inside a hidden blockchain/CVM environment. Users can withdraw available idle balance, but cannot force-liquidate positions. The public sees only a PnL leaderboard. At the end, the box opens: chain history, commitments, agent actions, and bridge accounting are revealed.
 
 
 ## Repository layout
@@ -14,9 +14,9 @@ apps/
 services/
   indexer/         Hidden-chain indexer, internal trading APIs, public leaderboard APIs.
   agents/          Agent prompts, wallets, brain/model loop, action validation.
-  bridge/          Deposits, withdrawals, hidden-chain crediting, settlement coordination.
+  bridge/          Deposits, shadow mints/burns, withdrawals, emergency exits.
   ens/             ENS subnames and commitment/reveal record updates.
-  reveal/          End-of-game export, replay bundle, settlement artifacts.
+  reveal/          End-of-game export, replay bundle, bridge accounting artifacts.
 
 infra/
   node/            Hidden Reth/Geth chain container and chain config.
@@ -35,10 +35,10 @@ Each runtime service is intended to build into a separate Docker container for C
 - `darkbox-node` — hidden Reth/Geth node running Frontier contracts.
 - `darkbox-indexer` — standalone indexer/query layer for orders, fills, positions, PnL, leaderboard, and reveal data.
 - `darkbox-agents` — agent wallets, prompts, brain, action validation, hidden-chain transaction submission.
-- `darkbox-bridge` — public deposits, hidden-chain credits, withdrawals/settlement.
+- `darkbox-bridge` — public deposits, shadow mints/burns, signing-service withdrawals, emergency exits.
 - `darkbox-ens` — ENS subnames and commitment/reveal records.
 - `darkbox-frontend` — public UI; only talks to public indexer endpoints.
-- `darkbox-reveal` — final reveal bundle, replay, and settlement artifacts.
+- `darkbox-reveal` — final reveal bundle, replay, and bridge accounting artifacts.
 
 ## Design docs
 

@@ -2,346 +2,508 @@
 
 ## 1. Decision
 
-DarkBox uses a public USDC escrow contract as the source of truth for player funding and final payout.
+DarkBox uses a public bridge/escrow contract for real assets and a shadow asset inside the local shadow EVM for in-game accounting.
+
+Users may deposit into or withdraw from their agent at any time, with one constraint: withdrawals can only use withdrawable available balance. Users cannot force liquidation of open orders or positions.
 
 For the hackathon MVP:
 
-- Canonical asset: USDC.
-- Canonical escrow chain: Base, unless the chosen sponsor integration requires a different settlement chain.
-- UX adapter: one sponsor/onboarding path only.
-- Reliability fallback: direct Base USDC deposit into the escrow contract.
-- Hidden-chain balance: synthetic game credit minted 1:1 from confirmed public escrow deposits.
-- Withdrawals: disabled during live play; unlocked only through pre-game refunds or post-reveal settlement claims.
+- Canonical public assets: USDC first, ETH optional if useful for demo/onboarding.
+- Canonical escrow chain: Base unless a sponsor flow requires another settlement chain.
+- Public contract: accepts direct sends/transfers and explicit deposit function calls.
+- Shadow EVM: mints/burns corresponding shadow USDC/shadow ETH for the user's mapped shadow account.
+- Ownership mapping: every shadow account maps to an onchain owner wallet.
+- Withdrawals: user signs a withdrawal command; the system forces the agent/shadow account to burn or transfer shadow funds in the shadow EVM; a signing service authorizes public escrow withdrawal.
+- Emergency withdrawal: retained through multisig/admin transaction path.
 
-The bridge service is not a general bridge. It is a coordinator that watches public funding, credits the hidden chain, and later produces/verifies settlement artifacts.
+There are no Merkle claims in the normal withdrawal path. Withdrawals are online, signing-service authorized bridge exits against available shadow balance.
 
 ## 2. Goals
 
-- Make entry feel simple: fund an agent, write instructions, enter the box.
-- Keep real USDC custody outside the hidden chain.
-- Never expose hidden orderbook/trade/position state through deposit or withdrawal flows.
-- Make every hidden-chain credit traceable to a public funding event.
-- Make final payout auditable from the reveal bundle.
+- Let users top up or withdraw available agent funds any time.
+- Keep real assets custodied in the public bridge/escrow contract.
+- Keep strategy risk intact: users can withdraw idle balance but cannot liquidate active positions through the bridge.
+- Make every shadow mint traceable to a public deposit operation.
+- Make every public withdrawal traceable to a user-signed command and a shadow-EVM burn/transfer.
+- Keep the public frontend away from hidden orderbook/trade/position APIs.
 - Keep the stack Docker/local-first so the same services can run locally and inside the CVM deployment.
 
 ## 3. Non-Goals
 
-- Permissionless cross-chain bridge custody.
-- Live mid-game withdrawals.
-- Revealing agent positions to justify partial withdrawals.
+- General-purpose bridge custody across many chains.
+- Forced liquidation of positions to satisfy withdrawals.
+- Public exposure of hidden orderbooks, trades, positions, or per-market PnL.
 - Supporting many onboarding providers in the MVP.
-- Letting the frontend talk directly to hidden node or privileged indexer APIs.
+- Letting the frontend talk directly to the hidden node or privileged indexer APIs.
+- Merkle-claim settlement as the standard withdrawal mechanism.
 
 ## 4. Actors
 
-- User: funds an agent and may claim settlement after reveal.
+- User: owns an onchain wallet, maps to a shadow account, deposits/withdraws available funds.
+- Agent: trades inside the shadow EVM using the user's shadow balance and instructions.
 - Frontend: public app; talks only to public bridge/indexer APIs.
-- Escrow contract: public USDC custody, registration, commitments, refund/claim gates.
-- Bridge service: watches escrow/provider events, writes hidden-chain credit transactions, stores idempotency state, generates settlement claims.
-- Hidden chain: receives synthetic credit transactions and runs Frontier markets.
-- Indexer: computes internal balances/PnL and exports final settlement data after reveal.
-- Reveal service: publishes replay bundle and settlement root.
-- ENS service: writes commitment/reveal metadata records.
+- Public bridge contract: custodies real USDC/ETH, records deposits, verifies signing-service withdrawals, supports emergency multisig exits.
+- Bridge service: detects public deposits, mints shadow funds, processes user withdrawal commands, asks signing service for exit signatures.
+- Signing service: signs withdrawal authorizations after shadow burn/transfer is confirmed.
+- Shadow EVM: holds shadow accounts, owner mapping, shadow assets, Frontier markets, and bridge-controller contracts.
+- Indexer: computes internal balances, available withdrawable balance, PnL, positions, and public-safe leaderboard data.
+- Multisig/admin: emergency withdrawal and recovery authority.
 
-## 5. Asset Model
+## 5. Account and Asset Model
 
-### 5.1 Public Escrow Balance
+### 5.1 Onchain Owner to Shadow Account Mapping
 
-Real USDC stays in the public escrow contract.
+The shadow EVM must maintain a canonical mapping:
+
+```text
+onchain owner wallet -> shadow account
+shadow account -> onchain owner wallet
+```
+
+Rules:
+
+- A user controls withdrawals by signing with the onchain owner wallet.
+- Deposits are credited to the mapped shadow account.
+- If no mapping exists, the bridge creates or registers one before minting shadow funds.
+- Agent trading permissions operate on the shadow account, but ownership remains anchored to the onchain wallet.
+- The mapping is stored inside the shadow EVM and mirrored by the bridge database for indexing/recovery.
+
+### 5.2 Public Escrow Balance
+
+Real assets stay in the public bridge/escrow contract.
 
 Escrow tracks:
 
-- game id
-- agent id
-- depositor wallet
+- asset address, or native ETH sentinel
+- onchain owner
+- optional beneficiary owner
 - total deposited
-- refunded amount
-- final claimed amount
-- registration/freeze/finalization status
+- total withdrawn
+- used withdrawal nonces
+- emergency status
 
-### 5.2 Hidden-Chain Credit
+### 5.3 Shadow Asset Balance
 
-The hidden chain receives synthetic credits, not bridged USDC.
+The shadow EVM mints local shadow assets corresponding to public deposits.
 
 Rules:
 
-- One public USDC unit equals one hidden credit unit.
-- Credits are minted only by the coordinator key.
-- Every credit transaction references a public deposit event id.
-- Duplicate deposit events must not create duplicate credits.
-- Hidden credits are game accounting balances, not withdrawable tokens during play.
+- Public USDC deposit mints shadow USDC.
+- Public ETH deposit mints shadow ETH, if ETH is supported.
+- Minting is performed only by the shadow bridge controller/coordinator.
+- Every mint references a public deposit operation id.
+- Duplicate public operations must not create duplicate shadow mints.
 
-### 5.3 Final Settlement
+### 5.4 Withdrawable Available Balance
 
-After reveal, the final hidden-chain state produces a public settlement root.
+Withdrawable balance is not total portfolio value.
 
-Settlement maps each agent to:
+Withdrawable balance equals idle/free balance that is not:
 
-- final claimable USDC amount
-- total deposits
-- realized PnL
-- fees, if any
-- settlement proof path
+- locked in open orders
+- posted as collateral or margin
+- reserved for pending internal transfers
+- required by unresolved market constraints
+- already committed to a pending withdrawal command
 
-The public escrow contract pays claims against this root.
+Users may withdraw only this available amount. If they want more, the agent must voluntarily cancel orders, close positions, or wait for fills/resolution according to normal market rules.
 
 ## 6. Deposit Lifecycle
 
-### 6.1 States
+### 6.1 Supported Deposit Paths
+
+DarkBox supports both passive sends and explicit function calls.
+
+1. Direct ETH send:
+   - user sends ETH to the public bridge contract
+   - contract emits a receive/deposit event where possible
+   - offchain system also observes the transaction
+   - beneficiary defaults to `msg.sender`
+
+2. Direct USDC transfer:
+   - user transfers USDC to the public bridge contract
+   - offchain system detects the ERC-20 `Transfer(from, bridge, amount)` event
+   - beneficiary defaults to `from`, unless a prior deposit intent maps the transfer to another beneficiary
+
+3. Explicit deposit function:
+   - user approves USDC
+   - user calls `deposit(asset, amount, beneficiary)`
+   - useful for normal app UX and composed flows such as LI.FI
+
+4. Cross-chain/onboarding adapter:
+   - provider flow ultimately sends assets to the bridge or calls `deposit(...)`
+   - offchain normalizer maps the operation to the beneficiary owner
+
+### 6.2 Deposit State Machine
 
 ```text
-created -> awaiting_funds -> funded -> credited_hidden -> active -> finalized -> claimed
-                         \-> refund_requested -> refunded
-                         \-> failed
+observed_public_deposit -> confirmed_public_deposit -> mapping_resolved -> shadow_mint_submitted -> shadow_minted
+                                                        \-> failed_needs_reconcile
 ```
 
-### 6.2 Happy Path
+Deposits are allowed any time unless the game or bridge is paused.
 
-1. User creates a registration draft in the frontend.
-2. Frontend requests a funding intent from `darkbox-bridge`.
-3. Bridge returns one funding path:
-   - sponsor/onboarding checkout, or
-   - direct Base USDC escrow deposit calldata.
-4. User funds the intent.
-5. Escrow emits `AgentFunded` or bridge receives provider confirmation.
-6. Bridge waits for the required confirmation threshold.
-7. Bridge records the event in its local DB with an idempotency key.
-8. Bridge submits `creditAgent(agentId, amount, depositEventId)` to the hidden chain.
-9. Hidden chain emits `AgentCredited`.
-10. Indexer sees the hidden credit and updates the agent balance.
-11. Public API shows only registration/funding status and aggregate leaderboard-safe balance data.
+### 6.3 Deposit Happy Path
 
-### 6.3 Confirmation Policy
-
-MVP defaults:
-
-- Direct Base deposit: wait for 3 confirmations.
-- Provider flow: wait for provider terminal success plus any on-chain confirmation needed by the adapter.
-- Never credit hidden chain on mempool-only events.
+1. User sends USDC/ETH to bridge or calls `deposit(asset, amount, beneficiary)`.
+2. Bridge watcher detects the operation.
+3. Bridge waits for the required confirmation threshold.
+4. Bridge resolves beneficiary owner and shadow account mapping.
+5. If needed, bridge creates/updates the shadow account mapping in the shadow EVM.
+6. Bridge submits `mintShadow(asset, shadowAccount, amount, depositOpId)` to the shadow bridge controller.
+7. Shadow EVM emits `ShadowMinted`.
+8. Indexer sees the mint and updates available balance.
+9. UI shows the deposit as credited.
 
 ### 6.4 Deposit Idempotency
 
-Bridge idempotency key:
+Deposit operation id:
 
 ```text
-chainId:escrowAddress:txHash:logIndex:agentId:amount
+chainId:bridgeAddress:asset:txHash:logIndex:from:beneficiary:amount
 ```
 
 Rules:
 
-- If the same key is seen again, do not submit another hidden-chain credit.
-- If hidden-chain submission succeeds but bridge crashes before marking success, recover by searching for `AgentCredited(depositEventId)` before retrying.
-- If provider webhooks duplicate, normalize them to the same escrow event or provider event id before processing.
+- If the same operation id is seen again, do not mint again.
+- If the shadow mint succeeds but bridge crashes before marking success, recover by searching shadow EVM for `ShadowMinted(depositOpId)` before retrying.
+- Direct USDC transfers without explicit beneficiary credit the sender by default.
+- Deposit intents can override beneficiary only when the observed transfer matches the intent constraints.
 
-## 7. Registration Commitments
+## 7. Withdrawal Lifecycle
 
-Funding and registration can be two transactions or one composed flow.
+### 7.1 Withdrawal State Machine
 
-Required commitment fields:
+```text
+requested -> user_signed -> shadow_burn_submitted -> shadow_burned -> service_signed -> submitted_public_withdrawal -> withdrawn
+          \-> rejected_insufficient_available
+          \-> failed_needs_reconcile
+```
+
+### 7.2 User-Signed Withdrawal Command
+
+When a user wants to withdraw:
+
+1. User connects their owner wallet.
+2. UI fetches withdrawable available balance from the public-safe bridge/indexer API.
+3. User chooses asset, amount, recipient, and shadow account.
+4. User signs an EIP-712 withdrawal command.
+5. Bridge treats this signature as a command to the user's agent/shadow account.
+
+The user signature authorizes the system to force a shadow-EVM burn/transfer of idle shadow funds. It does not authorize liquidation of positions.
+
+Suggested EIP-712 fields:
+
+```text
+WithdrawCommand {
+  gameId
+  owner
+  shadowAccount
+  asset
+  amount
+  recipient
+  nonce
+  deadline
+  bridgeContract
+  shadowChainId
+}
+```
+
+### 7.3 Forced Shadow Burn / Transfer
+
+After validating the user signature, the bridge submits a shadow-EVM transaction that forces one of:
+
+- burn shadow asset from the user's shadow account, or
+- transfer shadow asset from the user's shadow account to a bridge sink account
+
+Rules:
+
+- The shadow bridge controller checks available withdrawable balance.
+- It must not cancel orders or liquidate positions.
+- It reserves the amount immediately to prevent double-withdrawal.
+- It emits `ShadowWithdrawalLocked` or `ShadowBurned` with the withdrawal id.
+
+### 7.4 Signing-Service Public Withdrawal
+
+Once the shadow burn/transfer is confirmed:
+
+1. Bridge asks the signing service for a public withdrawal authorization.
+2. Signing service verifies:
+   - user EIP-712 signature
+   - owner-to-shadow mapping
+   - shadow burn/transfer event
+   - nonce unused
+   - asset/amount/recipient match
+3. Signing service returns a signature over the public withdrawal payload.
+4. UI receives the signing-service signature.
+5. User submits `withdraw(...)` to the public bridge contract.
+6. Public bridge verifies signer authorization, marks nonce used, transfers real asset.
+
+This makes withdrawal user-initiated while preserving the invariant that public escrow only releases assets after the corresponding shadow funds are removed from circulation.
+
+### 7.5 Public Withdrawal Payload
+
+Suggested payload signed by service:
+
+```text
+WithdrawalAuthorization {
+  gameId
+  owner
+  shadowAccount
+  asset
+  amount
+  recipient
+  userCommandHash
+  shadowBurnTxHash
+  nonce
+  deadline
+  bridgeContract
+  chainId
+}
+```
+
+### 7.6 Emergency Withdrawal
+
+Emergency withdrawal remains available through multisig/admin transaction.
+
+Use cases:
+
+- signing service outage
+- shadow chain unrecoverable failure
+- bridge service critical bug
+- legal/compliance/security emergency
+
+Rules:
+
+- Emergency path should be paused-by-default or role-gated.
+- Multisig action must emit explicit `EmergencyWithdrawal` events.
+- Emergency withdrawals should use the best available accounting snapshot.
+- Emergency path is not part of normal UX.
+
+## 8. Registration Commitments
+
+Funding and registration are separate from deposits. Users can add funds later.
+
+Required registration commitment fields:
 
 - `gameId`
 - `agentId`
-- `depositor`
+- `owner`
+- `shadowAccount`
 - `ensName` or `ensNode`
 - `instructionHash`
 - `runtimeHash`
 - `revealSaltHash`
-- `depositAmount`
 - `createdAt`
 
-Registration is frozen at game start. After freeze:
+Registration freeze, if used, freezes new agents or instruction updates. It should not freeze deposits or withdrawals unless the bridge is paused.
 
-- no new agents
-- no instruction updates unless explicitly included in game rules
-- no refunds except admin/emergency cancellation
-- deposits that arrive late are refundable, not credited
-
-## 8. Withdrawal and Refund Rules
-
-### 8.1 Before Registration Freeze
-
-Users may request a refund if:
-
-- the game has not frozen registration
-- the deposit has not been credited to active play, or the coordinator can safely reverse/unwind pre-start credit
-- the agent has not entered live trading
-
-MVP simplification:
-
-- allow refunds before `freezeRegistration`
-- disallow refunds after freeze
-
-### 8.2 During Game
-
-Withdrawals are disabled.
-
-Reason:
-
-- A live withdrawal would reveal balance/position pressure.
-- It would require hidden state proofs before reveal.
-- It creates market manipulation and insolvency edge cases.
-
-The UI should say: “Funds are locked during the match. Claim opens after reveal.”
-
-### 8.3 After Reveal
-
-Claims open when:
-
-1. trading is stopped
-2. markets are resolved
-3. reveal bundle is published
-4. settlement root is published to escrow
-5. optional dispute/challenge window expires, if enabled
-
-MVP can set dispute window to zero for demo, but the spec should keep the field.
-
-Claim flow:
-
-1. User opens claim page.
-2. Frontend fetches public settlement proof.
-3. User calls `claim(agentId, amount, proof)` on escrow.
-4. Escrow verifies the Merkle proof against `settlementRoot`.
-5. Escrow transfers USDC.
-6. Escrow marks the agent claim as spent.
-
-### 8.4 Failed or Cancelled Game
-
-If game is cancelled before finalization:
-
-- admin publishes `cancelGame(gameId)`
-- users can withdraw original deposits minus explicitly documented non-refundable fees, ideally zero for MVP
-- no hidden-chain PnL is used
-
-## 9. Escrow Contract Interface
+## 9. Public Bridge Contract Interface
 
 Candidate Solidity interface:
 
 ```solidity
-interface IDarkBoxEscrow {
+interface IDarkBoxBridge {
     event AgentRegistered(
         bytes32 indexed gameId,
         bytes32 indexed agentId,
-        address indexed depositor,
+        address indexed owner,
+        bytes32 shadowAccount,
         string ensName,
         bytes32 instructionHash,
         bytes32 runtimeHash,
         bytes32 revealSaltHash
     );
 
-    event AgentFunded(
+    event DepositReceived(
         bytes32 indexed gameId,
-        bytes32 indexed agentId,
-        address indexed depositor,
+        address indexed owner,
+        address indexed asset,
         uint256 amount,
-        bytes32 fundingRef
+        address beneficiary,
+        bytes32 depositRef
     );
 
-    event RegistrationFrozen(bytes32 indexed gameId, uint64 frozenAt);
-    event FinalRootPublished(bytes32 indexed gameId, bytes32 hiddenChainRoot, bytes32 revealBundleHash, bytes32 settlementRoot);
-    event Refunded(bytes32 indexed gameId, bytes32 indexed agentId, address indexed recipient, uint256 amount);
-    event Claimed(bytes32 indexed gameId, bytes32 indexed agentId, address indexed recipient, uint256 amount);
+    event WithdrawalExecuted(
+        bytes32 indexed gameId,
+        address indexed owner,
+        address indexed asset,
+        uint256 amount,
+        address recipient,
+        uint256 nonce,
+        bytes32 userCommandHash,
+        bytes32 shadowBurnRef
+    );
+
+    event EmergencyWithdrawal(
+        bytes32 indexed gameId,
+        address indexed owner,
+        address indexed asset,
+        uint256 amount,
+        address recipient,
+        bytes32 reason
+    );
+
+    receive() external payable;
 
     function registerAgent(
         bytes32 gameId,
         bytes32 agentId,
+        bytes32 shadowAccount,
         string calldata ensName,
         bytes32 instructionHash,
         bytes32 runtimeHash,
         bytes32 revealSaltHash
     ) external;
 
-    function depositForAgent(bytes32 gameId, bytes32 agentId, uint256 amount, bytes32 fundingRef) external;
-
-    function registerAndDeposit(
+    function deposit(
         bytes32 gameId,
-        bytes32 agentId,
-        string calldata ensName,
-        bytes32 instructionHash,
-        bytes32 runtimeHash,
-        bytes32 revealSaltHash,
+        address asset,
         uint256 amount,
-        bytes32 fundingRef
-    ) external;
+        address beneficiary,
+        bytes32 depositRef
+    ) external payable;
 
-    function freezeRegistration(bytes32 gameId) external;
-
-    function publishFinalRoot(
+    function withdraw(
         bytes32 gameId,
-        bytes32 hiddenChainRoot,
-        bytes32 revealBundleHash,
-        bytes32 settlementRoot
-    ) external;
-
-    function refund(bytes32 gameId, bytes32 agentId) external;
-
-    function claim(
-        bytes32 gameId,
-        bytes32 agentId,
+        address owner,
+        bytes32 shadowAccount,
+        address asset,
+        uint256 amount,
         address recipient,
+        uint256 nonce,
+        uint256 deadline,
+        bytes32 userCommandHash,
+        bytes32 shadowBurnRef,
+        bytes calldata serviceSignature
+    ) external;
+
+    function emergencyWithdraw(
+        bytes32 gameId,
+        address owner,
+        address asset,
         uint256 amount,
-        bytes32[] calldata proof
+        address recipient,
+        bytes32 reason
     ) external;
 }
 ```
 
-## 10. Bridge Service API
+Notes:
+
+- Native ETH uses `asset = address(0)` or an agreed sentinel.
+- Direct ERC-20 transfers do not call `deposit(...)`; the offchain watcher must detect them from token `Transfer` events.
+- `deposit(...)` exists for approve + deposit UX and composed flows such as LI.FI.
+
+## 10. Shadow EVM Bridge Controller Interface
+
+Candidate shadow-side interface:
+
+```solidity
+interface IShadowBridgeController {
+    event ShadowAccountMapped(address indexed owner, bytes32 indexed shadowAccount);
+    event ShadowMinted(bytes32 indexed depositOpId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
+    event ShadowWithdrawalLocked(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
+    event ShadowBurned(bytes32 indexed withdrawalId, bytes32 indexed shadowAccount, address indexed asset, uint256 amount);
+
+    function mapShadowAccount(address owner, bytes32 shadowAccount) external;
+
+    function mintShadow(
+        bytes32 depositOpId,
+        address owner,
+        bytes32 shadowAccount,
+        address asset,
+        uint256 amount
+    ) external;
+
+    function burnForWithdrawal(
+        bytes32 withdrawalId,
+        address owner,
+        bytes32 shadowAccount,
+        address asset,
+        uint256 amount,
+        bytes32 userCommandHash
+    ) external;
+
+    function withdrawableBalance(bytes32 shadowAccount, address asset) external view returns (uint256);
+}
+```
+
+## 11. Bridge Service API
 
 Public endpoints exposed by `darkbox-bridge`:
 
-- `POST /api/funding-intents`
-  - creates a deposit intent for an agent registration draft
-  - returns checkout URL or direct deposit calldata
-- `GET /api/funding-intents/:id`
-  - returns status: `created`, `awaiting_funds`, `funded`, `credited_hidden`, `failed`, `refundable`
-- `GET /api/claims/:agentId`
-  - after reveal, returns claim amount and proof if available
+- `POST /api/deposit-intents`
+  - optional helper for app/composed flows
+  - returns bridge address, deposit calldata, or tracking reference
+- `GET /api/deposits/:depositOpId`
+  - returns deposit status and credited shadow account
+- `GET /api/accounts/:owner`
+  - returns mapped shadow account and public-safe balances
+- `GET /api/withdrawable/:owner`
+  - returns withdrawable available balances only
+- `POST /api/withdrawals/commands`
+  - accepts user-signed withdrawal command
+  - submits/monitors shadow burn
+  - returns status and, when ready, signing-service authorization
+- `GET /api/withdrawals/:withdrawalId`
+  - returns withdrawal status
 
 Internal endpoints, not public:
 
 - `POST /internal/deposits/reconcile`
-- `POST /internal/credits/retry`
-- `POST /internal/settlement/build`
-- `GET /internal/settlement/export`
+- `POST /internal/withdrawals/reconcile`
+- `POST /internal/shadow-mints/retry`
+- `POST /internal/shadow-burns/retry`
+- `POST /internal/signing-service/sign-withdrawal`
 
-The public frontend must never receive internal deposit reconciliation data that reveals hidden trades, positions, or per-market PnL before reveal.
+The public frontend must never receive internal reconciliation data that reveals hidden trades, positions, or per-market PnL before reveal.
 
-## 11. Bridge Worker Responsibilities
+## 12. Bridge Worker Responsibilities
 
 Workers:
 
-- public chain watcher
-- provider webhook normalizer, if sponsor UX is used
-- hidden-chain credit submitter
+- public chain watcher for ETH receives, explicit deposits, and ERC-20 transfers
+- provider/webhook normalizer, if sponsor UX is used
+- shadow account mapper
+- shadow mint submitter
+- withdrawal command validator
+- shadow burn/transfer submitter
+- signing-service requester
 - reconciliation worker
-- settlement artifact builder
-- claim proof server
 
 Required persistence:
 
-- funding intents
-- observed escrow events
-- provider events
-- hidden credit transaction hashes
+- deposit intents
+- observed public deposit operations
+- owner to shadow account mappings
+- shadow mint transaction hashes
+- withdrawal commands
+- user command hashes
+- shadow burn transaction hashes
+- signing-service authorizations
 - retry counts
-- final settlement proofs
 
 Local-first storage can be Postgres or SQLite for MVP. If using SQLite locally, keep the schema compatible with Postgres for CVM deployment.
 
-## 12. Docker / CVM Deployment
+## 13. Docker / CVM Deployment
 
 `darkbox-bridge` runs as its own container.
+
+`darkbox-signer` may be a separate container or an internal module for MVP. Prefer a separate container if time allows, because it has a distinct key boundary.
 
 Required networks:
 
 - `public_net`: frontend/API ingress for public endpoints
-- `cvm_net`: internal calls to indexer/reveal/hidden node if colocated
+- `cvm_net`: internal calls to indexer/shadow node
 - `egress_net`: public chain RPC, onboarding provider API, Base RPC
 
 Required secrets:
 
 - public chain RPC URL
-- escrow admin/finalizer key or signer service credentials
-- hidden-chain coordinator key
+- signing-service private key or signer-service credentials
+- shadow bridge coordinator key
+- emergency multisig/admin config
 - provider API keys/webhook secret, if used
 - database credentials
 
@@ -351,45 +513,51 @@ Required environment variables:
 GAME_ID=
 BASE_CHAIN_ID=8453
 USDC_ADDRESS=
-ESCROW_ADDRESS=
+BRIDGE_ADDRESS=
 PUBLIC_RPC_URL=
-HIDDEN_RPC_URL=
-BRIDGE_COORDINATOR_ADDRESS=
+SHADOW_RPC_URL=
+SHADOW_BRIDGE_CONTROLLER_ADDRESS=
+SIGNER_ADDRESS=
 CONFIRMATIONS_REQUIRED=3
 FUNDING_PROVIDER=direct|blink|privy|dynamic|lifi
 DATABASE_URL=
 ```
 
-## 13. Security Invariants
+## 14. Security Invariants
 
-- Public escrow must never depend on unrevealed hidden state before final root publication.
-- Hidden-chain credits must be idempotent.
-- Funding provider webhooks are advisory until reconciled against canonical escrow/provider state.
-- The public bridge API must not expose hidden balances beyond the allowed user-specific status and public leaderboard aggregates.
-- Claims must be single-use.
-- Settlement root publication must be gated to finalizer/admin multisig for MVP.
-- Coordinator keys must be injected as Docker secrets or CVM-sealed secrets, never baked into images.
-- Late deposits after freeze must be refundable, not silently credited.
+- Public withdrawals require both user command signature and signing-service authorization.
+- Signing-service authorization requires confirmed shadow burn/transfer first.
+- Withdrawals can only consume withdrawable available balance; they must never liquidate or cancel positions implicitly.
+- Public deposits can mint shadow assets only once.
+- Direct ERC-20 transfers must be reconciled from canonical token events, not trusted client reports.
+- Provider webhooks are advisory until reconciled against canonical public-chain/provider state.
+- Owner-to-shadow mapping must be enforced consistently on deposits, withdrawals, and agent control.
+- Public APIs must not expose hidden balances beyond user-owned available balance and allowed leaderboard aggregates.
+- Emergency withdrawal is multisig/admin-only and must be auditable.
+- Coordinator and signer keys must be injected as Docker secrets or CVM-sealed secrets, never baked into images.
 
-## 14. MVP Implementation Plan
+## 15. MVP Implementation Plan
 
-1. Implement escrow contract with `registerAndDeposit`, freeze, cancel/refund, final root publish, and Merkle claim.
-2. Implement `darkbox-bridge` direct Base USDC watcher.
-3. Add funding intent API that returns direct deposit calldata.
-4. Add idempotent hidden-chain credit submitter.
-5. Add frontend funding status page.
-6. Add settlement artifact format to reveal service.
-7. Add claim proof endpoint and claim page.
-8. Only then add one sponsor UX adapter if it is faster/better for the demo.
+1. Implement public bridge contract with `receive()`, `deposit(asset, amount, beneficiary)`, signer-authorized `withdraw(...)`, and multisig `emergencyWithdraw(...)`.
+2. Implement shadow bridge controller with owner mapping, idempotent shadow mint, withdrawable-balance check, and burn/lock for withdrawal.
+3. Implement bridge watcher for direct ETH sends, direct USDC `Transfer` events, and explicit deposit calls.
+4. Implement shadow account mapping and immediate minting after confirmed public deposits.
+5. Implement user EIP-712 withdrawal command flow.
+6. Implement shadow burn/transfer worker.
+7. Implement signing service authorization after burn confirmation.
+8. Implement frontend deposit and available-balance withdrawal UX.
+9. Add one sponsor/composed deposit adapter only if it improves demo/bounty fit.
 
-## 15. Demo Script
+## 16. Demo Script
 
 - User connects wallet.
-- User names agent and writes instructions.
-- User deposits USDC.
-- UI shows “funded, waiting for box credit”.
-- Bridge credits hidden chain.
-- UI shows “agent entered the box”.
-- During play, user sees only leaderboard-safe info.
-- At reveal, user sees replay + final PnL.
-- User claims final USDC payout from escrow.
+- User registers an agent and receives/creates a shadow account mapping.
+- User sends USDC directly to bridge or uses approve + `deposit(amount, beneficiary)`.
+- Bridge detects the operation and mints shadow USDC to the mapped shadow account.
+- Agent trades with shadow USDC inside the shadow EVM.
+- User sees withdrawable available balance.
+- User signs a withdrawal command for part of the idle balance.
+- Bridge forces a shadow burn/transfer for that amount.
+- Signing service returns withdrawal authorization.
+- User submits the withdrawal transaction and receives public USDC.
+- If normal signing fails, multisig emergency withdrawal remains available.

@@ -44,7 +44,7 @@ Core promise:
 
 - Production-grade decentralized confidential consensus.
 - Permissionless cross-chain bridge custody.
-- Mid-game withdrawals.
+- Forced liquidation withdrawals from open positions.
 - Public access to hidden node, privileged indexer data, orderbooks, raw trades, per-agent positions/balances, or agent prompts.
 - General-purpose prediction-market protocol beyond this hackathon arena.
 - Perfect LLM sandboxing against all possible provider/model leaks.
@@ -241,24 +241,27 @@ Must not:
 
 #### `darkbox-bridge`
 
-Purpose: funding coordinator, not a general bridge.
+Purpose: asset bridge coordinator between public escrow and the shadow EVM.
 
 Responsibilities:
 
-- Watch public escrow/provider funding events.
-- Normalize funding events into idempotency keys.
-- Wait for required confirmations.
-- Credit synthetic balances inside hidden chain.
-- Track credit status and recovery state.
-- Support pre-freeze refunds and post-reveal settlement claim artifacts.
+- Watch direct ETH sends, direct USDC transfers, explicit deposit calls, and provider/composed funding events.
+- Normalize funding events into idempotent deposit operation ids.
+- Resolve onchain owner wallet to shadow account mapping.
+- Mint corresponding shadow assets inside the shadow EVM after confirmed deposits.
+- Accept user-signed withdrawal commands.
+- Force a shadow-EVM burn/transfer of withdrawable available balance.
+- Request signing-service authorization after shadow burn confirmation.
+- Support multisig emergency withdrawals.
 
 Detailed behavior lives in `docs/DEPOSITS_WITHDRAWALS_SPEC.md`.
 
 Must not:
 
-- Allow mid-game withdrawals.
-- Credit hidden balances from mempool-only events.
+- Liquidate positions or cancel orders implicitly to satisfy withdrawals.
+- Credit shadow balances from mempool-only events.
 - Double-credit duplicate deposit/provider events.
+- Release public escrow funds before the matching shadow burn/transfer is confirmed.
 
 #### `darkbox-ens`
 
@@ -302,7 +305,7 @@ Responsibilities:
 - Export indexed events and derived state.
 - Export commitments and preimages.
 - Export agent runtime logs according to reveal policy.
-- Build settlement root/proofs.
+- Export deposit/withdrawal accounting and shadow burn/mint trace.
 - Build replay data.
 - Stage/publish final bundle.
 
@@ -374,8 +377,10 @@ Fields:
 - `instructionHash`
 - `runtimeHash`
 - `revealSaltHash`
-- `depositAmount`
-- `status`: `draft | awaiting_funds | funded | credited_hidden | active | halted | finalized | claimed | refunded`
+- `shadowAccount`
+- `totalDeposited`
+- `withdrawableAvailableBalance`
+- `status`: `draft | mapped | funded | active | halted | finalized`
 - `createdAt`
 - `updatedAt`
 
@@ -536,17 +541,20 @@ Base path: `/bridge`
 
 Public-safe endpoints:
 
-- `POST /bridge/funding-intents`
-- `GET /bridge/funding-intents/:id`
-- `GET /bridge/agents/:agentId/funding-status`
-- `POST /bridge/refunds` before freeze only
-- `GET /bridge/claims/:agentId` after settlement only
+- `POST /bridge/deposit-intents` optional helper for app/composed flows
+- `GET /bridge/deposits/:depositOpId`
+- `GET /bridge/accounts/:owner`
+- `GET /bridge/withdrawable/:owner`
+- `POST /bridge/withdrawals/commands` for user-signed withdrawal commands
+- `GET /bridge/withdrawals/:withdrawalId`
 
 Internal endpoints:
 
 - `POST /bridge/admin/reconcile-deposits`
-- `POST /bridge/admin/credit-hidden`
-- `POST /bridge/admin/build-settlement`
+- `POST /bridge/admin/reconcile-withdrawals`
+- `POST /bridge/admin/retry-shadow-mint`
+- `POST /bridge/admin/retry-shadow-burn`
+- `POST /bridge/admin/sign-withdrawal`
 
 ### 9.4 Agent Action Schema
 
@@ -601,29 +609,34 @@ Validation rules:
 - Reject actions that require unavailable hidden state.
 - Log rejected actions for reveal/audit.
 
-## 10. Funding, Registration, and Settlement
+## 10. Deposits, Withdrawals, and Shadow Assets
 
-The funding source of truth is a public USDC escrow/onboarding flow. The hidden chain receives synthetic credits.
+The public bridge contract custodies real assets. The shadow EVM holds corresponding shadow assets used by agents for trading. Users may deposit any time and may withdraw withdrawable available balance any time, but cannot force liquidation of positions.
 
 Use `docs/DEPOSITS_WITHDRAWALS_SPEC.md` as the detailed source for:
 
-- escrow state machine
-- deposit confirmation policy
-- idempotency keys
-- refund rules
-- settlement root
-- claim models
+- direct ETH sends and direct USDC transfer detection
+- approve + `deposit(asset, amount, beneficiary)` flows
+- cross-chain/composed deposit compatibility
+- owner wallet to shadow account mapping
+- idempotent shadow minting
+- withdrawable available balance rules
+- user-signed withdrawal commands
+- forced shadow burn/transfer before public withdrawal
+- signing-service withdrawal authorization
+- multisig emergency withdrawals
 - failure recovery
 
 MVP decisions:
 
-- Canonical asset: USDC.
-- Preferred escrow chain: Base unless sponsor requirements dictate otherwise.
-- Direct Base USDC deposit is the reliability fallback.
-- Pick one sponsor-aligned adapter; do not implement many half-working adapters.
-- Hidden credits mint 1:1 against confirmed deposits.
-- No withdrawals during live play.
-- Late deposits after freeze are refundable, not credited.
+- Canonical asset: USDC; ETH optional if useful.
+- Preferred public chain: Base unless sponsor requirements dictate otherwise.
+- Direct sends/transfers to the bridge must be detected offchain.
+- Explicit `deposit(...)` is supported for app UX and LI.FI-style composed flows.
+- Shadow assets mint 1:1 against confirmed public deposits.
+- Withdrawals use user signature + shadow burn + signing-service authorization.
+- No Merkle claims for normal withdrawals.
+- Emergency withdrawals remain multisig/admin-only.
 
 ## 11. ENS Identity and Commitments
 
@@ -655,7 +668,7 @@ Post-reveal records can include:
 
 - `darkbox:revealBundleUri`
 - `darkbox:finalStateRoot`
-- `darkbox:settlementRoot`
+- `darkbox:bridgeStatus`
 - `darkbox:replayUri`
 
 Commitment hash:
@@ -754,6 +767,7 @@ Disallowed observations:
 - privileged operator state
 - public escrow secrets
 - bridge/coordinator keys
+- withdrawal signing-service key
 - arbitrary hidden chain dumps unless intentionally allowed
 
 Important product decision:
@@ -849,10 +863,13 @@ commitments/
   registrations.ndjson
   instruction_preimages.ndjson (if reveal policy allows)
   ens_records.ndjson
-settlement/
-  settlement_root.json
-  claims.ndjson
-  proofs/
+bridge/
+  deposits.ndjson
+  shadow_mints.ndjson
+  withdrawal_commands.ndjson
+  shadow_burns.ndjson
+  public_withdrawals.ndjson
+  emergency_withdrawals.ndjson
 replay/
   replay_events.ndjson
 ```
@@ -869,7 +886,7 @@ replay/
 - hidden contract addresses
 - start/end/freeze timestamps
 - final state root
-- settlement root
+- bridge accounting summary
 - file hashes for every bundle file
 - bundle creation timestamp
 
@@ -881,7 +898,7 @@ Replay UI should support:
 - market creation timeline
 - order/fill timeline
 - agent action timeline
-- final settlement view
+- final deposit/withdrawal accounting view
 
 Replay can be implemented after raw bundle export, but the export schema should anticipate it.
 
@@ -955,7 +972,7 @@ Controls:
 - deterministic logs
 - signed image/runtime hashes
 - reveal bundle with file hashes
-- settlement root traceable to revealed state
+- deposit/withdrawal accounting traceable to revealed shadow and public-chain events
 
 ### 17.4 Market Abuse
 
@@ -1243,7 +1260,7 @@ Done when:
 10. Winner/resolutions are applied.
 11. Reveal bundle is generated.
 12. Replay UI shows what happened inside the box.
-13. Settlement root/proofs are available for claims.
+13. Signing-service authorized withdrawals are available for withdrawable shadow balances.
 
 ## 21. Open Decisions
 

@@ -547,10 +547,13 @@ If precise copy would help a trader infer hidden state, make it poetic/noisy ins
 
 - Loop 6 is currently a frontend-only sealed wait-room prototype.
 - It shows the user's daemon display name, user's own decrypted prototype balance, safe status word, and poetic hall murmur.
+- After the daemon card, the user sees `listen at the wall` rather than the full leaderboard crammed into the card.
+- `listen at the wall` opens a full-screen scrollable hall-wall view: a peek into muffled aggregate movement, not a window into hidden state.
+- Hall-wall copy should preserve the concept language: `muffled through stone`, `crowd you cannot read`, `echoes, not windows`.
 - It includes public wall/leaderboard material from the concept doc: aggregate values (`volume`, `trades`, `sealed boxes`, `fingerprints`) plus a leaderboard of daemon process names, coarse percentage pulse, and safe status words.
 - The leaderboard intentionally avoids positions, orderbook, hidden market state, other player balances, agent reasoning, exact trade timing, or exact event details.
 - Prototype values are deterministic/noisy frontend values until backend/indexer integration is explicitly wired.
-- `whisper again` restarts the local prototype flow without touching backend state.
+- `step back` closes the hall wall; `whisper again` restarts the local prototype flow without touching backend state.
 
 ---
 

@@ -120,6 +120,15 @@
             <p><span>murmur</span><strong id="wait-murmur">▸ something moved behind the wall</strong></p>
           </div>
 
+          <p class="wait-note">your daemon is inside. the wall is all you get.</p>
+          <button id="open-hall-wall" class="primary-ritual wall-button" type="button">listen at the wall</button>
+
+          <div class="hall-wall" aria-label="The hall wall" aria-hidden="true">
+            <div class="hall-wall-inner">
+              <button id="close-hall-wall" class="wall-close" type="button">step back</button>
+              <p class="ritual-kicker">muffled through stone.</p>
+              <h2>something is happening in the hall.</h2>
+              <p class="wall-copy">you can feel the crowd you cannot read. the numbers are echoes, not windows.</p>
           <div class="hall-metrics" aria-label="Hall aggregate values">
             <p><span>volume</span><strong id="metric-volume">$12.4k</strong></p>
             <p><span>trades</span><strong id="metric-trades">317</strong></p>
@@ -134,7 +143,10 @@
             <div id="leaderboard-rows" class="leaderboard-rows"></div>
           </div>
 
-          <p class="wait-note">leaderboard shows daemon names, coarse pulse, and aggregate movement only. positions, orders, balances, and the dark stay sealed until the boxes open.</p>
+              <p class="wait-note wall-note">leaderboard shows daemon names, coarse pulse, aggregate movement, and safe murmurs only. positions, orders, balances, and the dark stay sealed until the boxes open.</p>
+            </div>
+          </div>
+
           <button id="restart-flow" class="ghost-ritual" type="button">whisper again</button>
         </div>
       </section>

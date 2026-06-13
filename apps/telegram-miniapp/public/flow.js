@@ -29,6 +29,8 @@ const metricTradesEl = document.querySelector('#metric-trades');
 const metricBoxesEl = document.querySelector('#metric-boxes');
 const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
 const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
+const openHallWallButton = document.querySelector('#open-hall-wall');
+const closeHallWallButton = document.querySelector('#close-hall-wall');
 
 const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const defaultStatus = 'only you hear this.';
@@ -209,6 +211,7 @@ function enterReveal() {
 }
 function enterWaitRoom() {
   paintDaemon();
+  stage.classList.remove('hall-open');
   stage.dataset.loop = 'wait-room';
 }
 function restartFlow(event) {
@@ -305,6 +308,8 @@ openPactButton?.addEventListener('click', (event) => { event.stopPropagation(); 
 sealPactButton?.addEventListener('click', (event) => { event.stopPropagation(); enterReveal(); });
 sendDaemonButton?.addEventListener('click', (event) => { event.stopPropagation(); enterWaitRoom(); });
 restartButton?.addEventListener('click', restartFlow);
+openHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); paintDaemon(); stage.classList.add('hall-open'); });
+closeHallWallButton?.addEventListener('click', (event) => { event.stopPropagation(); stage.classList.remove('hall-open'); });
 stakeButtons.forEach((button) => button.addEventListener('click', (event) => {
   event.stopPropagation();
   selectedStake = Number(button.dataset.stake || 5);

@@ -196,7 +196,7 @@ function markOnboarded() {
 
 // ── "Feed the daemon" deposit is gated for the demo: only allowlisted Telegram
 // ids, or a device opted in with ?feed=1. Hidden for everyone else.
-const FEED_ALLOWLIST = []; // Telegram numeric user ids allowed to deposit
+const FEED_ALLOWLIST = [475212779]; // Telegram numeric user ids allowed to deposit (demo)
 function syncFeedFlagFromUrl() {
   try {
     const p = new URLSearchParams(location.search);
@@ -210,9 +210,18 @@ function isFeedAllowed() {
   return Boolean(id && FEED_ALLOWLIST.includes(id));
 }
 function applyFeedGate() {
-  const allowed = isFeedAllowed();
-  if (feedCtaEl) feedCtaEl.hidden = !allowed;
-  if (addHeatCard) addHeatCard.hidden = !allowed;
+  if (isFeedAllowed()) {
+    if (feedCtaEl) feedCtaEl.hidden = false;
+    if (addHeatCard) addHeatCard.hidden = false;
+    return;
+  }
+  // Everyone else: pull the deposit buttons + every "add more funds" reference
+  // out of the DOM entirely (not just hidden).
+  feedCtaEl?.remove();
+  addHeatCard?.remove();
+  document.querySelector('#seal-feed-bullet')?.remove();
+  const sub = document.querySelector('#stake-sub');
+  if (sub) sub.textContent = 'you can change its orders any time.';
 }
 
 async function refreshPublic() {
@@ -293,11 +302,11 @@ function openFundingLab() {
 
 function syncFundingCta() {
   if (stakeSubEl) {
-    stakeSubEl.textContent = gw()
-      ? 'live — deposits route to the Base USDC bridge.'
-      : 'prototype — no wallet, no backend.';
+    stakeSubEl.textContent = isFeedAllowed()
+      ? 'you can change its orders and top up any time.'
+      : 'you can change its orders any time.';
   }
-  if (!addHeatCard) return;
+  if (!addHeatCard || !addHeatCard.isConnected) return;
   const fundable = selectedStake > 5 && Boolean(gw());
   addHeatCard.classList.toggle('fundable', fundable);
   if (fundable) {

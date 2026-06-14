@@ -331,7 +331,7 @@ const WHISPER_THREAD = [
   [{ t: 'it walks into the hall alone.' }],
   [{ t: 'and on Sunday, 5:00 PM, it ' }, { t: 'confesses', c: 'c-confess' }, { t: '.' }],
 ];
-const WHISPER_FINAL = [{ t: "whisper your daemon's orders." }];
+const WHISPER_FINAL = [{ t: 'whisper your ' }, { t: 'daemon', c: 'c-blind' }, { t: "'s orders." }];
 
 function typeSegments(el, segs, done) {
   el.textContent = '';

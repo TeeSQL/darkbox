@@ -177,6 +177,8 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   white-space: nowrap;
 }
+/* "Daemon" in violet inside the wordmark — override the chrome text-clip. */
+.wm-daemon { color: var(--violet); -webkit-text-fill-color: var(--violet); }
 .wm-home { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.15s ease; }
 .wm-home:hover { opacity: 0.78; }
 .wm-home:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 3px; }

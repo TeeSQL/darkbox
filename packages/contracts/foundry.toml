@@ -8,7 +8,7 @@ script = "script"
 # solc 0.8.26 / cancun / via_ir. DarkBox's own ^0.8.24 contracts compile fine
 # under 0.8.26.
 solc = "0.8.26"
-evm_version = "cancun"
+evm_version = "london"
 optimizer = true
 # 200 runs keeps the large GeometricFrontierBook under the EIP-170 size limit
 # (this mirrors Frontier's own [profile.deploy]).

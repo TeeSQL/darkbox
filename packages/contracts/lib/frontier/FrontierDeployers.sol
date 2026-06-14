@@ -117,7 +117,13 @@ contract GeometricBookDeployer {
     function _store(bytes memory code, uint256 offset, uint256 size) private returns (address ptr) {
         bytes memory data = new bytes(size);
         assembly ("memory-safe") {
-            mcopy(add(data, 0x20), add(add(code, 0x20), offset), size)
+            // London-compatible memory copy (this hidden chain enables forks only
+            // through London — no Cancun MCOPY). `data` is a fresh new bytes(size)
+            // whose allocation is word-rounded, so copying ceil(size/32) words
+            // word-by-word stays within the buffer and reproduces MCOPY's result.
+            let dst := add(data, 0x20)
+            let src := add(add(code, 0x20), offset)
+            for { let i := 0 } lt(i, size) { i := add(i, 0x20) } { mstore(add(dst, i), mload(add(src, i))) }
         }
         // PUSH4 len; DUP1; PUSH1 14; PUSH1 0; CODECOPY; PUSH1 0; RETURN
         bytes memory init = abi.encodePacked(hex"63", uint32(size + 1), hex"80600e6000396000f3", hex"00", data);

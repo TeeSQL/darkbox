@@ -73,6 +73,10 @@ export class MemoryStore implements Store {
     return null;
   }
 
+  async listIdentities(): Promise<Identity[]> {
+    return [...this.identities.values()];
+  }
+
   async upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void> {
     this.snapshots.set(input.shadowAccount, input);
   }

@@ -64,6 +64,13 @@ export function createServer(deps: ServerDeps): http.Server {
       if (method === 'GET' && pathname === '/public/activity') {
         return send(res, 200, service.activity());
       }
+      if (method === 'GET' && pathname === '/public/reveal/status') {
+        return send(res, 200, { ready: service.isRevealReady() });
+      }
+      if (method === 'GET' && pathname === '/public/reveal/bundle') {
+        if (!service.isRevealReady()) return send(res, 404, { error: 'reveal not published' });
+        return send(res, 200, { bundle: await service.revealBundle(new Date().toISOString()) });
+      }
 
       // --- Internal surface ----------------------------------------------
       if (method === 'GET' && pathname === '/internal/health') return send(res, 200, { ok: true });
@@ -179,6 +186,13 @@ export function createServer(deps: ServerDeps): http.Server {
         const agentId = str(body.agentId);
         if (!orderId || !agentId) return send(res, 400, { error: 'orderId and agentId required' });
         await service.cancelOrder(orderId, agentId);
+        return send(res, 200, { ok: true });
+      }
+      if (method === 'GET' && pathname === '/internal/reveal/export') {
+        return send(res, 200, { bundle: await service.revealBundle(new Date().toISOString()) });
+      }
+      if (method === 'POST' && pathname === '/internal/reveal/publish') {
+        service.publishReveal();
         return send(res, 200, { ok: true });
       }
       if (method === 'POST' && pathname === '/internal/billboard') {

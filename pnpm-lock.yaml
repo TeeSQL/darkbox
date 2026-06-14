@@ -38,6 +38,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
 
+  services/ens: {}
+
   services/indexer:
     dependencies:
       '@darkbox/shared':
@@ -50,6 +52,12 @@ importers:
       '@types/pg':
         specifier: ^8.11.10
         version: 8.20.0
+
+  services/reveal:
+    dependencies:
+      '@darkbox/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
 
 packages:
 

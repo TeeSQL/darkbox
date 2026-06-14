@@ -127,6 +127,11 @@ export class PostgresStore implements Store {
     return this.getIdentityBy('agent_id', agentId);
   }
 
+  async listIdentities(): Promise<Identity[]> {
+    const result = await this.pool.query<IdentityRow>('SELECT * FROM identity ORDER BY created_at ASC');
+    return result.rows.map(rowToIdentity);
+  }
+
   async upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void> {
     await this.pool.query(
       `INSERT INTO leaderboard_snapshot (shadow_account, agent_id, starting_balance, current_equity, pnl, updated_at)

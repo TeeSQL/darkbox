@@ -43,6 +43,7 @@ export interface Store {
   getIdentityByTelegramUserId(telegramUserId: string): Promise<Identity | null>;
   getIdentityByDaemonName(daemonName: string): Promise<Identity | null>;
   getIdentityByAgentId(agentId: string): Promise<Identity | null>;
+  listIdentities(): Promise<Identity[]>;
   upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void>;
   /** Returns leaderboard entries joined with identity, sorted by pnl desc, ranked. */
   getLeaderboard(): Promise<LeaderboardEntry[]>;

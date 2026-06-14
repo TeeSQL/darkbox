@@ -53,8 +53,12 @@ services:
       HIDDEN_RPC_URL: http://darkbox-node:8545
 
   darkbox-ens:
-    build: ./services/ens
+    build:
+      context: .
+      dockerfile: services/ens/Dockerfile
     networks: [egress_net]
+    expose:
+      - "8099"
 
   darkbox-frontend:
     build:
@@ -68,12 +72,17 @@ services:
       PUBLIC_INDEXER_URL: http://darkbox-indexer:8080/public
 
   darkbox-reveal:
-    build: ./services/reveal
+    build:
+      context: .
+      dockerfile: services/reveal/Dockerfile
     networks: [hidden_net, egress_net]
     depends_on: [darkbox-indexer, darkbox-node]
     profiles: [reveal]
+    expose:
+      - "8095"
     environment:
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-darkbox_internal_dev_only}
       HIDDEN_RPC_URL: http://darkbox-node:8545
 
 networks:

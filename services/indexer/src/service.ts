@@ -29,6 +29,8 @@ export class IndexerService {
   >();
   private billboardCounter = 0;
   private proposalCounter = 0;
+  /** Gate for the public reveal bundle: sealed until the game is finalized. */
+  private revealReady = false;
 
   constructor(private readonly store: Store) {
     this.identities = new IdentityRepository(store);
@@ -268,6 +270,51 @@ export class IndexerService {
       billboard: this.recentBillboard(),
       markets: this.marketSnapshots(),
       proposals: [...this.proposals.values()].map((p) => ({ proposalId: p.proposalId, question: p.question, status: p.status })),
+    };
+  }
+
+  // --- reveal bundle --------------------------------------------------------
+
+  /** Open the public reveal bundle (call after the game is finalized). */
+  publishReveal(): void {
+    this.revealReady = true;
+  }
+
+  isRevealReady(): boolean {
+    return this.revealReady;
+  }
+
+  /**
+   * Assemble the post-game audit bundle. Everything needed to independently
+   * replay and verify the game is already durable: the event log is the full
+   * ordered action stream, identities are the registration commitments, and the
+   * leaderboard is the final standing. Replaying `actions` through a fresh
+   * MarketEngine reproduces `finalLeaderboard` exactly.
+   */
+  async revealBundle(generatedAt: string): Promise<{
+    generatedAt: string;
+    agents: Identity[];
+    registrations: { shadowAccount: string; agentId?: string; ownerAddress?: string; ensName?: string; source: string }[];
+    actions: EngineEvent[];
+    finalLeaderboard: LeaderboardEntry[];
+    markets: MarketSnapshot[];
+    billboard: { messageId: string; agentId: string; message: string; createdAt: string }[];
+  }> {
+    const agents = await this.store.listIdentities();
+    return {
+      generatedAt,
+      agents,
+      registrations: agents.map((a) => ({
+        shadowAccount: a.shadowAccount,
+        agentId: a.agentId,
+        ownerAddress: a.ownerAddress,
+        ensName: a.ensName,
+        source: a.source,
+      })),
+      actions: await this.store.loadEngineEvents(),
+      finalLeaderboard: await this.leaderboard(),
+      markets: this.marketSnapshots(),
+      billboard: this.recentBillboard(Number.MAX_SAFE_INTEGER),
     };
   }
 

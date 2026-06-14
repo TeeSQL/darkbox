@@ -9,6 +9,12 @@ export const config = {
       .map((x) => x.trim())
       .filter(Boolean),
   ),
+  oceanOperatorTelegramIds: new Set(
+    (process.env["OCEAN_OPERATOR_TELEGRAM_IDS"] ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
+  ),
   indexerInternalUrl: (process.env["INDEXER_INTERNAL_URL"] ?? "http://darkbox-indexer:8080/internal").replace(/\/$/, ""),
   pollMs: parseInt(process.env["TELEGRAM_POLL_MS"] ?? "1500", 10),
   enablePolling: (process.env["TELEGRAM_ENABLE_POLLING"] ?? "false") === "true",

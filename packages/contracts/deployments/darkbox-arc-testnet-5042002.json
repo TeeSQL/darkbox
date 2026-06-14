@@ -1,0 +1,25 @@
+{
+  "chainId": 5042002,
+  "deployer": "0xCa1370C6226A867BE549A0aEB613f27BdD11370B",
+  "frontier": {
+    "factory": "0xE391ab3eA709f66896eE774FBD16096b0e2972a6",
+    "router": "0x965648Aecdd23b91970E497f497D51AAFFFBEaDD",
+    "lens": "0x25C53b1E4f36B17187C6e0Bc27F59Ba9feb44a37"
+  },
+  "feeConfig": {
+    "makerFeeBps": 0,
+    "takerFeeBps": 100
+  },
+  "darkbox": {
+    "syntheticUSDC": "0xfF3088439D59559eb3Ba740429eBBA5303FB3D80",
+    "marketFactory": "0x23bc8FB74d4Bb89e899BC1558B08A843E6eE9796"
+  },
+  "canonicalMarket": {
+    "marketId": "0xd157204b0669e2c47343ebff2a792eea14cab8ca43cef5d6c65be555d7bcf56c",
+    "market": "0x26baAF2540c86eB04c3eC0304FF634c810F7A0B1",
+    "yesToken": "0x100517393c0861BD4F2A63803B393948232B02fd",
+    "noToken": "0xCa369b1d83419C6Ff3BD63472F066Efec35814D3",
+    "yesBook": "0x3707E690f0fc75453561658c99D36372be5B00b1",
+    "noBook": "0x9850aC4DCF880EC2f765B5b6b6135a373bC4bB47"
+  }
+}

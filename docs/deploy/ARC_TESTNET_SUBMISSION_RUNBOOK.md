@@ -39,7 +39,7 @@ forge build --evm-version cancun
 
 ## 2. Deploy CLOB + prediction market stack
 
-The deploy script deploys:
+On Arc, use the split deployment path if the all-in-one script exceeds the 30M gas cap. The initial deploy script deploys:
 
 - Frontier permission registry
 - Frontier geometric book factory + book deployers
@@ -124,7 +124,7 @@ DEPLOYER_KEY="$DEPLOYER_KEY" \
 MAKER_KEY="$MAKER_KEY" \
 TAKER_KEY="$TAKER_KEY" \
 SEED_BASE_UNITS=1000000 \
-TAKER_SPEND_UNITS=5000000 \
+TAKER_SPEND_UNITS=2000000 \
 bash script/seed-arc-orderflow.sh
 ```
 
@@ -199,3 +199,7 @@ Capture these artifacts/screenshots:
 - bot funding/seeding tx hashes
 - UI screenshot showing Arc Testnet + selected YES/NO book
 - public activity/leaderboard screenshot if API is wired
+
+## Arc gas-cap note from live deployment
+
+The all-in-one `DeployDarkBox.s.sol` can deploy Frontier + sUSDC + the factory, but canonical market creation may exceed Arc's 30M per-transaction gas cap because it atomically deploys the binary market, YES/NO tokens, and both books. The live Arc deployment used `DeployArcMarketSplit.s.sol`, which reuses the deployed Frontier/sUSDC addresses, deploys a split-capable market factory, then creates the market shell, YES book, and NO book in separate transactions.

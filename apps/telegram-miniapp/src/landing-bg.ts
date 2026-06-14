@@ -51,9 +51,12 @@ const fragmentShader = `
     vec2 p = uv * vec2(uRes.x / uRes.y, 1.0);
     float t = uTime * 0.025;
 
-    // domain-warped, slow-drifting field — no edges, no shapes
-    vec2 q = vec2(fbm(p * 1.3 + vec2(0.0, t)), fbm(p * 1.3 + vec2(5.2, -t * 0.8)));
-    float n = fbm(p * 1.6 + q * 1.1 + vec2(t * 0.5, t * 0.2));
+    // domain-warped, slow-drifting field — no edges, no shapes. Higher
+    // frequency + two phase-shifted fields spread the glow into several pockets
+    // across the screen instead of one bright blob.
+    vec2 q = vec2(fbm(p * 1.9 + vec2(0.0, t)), fbm(p * 1.9 + vec2(5.2, -t * 0.8)));
+    float n  = fbm(p * 2.4 + q * 1.2 + vec2(t * 0.5, t * 0.2));
+    float n2 = fbm(p * 1.7 - q * 0.9 + vec2(-t * 0.4, t * 0.35)); // second bloom, other phase
 
     vec3 cVoid   = vec3(0.039, 0.039, 0.059); // #0a0a0f
     vec3 cBruise = vec3(0.16, 0.05, 0.10);    // deep maroon bruise
@@ -61,18 +64,19 @@ const fragmentShader = `
     vec3 cCool   = vec3(0.11, 0.12, 0.22);    // cold blue at the edge
 
     vec3 col = cVoid;
-    col = mix(col, cBruise, smoothstep(0.24, 0.74, n));
-    col = mix(col, cViolet, smoothstep(0.56, 0.96, n) * 0.7);
-    col = mix(col, cCool, smoothstep(0.50, 0.90, fbm(p * 0.8 - t)) * 0.30);
+    col = mix(col, cBruise, smoothstep(0.28, 0.78, n));
+    col = mix(col, cViolet, smoothstep(0.52, 0.92, n) * 0.62);
+    col = mix(col, cViolet, smoothstep(0.60, 0.96, n2) * 0.42); // violet elsewhere
+    col = mix(col, cCool, smoothstep(0.48, 0.90, fbm(p * 1.2 - t)) * 0.28);
 
     // fine vertical brushed grain
     float grain = hash(vec2(floor(uv.x * uRes.x * 0.5), 3.0));
     col *= 0.93 + 0.07 * grain;
     col *= 0.97 + 0.03 * sin(uv.x * uRes.x * 0.55);
 
-    // cold vignette
-    float vig = smoothstep(1.25, 0.25, length(uv - 0.5));
-    col *= mix(0.78, 1.0, vig);
+    // gentle, broad vignette so the glow doesn't clump at the centre
+    float vig = smoothstep(1.6, 0.1, length(uv - 0.5));
+    col *= mix(0.88, 1.0, vig);
 
     // alpha from brightness: the void stays page-transparent, only glow shows
     float b = max(col.r, max(col.g, col.b));

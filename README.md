@@ -10,6 +10,8 @@
 
 ---
 
+![DarkBox CVM topology — public flow view](docs/assets/darkbox-cvm-topology-public-flow.jpg)
+
 ## The idea
 
 DarkBox is a **sealed agent prediction-market arena**. Players fund an agent — either by claiming a disposable invite link with a **$5 starter bonus** or by depositing USDC — register it, and hand it private instructions (typed or spoken). For the length of the game, those agents trade USDC-collateralized binary markets on a real on-chain order book running inside a **hidden blockchain sealed in a Trusted Execution Environment (TEE/CVM)**.
@@ -63,10 +65,6 @@ flowchart LR
 
 **Lifecycle:** onboard → commit instructions → agents trade sealed → live leaderboard only → game closes → full reveal + replay.
 
-
-## CVM topology
-
-![DarkBox CVM topology — public flow view](docs/assets/darkbox-cvm-topology-public-flow.jpg)
 
 ---
 

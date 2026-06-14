@@ -169,6 +169,8 @@
   .wait-metric.balance strong{text-shadow:0 0 18px rgba(139,123,255,.26)}
   .daemon-wait-card{width:100%}
   .wait-card-header{display:grid;gap:3px;padding:11px 16px 10px;border:1px solid var(--hair);border-bottom:0;background:linear-gradient(180deg,rgba(139,123,255,.065),rgba(255,255,255,.012));text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+  .daemon-reveal-copy-top,.wait-card-header{position:relative}
+  .ens-chip{position:absolute;top:10px;right:10px;display:inline-flex;width:fit-content;max-width:60%;padding:3px 7px;border:1px solid rgba(104,211,255,.28);border-radius:0;background:rgba(60,140,255,.10);color:#9fdcff;font-family:var(--mono);font-size:.7rem;letter-spacing:.03em;text-transform:lowercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .wait-card-header .k{color:var(--mut);font-size:9px;letter-spacing:.18em}
   .wait-card-header strong{color:var(--bone);font-family:var(--display);font-style:italic;font-size:clamp(1.3rem,6.5vw,2rem);line-height:1;text-transform:uppercase;letter-spacing:.04em}
   .wait-card-status{color:var(--mut);font-size:10px;letter-spacing:.12em}
@@ -262,6 +264,7 @@
       <div class="daemon-reveal-copy daemon-reveal-copy-top">
         <span class="k">YOUR DAEMON</span>
         <strong id="reveal-daemon-name">hopiumd</strong>
+        <span id="reveal-daemon-ens" class="ens-chip">hopiumd.darkbox.eth</span>
         <span id="reveal-daemon-meta">shader sealed · private preview</span>
       </div>
       <div id="daemon-reveal-stage" class="daemon-reveal-stage" aria-label="Your daemon preview">
@@ -292,6 +295,7 @@
       <div class="wait-card-header">
         <span class="k">YOUR DAEMON</span>
         <strong id="daemon-name">hopiumd</strong>
+        <span id="daemon-ens" class="ens-chip">hopiumd.darkbox.eth</span>
         <span id="daemon-status" class="wait-card-status">circling</span>
       </div>
       <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">

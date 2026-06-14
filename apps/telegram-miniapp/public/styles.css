@@ -1026,19 +1026,29 @@ html.bestiary-html .daemon-stage {
 .action-card.fundable:active { transform: scale(0.99); }
 
 
+/* ENS subname chip — pinned to the top-right of the card, sharp corners to
+   match the angular card styling. */
+.daemon-reveal-copy-top,
+.wait-card-header { position: relative; }
 .ens-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: inline-flex;
   width: fit-content;
-  margin-top: 4px;
-  padding: 4px 8px;
+  max-width: 60%;
+  padding: 3px 7px;
   border: 1px solid rgba(104, 211, 255, 0.28);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(60, 140, 255, 0.10);
   color: #9fdcff;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   letter-spacing: 0.03em;
   text-transform: lowercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* ─── Feed the daemon: returning-player deposit CTA + inline Blink modal ─────── */
 .feed-cta[hidden] { display: none; }

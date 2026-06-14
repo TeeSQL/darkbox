@@ -21,6 +21,14 @@ export class IndexerService {
   private readonly identities: IdentityRepository;
   /** Bridge operation ids already applied, for durable deposit/withdraw idempotency. */
   private readonly processedOps = new Set<string>();
+  /** Social game state (durable via the same event log; does not touch the ledger). */
+  private readonly billboard: { messageId: string; agentId: string; message: string; createdAt: string }[] = [];
+  private readonly proposals = new Map<
+    string,
+    { proposalId: string; agentId: string; question: string; description: string; status: 'proposed' | 'deployed'; marketId?: string }
+  >();
+  private billboardCounter = 0;
+  private proposalCounter = 0;
 
   constructor(private readonly store: Store) {
     this.identities = new IdentityRepository(store);
@@ -94,6 +102,26 @@ export class IndexerService {
     await this.persistSnapshots();
   }
 
+  // --- social game state ----------------------------------------------------
+
+  async postBillboard(agentId: string, message: string): Promise<string> {
+    const messageId = `b${(this.billboardCounter += 1)}`;
+    await this.commit({ type: 'postBillboard', messageId, agentId, message, createdAt: new Date().toISOString() });
+    return messageId;
+  }
+
+  async proposeMarket(agentId: string, question: string, description: string): Promise<string> {
+    const proposalId = `p${(this.proposalCounter += 1)}`;
+    await this.commit({ type: 'proposeMarket', proposalId, agentId, question, description, createdAt: new Date().toISOString() });
+    return proposalId;
+  }
+
+  /** Approve a proposal and deploy it as a tradeable market. */
+  async approveProposal(proposalId: string, marketId = proposalId): Promise<void> {
+    if (!this.proposals.has(proposalId)) throw new Error(`unknown proposal: ${proposalId}`);
+    await this.commit({ type: 'approveProposal', proposalId, marketId });
+  }
+
   /**
    * Apply to the engine first, then append to the log. The engine validates
    * synchronously and throws (EngineError) on bad input before we ever write,
@@ -130,6 +158,29 @@ export class IndexerService {
         return this.engine.cancelOrder(event.orderId, event.agentId);
       case 'resolveMarket':
         return this.engine.resolveMarket(event.marketId, event.winningOutcome);
+      case 'postBillboard':
+        this.billboard.push({ messageId: event.messageId, agentId: event.agentId, message: event.message, createdAt: event.createdAt });
+        this.billboardCounter = Math.max(this.billboardCounter, Number(event.messageId.slice(1)));
+        return undefined;
+      case 'proposeMarket':
+        this.proposals.set(event.proposalId, {
+          proposalId: event.proposalId,
+          agentId: event.agentId,
+          question: event.question,
+          description: event.description,
+          status: 'proposed',
+        });
+        this.proposalCounter = Math.max(this.proposalCounter, Number(event.proposalId.slice(1)));
+        return undefined;
+      case 'approveProposal': {
+        const proposal = this.proposals.get(event.proposalId);
+        if (proposal) {
+          proposal.status = 'deployed';
+          proposal.marketId = event.marketId;
+          this.engine.createMarket(event.marketId, proposal.question);
+        }
+        return undefined;
+      }
     }
   }
 
@@ -191,9 +242,32 @@ export class IndexerService {
       markets: this.marketSnapshots(),
       orders,
       balances: [{ agentId, available: fmt(balance.available), equity: fmt(this.engine.equity(agentId)) }],
-      billboardSinceLastTurn: [],
-      marketProposals: [],
+      billboardSinceLastTurn: this.recentBillboard(),
+      marketProposals: [...this.proposals.values()].map((proposal) => ({
+        proposalId: proposal.proposalId,
+        agentId: proposal.agentId,
+        question: proposal.question,
+        status: proposal.status,
+      })),
       sharedContext: [],
+    };
+  }
+
+  /** Recent public billboard messages (newest last), capped. */
+  recentBillboard(limit = 50): { messageId: string; agentId: string; message: string; createdAt: string }[] {
+    return this.billboard.slice(-limit);
+  }
+
+  /** Public, visibility-safe activity feed: billboard + market list + aggregates. */
+  activity(): {
+    billboard: { messageId: string; agentId: string; message: string; createdAt: string }[];
+    markets: MarketSnapshot[];
+    proposals: { proposalId: string; question: string; status: string }[];
+  } {
+    return {
+      billboard: this.recentBillboard(),
+      markets: this.marketSnapshots(),
+      proposals: [...this.proposals.values()].map((p) => ({ proposalId: p.proposalId, question: p.question, status: p.status })),
     };
   }
 

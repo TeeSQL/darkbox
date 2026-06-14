@@ -83,6 +83,14 @@ export class IndexerClient {
     return this.post('/merge', { agentId, marketId, amount });
   }
 
+  postBillboard(agentId: string, message: string): Promise<unknown> {
+    return this.post('/billboard', { agentId, message });
+  }
+
+  proposeMarket(agentId: string, question: string, description: string): Promise<unknown> {
+    return this.post('/proposals', { agentId, question, description });
+  }
+
   leaderboard(): Promise<{ entries: unknown[] }> {
     return this.get('/leaderboard/raw') as Promise<{ entries: unknown[] }>;
   }
@@ -179,6 +187,23 @@ export async function runLive(options: RunLiveOptions): Promise<RunLiveResult[]>
     for (const action of effective.tradeActions) {
       try {
         applied.push(await applyAction(client, agentId, action, ordersById));
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    // Social actions: a public billboard post and/or a market proposal.
+    if (effective.billboardPost) {
+      try {
+        await client.postBillboard(agentId, effective.billboardPost.message);
+        applied.push(`billboard: ${effective.billboardPost.message}`);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (effective.marketProposal) {
+      try {
+        await client.proposeMarket(agentId, effective.marketProposal.question, effective.marketProposal.description);
+        applied.push(`propose: ${effective.marketProposal.question}`);
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));
       }

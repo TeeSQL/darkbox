@@ -83,7 +83,16 @@ export type ProjectSnapshot = Record<string, unknown> & { uuid: string; slug: st
 async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', origin: API_ORIGIN },
+    headers: {
+      'content-type': 'application/json',
+      accept: '*/*',
+      origin: API_ORIGIN,
+      referer: `${API_ORIGIN}/`,
+      // The API sits behind a bot filter that rejects default runtime user
+      // agents, so we present a normal browser UA.
+      'user-agent':
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    },
     body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) {

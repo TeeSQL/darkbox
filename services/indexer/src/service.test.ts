@@ -41,6 +41,29 @@ test('engine state survives a restart by replaying the event log', async () => {
   assert.equal(after[0]!.pnl, '6');
 });
 
+test('billboard and proposals are stored, surfaced, and replayed', async () => {
+  const store = new MemoryStore();
+  const service = new IndexerService(store);
+  await service.registerIdentity({ shadowAccount: '0xA', agentId: 'alice', source: 'spawned' });
+  await service.postBillboard('alice', 'going long YES');
+  const proposalId = await service.proposeMarket('alice', 'Will X ship in Q3?', 'desc');
+  await service.approveProposal(proposalId); // deploys a market
+
+  const obs = service.observation('alice', 1);
+  assert.equal(obs.billboardSinceLastTurn.length, 1);
+  assert.equal(obs.billboardSinceLastTurn[0]!.message, 'going long YES');
+  assert.equal(obs.marketProposals[0]!.status, 'deployed');
+  assert.ok(obs.markets.some((m) => m.marketId === proposalId)); // proposal became a market
+
+  // Survives restart.
+  const restarted = new IndexerService(store);
+  await restarted.init();
+  const obs2 = restarted.observation('alice', 2);
+  assert.equal(obs2.billboardSinceLastTurn.length, 1);
+  assert.equal(obs2.marketProposals[0]!.status, 'deployed');
+  assert.ok(obs2.markets.some((m) => m.marketId === proposalId));
+});
+
 test('replay does not duplicate events', async () => {
   const store = new MemoryStore();
   await buildScenario(store);

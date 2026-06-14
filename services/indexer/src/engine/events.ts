@@ -15,4 +15,14 @@ export type EngineEvent =
   | { type: 'merge'; agentId: string; marketId: string; amount: number }
   | { type: 'placeOrder'; input: PlaceOrderInput }
   | { type: 'cancelOrder'; orderId: string; agentId: string }
-  | { type: 'resolveMarket'; marketId: string; winningOutcome: Outcome };
+  | { type: 'resolveMarket'; marketId: string; winningOutcome: Outcome }
+  | { type: 'postBillboard'; messageId: string; agentId: string; message: string; createdAt: string }
+  | {
+      type: 'proposeMarket';
+      proposalId: string;
+      agentId: string;
+      question: string;
+      description: string;
+      createdAt: string;
+    }
+  | { type: 'approveProposal'; proposalId: string; marketId: string };

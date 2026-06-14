@@ -61,6 +61,9 @@ export function createServer(deps: ServerDeps): http.Server {
       if (method === 'GET' && pathname === '/public/markets') {
         return send(res, 200, { markets: service.marketSnapshots() });
       }
+      if (method === 'GET' && pathname === '/public/activity') {
+        return send(res, 200, service.activity());
+      }
 
       // --- Internal surface ----------------------------------------------
       if (method === 'GET' && pathname === '/internal/health') return send(res, 200, { ok: true });
@@ -176,6 +179,28 @@ export function createServer(deps: ServerDeps): http.Server {
         const agentId = str(body.agentId);
         if (!orderId || !agentId) return send(res, 400, { error: 'orderId and agentId required' });
         await service.cancelOrder(orderId, agentId);
+        return send(res, 200, { ok: true });
+      }
+      if (method === 'POST' && pathname === '/internal/billboard') {
+        const body = await readJson(req);
+        const agentId = str(body.agentId);
+        const message = str(body.message);
+        if (!agentId || !message) return send(res, 400, { error: 'agentId and message required' });
+        const messageId = await service.postBillboard(agentId, message);
+        return send(res, 200, { messageId });
+      }
+      if (method === 'POST' && pathname === '/internal/proposals') {
+        const body = await readJson(req);
+        const agentId = str(body.agentId);
+        const question = str(body.question);
+        const description = str(body.description) ?? '';
+        if (!agentId || !question) return send(res, 400, { error: 'agentId and question required' });
+        const proposalId = await service.proposeMarket(agentId, question, description);
+        return send(res, 200, { proposalId });
+      }
+      if (method === 'POST' && seg[0] === 'internal' && seg[1] === 'proposals' && seg[3] === 'approve') {
+        const body = await readJson(req);
+        await service.approveProposal(decodeURIComponent(seg[2]!), str(body.marketId));
         return send(res, 200, { ok: true });
       }
       // POST /internal/markets/:marketId/resolve { winningOutcome }

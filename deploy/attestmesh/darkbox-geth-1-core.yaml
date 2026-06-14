@@ -89,6 +89,13 @@ services:
       - INDEXER_INTERNAL_URL=http://localhost:8080/internal
       - HIDDEN_RPC_URL=http://localhost:8545
       - VENICE_API_KEY=${VENICE_API_KEY}
+      # ETHGlobal showcase refresh loop (pulls project snapshots every 15 min to
+      # the showcase_data volume; needs CVM egress to api2.ethglobal.com).
+      - SHOWCASE_EVENT_SLUG=newyork2025
+      - SHOWCASE_INTERVAL_SECONDS=900
+      - SHOWCASE_OUT=/data/ethglobal
+    volumes:
+      - showcase_data:/data
 
   # ── Bridge coordinator (deposits/withdrawals; calls signer cross-mesh) ───────
   bridge:
@@ -160,3 +167,4 @@ volumes:
   agentsock:
   gethdata:
   db_data:
+  showcase_data:

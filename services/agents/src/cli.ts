@@ -6,6 +6,7 @@ import { makeFixtureObservation } from './fixture.js';
 import { createRandomStrategy, randomStrategyKinds, type RandomAgentKind } from './random.js';
 import { validateTurnOutput } from './validate.js';
 import { createVeniceStrategy } from './venice.js';
+import { cacheEventProjects, DEFAULT_EVENT_SLUG } from './ethglobal.js';
 
 function loadDotEnv(filePath: string): void {
   if (!fs.existsSync(filePath)) return;
@@ -40,6 +41,15 @@ async function main(): Promise<void> {
 
   if (mode === 'list') {
     console.log(JSON.stringify({ randomStrategyKinds }, null, 2));
+    return;
+  }
+
+  if (mode === 'showcase') {
+    // Pull ETHGlobal showcase project snapshots and cache them locally.
+    const eventSlug = argValue('--event', DEFAULT_EVENT_SLUG);
+    const out = argValue('--out', path.resolve(process.cwd(), '../../data/ethglobal'));
+    const result = await cacheEventProjects(eventSlug, out, (msg) => console.error(msg));
+    console.log(JSON.stringify({ mode, ...result }, null, 2));
     return;
   }
 

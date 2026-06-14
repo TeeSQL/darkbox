@@ -1113,3 +1113,10 @@ body.feed-open { overflow: hidden; }
   animation: micSpin .8s linear infinite;
 }
 @keyframes micSpin { to { transform: rotate(360deg); } }
+
+/* ── Pact page: the deal list ──────────────────────────────────────────────── */
+.deal-list { width: 100%; margin: 24px 0 6px; padding: 0; list-style: none; display: grid; gap: 14px; text-align: left; }
+.deal-list li { position: relative; padding-left: 22px; color: var(--silver); font-size: 14px; line-height: 1.5; }
+.deal-list li::before { content: "›"; position: absolute; left: 4px; top: 0; color: var(--violet); font-weight: 700; }
+.deal-list strong { color: var(--bone); font-weight: 600; }
+.deal-list + .feed-cta { margin-top: 22px; }

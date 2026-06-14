@@ -157,8 +157,14 @@ function isReturningPlayer(self) {
 
 function applyReturningState(self) {
   const returning = isReturningPlayer(self);
-  if (chipsEl) chipsEl.hidden = returning;
-  if (feedCtaEl) feedCtaEl.hidden = !returning;
+  if (chipsEl) chipsEl.hidden = true; // chips retired; funding is the $5 house + Feed the daemon
+  if (feedCtaEl) feedCtaEl.hidden = false; // always offer an optional top-up on the pact
+  const promoLine = document.querySelector('#seal-promo-line');
+  if (promoLine) {
+    promoLine.innerHTML = returning
+      ? 'your <strong>$5 is in play</strong> — feed more to go bigger'
+      : '<strong>your first $5 is on the house</strong> — free to play';
+  }
 }
 
 function openFeedDeposit() {

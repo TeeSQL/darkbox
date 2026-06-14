@@ -977,7 +977,7 @@ let tsttRecording = false;
 
 async function startTerminalServerStt() {
   try {
-    tsttStream = await getSharedMicStream();
+    tsttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (_) {
     if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
     return;
@@ -1004,12 +1004,15 @@ function stopTerminalServerStt() {
 }
 
 async function transcribeTerminalStt() {
-  tsttStream = null; // shared stream stays alive for reuse (avoids a second prompt)
+  const stream = tsttStream;
+  tsttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
   const chunks = tsttChunks;
   tsttChunks = [];
-  if (!chunks.length) return;
+  if (!chunks.length) { releaseMic(); return; }
   const type = (tsttRecorder && tsttRecorder.mimeType) || 'audio/webm';
   const blob = new Blob(chunks, { type });
+  releaseMic();
   if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcribing…';
   terminalVoiceButton?.classList.add('transcribing');
   try {
@@ -1175,25 +1178,13 @@ async function startOpenMicFallback() {
   return true;
 }
 
-// One shared mic stream reused by every recorder. Telegram-Android re-prompts on
-// EACH getUserMedia, so acquiring once — and NOT stopping it between recordings —
-// means a single permission prompt for the whole session (main mic + modal mic).
-let sharedMicStream = null;
-async function getSharedMicStream() {
-  if (sharedMicStream && sharedMicStream.active) return sharedMicStream;
-  sharedMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  return sharedMicStream;
-}
-function stopSharedMicStream() {
-  try { sharedMicStream && sharedMicStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
-  sharedMicStream = null;
-}
-
-// Telegram-Android: record audio with MediaRecorder (one mic permission) and
-// transcribe it server-side on stop; the words land in the textarea.
+// Telegram-Android: record audio with MediaRecorder and transcribe it
+// server-side on stop; the words land in the textarea. Each recording acquires
+// its own stream and stops it on finish (reusing a kept-alive stream broke
+// recording in the Telegram webview), so the webview re-prompts per recording.
 async function startServerStt() {
   try {
-    sttStream = await getSharedMicStream();
+    sttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (_) {
     sttStream = null;
     mainMode = 'idle';
@@ -1221,12 +1212,15 @@ async function startServerStt() {
 }
 
 async function transcribeStt() {
-  sttStream = null; // shared stream stays alive for reuse (avoids a second prompt)
+  const stream = sttStream;
+  sttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
   const chunks = sttChunks;
   sttChunks = [];
-  if (!chunks.length) { if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
+  if (!chunks.length) { releaseMic(); if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
   const type = (sttRecorder && sttRecorder.mimeType) || 'audio/webm';
   const blob = new Blob(chunks, { type });
+  releaseMic();
   if (whisperStatus) whisperStatus.textContent = 'transcribing…';
   voiceButton?.classList.add('transcribing'); // spinner while STT runs
   try {
@@ -1421,7 +1415,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !terminalModal?.hasAttribute('hidden')) closeSealedTerminal();
 });
 window.visualViewport?.addEventListener('resize', syncKeyboardState);
-window.addEventListener('pagehide', () => { recognition?.stop?.(); stopSharedMicStream(); });
+window.addEventListener('pagehide', () => recognition?.stop?.());
 
 tickCountdown();
 window.setInterval(tickCountdown, 1000);

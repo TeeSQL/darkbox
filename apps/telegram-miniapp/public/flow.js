@@ -552,6 +552,154 @@ async function grantMicForVisuals(event) {
   }
 }
 
+// ── Main whisper mic: tap-to-toggle + hold-to-talk (web + miniapp) ─────────
+// Fast tap  → latch recording on; tap again to stop.
+// Press &   → hold-to-talk; recording lasts until release.
+//   hold > HOLD_THRESHOLD_MS
+const HOLD_THRESHOLD_MS = 1000;
+let mainRecognition;
+let mainListening = false; // recognizer actually running
+let mainWanted = false; // we want it running (drives auto-restart)
+let mainBaseText = '';
+let mainFinalText = '';
+let mainStream = null; // fallback open-mic stream when SpeechRecognition is absent
+let mainMode = 'idle'; // 'idle' | 'recording'
+let micPressTimer = null;
+let micPressStart = 0;
+let micPressWillStop = false; // this gesture is a tap-to-stop on an active recording
+
+function setMainVoiceState(state) {
+  // state: 'idle' | 'recording' | 'hold'
+  const active = state !== 'idle';
+  voiceButton?.classList.toggle('listening', active);
+  voiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
+  voiceButton?.setAttribute('aria-label', active ? 'Stop recording' : 'Record whisper');
+  if (voiceButton) voiceButton.dataset.recordingMode = state;
+  if (voiceStateEl) {
+    const granted = hasMicGrantThisSession();
+    voiceStateEl.dataset.state = active ? 'recording' : granted ? 'mic-allowed' : 'idle';
+    voiceStateEl.textContent = {
+      idle: granted ? 'mic allowed' : 'allow mic',
+      recording: 'recording · tap to stop',
+      hold: 'recording · release to stop',
+    }[state] || (granted ? 'mic allowed' : 'allow mic');
+  }
+}
+
+function ensureMainRecognition() {
+  if (mainRecognition || !SpeechRecognition) return mainRecognition;
+  mainRecognition = new SpeechRecognition();
+  mainRecognition.lang = 'en-US';
+  mainRecognition.interimResults = true;
+  mainRecognition.continuous = true;
+  mainRecognition.onstart = () => { mainListening = true; };
+  mainRecognition.onerror = () => {
+    mainWanted = false;
+    mainListening = false;
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
+  };
+  mainRecognition.onend = () => {
+    mainListening = false;
+    if (mainWanted) {
+      window.setTimeout(() => {
+        if (!mainWanted || mainListening) return;
+        try { mainRecognition.start(); } catch (_) { mainWanted = false; }
+      }, 120);
+      return;
+    }
+    setMainVoiceState('idle');
+  };
+  mainRecognition.onresult = (event) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      if (result.isFinal) mainFinalText += `${result[0].transcript} `;
+      else interim += result[0].transcript;
+    }
+    const spoken = `${mainFinalText}${interim}`.trim();
+    if (input) input.value = [mainBaseText, spoken].filter(Boolean).join(mainBaseText && spoken ? ' ' : '').trimStart();
+    handleInput();
+  };
+  return mainRecognition;
+}
+
+async function startMainRecording() {
+  if (mainMode === 'recording') return true;
+  let allowed = false;
+  try { allowed = await requestMicAccess('recording. speak your order.'); }
+  catch (_) { allowed = false; }
+  if (!allowed) {
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    return false;
+  }
+  setMainMicGrantState(true);
+  mainMode = 'recording';
+  const recognizer = ensureMainRecognition();
+  if (recognizer) {
+    mainBaseText = input?.value.trim() || '';
+    mainFinalText = '';
+    mainWanted = true;
+    try { recognizer.start(); } catch (_) {}
+  } else {
+    // Some webviews (notably iOS Telegram) lack SpeechRecognition. Keep an open
+    // mic stream so the recording state is honest; the user types to finish.
+    try { mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+    catch (_) { mainStream = null; }
+    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+  }
+  return true;
+}
+
+function stopMainRecording(statusText = 'recording stopped. review before sealing.') {
+  if (mainMode === 'idle') return;
+  mainMode = 'idle';
+  mainWanted = false;
+  try { mainRecognition?.stop?.(); } catch (_) {}
+  if (mainStream) {
+    mainStream.getTracks().forEach((track) => track.stop());
+    mainStream = null;
+  }
+  setMainVoiceState('idle');
+  if (whisperStatus) whisperStatus.textContent = statusText;
+  handleInput();
+}
+
+function onMicPointerDown(event) {
+  event.preventDefault(); // keep textarea focus so the keyboard/layout doesn't jump
+  try { voiceButton?.setPointerCapture?.(event.pointerId); } catch (_) {}
+  if (mainMode === 'recording') {
+    // A press on an already-recording mic ends it on release (tap-to-stop).
+    micPressWillStop = true;
+    return;
+  }
+  micPressWillStop = false;
+  micPressStart = Date.now();
+  setMainVoiceState('recording');
+  startMainRecording();
+  micPressTimer = window.setTimeout(() => {
+    if (mainMode !== 'idle') setMainVoiceState('hold');
+  }, HOLD_THRESHOLD_MS);
+}
+
+function onMicPointerUp() {
+  if (micPressTimer) { window.clearTimeout(micPressTimer); micPressTimer = null; }
+  if (micPressWillStop) {
+    micPressWillStop = false;
+    stopMainRecording();
+    return;
+  }
+  const held = Date.now() - micPressStart;
+  if (held >= HOLD_THRESHOLD_MS) {
+    stopMainRecording(); // hold-to-talk: release ends recording
+  } else {
+    setMainVoiceState('recording'); // fast tap: latch until next tap
+  }
+}
+
 function syncKeyboardState() {
   const viewport = window.visualViewport;
   // Only top-align for a REAL on-screen keyboard (viewport shrinks). Focus alone
@@ -587,10 +735,13 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
-// Don't let the mic button steal focus from the textarea: blurring it would
-// close the on-screen keyboard and re-center the composer (a visible hop).
-voiceButton?.addEventListener('pointerdown', (event) => event.preventDefault());
-voiceButton?.addEventListener('click', grantMicForVisuals);
+// Two-mode mic: tap to latch recording, hold (≥600ms) for push-to-talk.
+// pointerdown preventDefault also keeps textarea focus, so the keyboard/layout
+// doesn't jump. Works for both web and the Telegram Mini App webview.
+voiceButton?.addEventListener('pointerdown', onMicPointerDown);
+voiceButton?.addEventListener('pointerup', onMicPointerUp);
+voiceButton?.addEventListener('pointercancel', onMicPointerUp);
+voiceButton?.addEventListener('contextmenu', (event) => event.preventDefault());
 terminalInput?.addEventListener('input', handleTerminalInput);
 terminalSealButton?.addEventListener('click', sealTerminalWhisper);
 terminalVoiceButton?.addEventListener('click', startVoice);

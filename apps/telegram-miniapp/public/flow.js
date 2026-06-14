@@ -45,6 +45,8 @@ const hallNewMarketEl = document.querySelector('#hall-new-market');
 const hallNewMarketMetaEl = document.querySelector('#hall-new-market-meta');
 const notifyToggle = document.querySelector('#notify-toggle');
 const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
+const chipsEl = document.querySelector('.chips');
+const feedCtaEl = document.querySelector('#feed-cta');
 const terminalButton = document.querySelector('#sealed-terminal-button');
 const terminalModal = document.querySelector('#sealed-terminal-modal');
 const terminalLogEl = document.querySelector('#sealed-terminal-log');
@@ -139,10 +141,34 @@ async function refreshSelf() {
       self = await client.selfStatus();
     } catch (_) { /* promo closed/frozen, or already settled — keep self as-is */ }
     live.self = self;
+    applyReturningState(self);
     renderPrivateState();
   } catch (_) {
     // unauthenticated (no initData) or gateway down → keep the mock.
   }
+}
+
+// First round → "$5 on the house" (the stake chips). Once the promo's been
+// claimed, the house stake is spent: swap the chips for "Feed the daemon", which
+// opens the inline Blink deposit popup (window.DarkboxFeed).
+function isReturningPlayer(self) {
+  return Boolean(self && (self.enteredViaInvite || self.fundingStatus === 'promo_funded'));
+}
+
+function applyReturningState(self) {
+  const returning = isReturningPlayer(self);
+  if (chipsEl) chipsEl.hidden = returning;
+  if (feedCtaEl) feedCtaEl.hidden = !returning;
+}
+
+function openFeedDeposit() {
+  if (!window.DarkboxFeed) {
+    if (stakeSubEl) stakeSubEl.textContent = 'the deposit window failed to load. reload and try again.';
+    return;
+  }
+  window.DarkboxFeed.open({
+    onCredited: () => { refreshSelf(); },
+  });
 }
 
 async function refreshPublic() {
@@ -1207,6 +1233,7 @@ stakeButtons.forEach((button) => {
     }
   });
 });
+feedCtaEl?.addEventListener('click', openFeedDeposit);
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));

@@ -16,8 +16,8 @@ import {OffchainResolver} from "../src/ens/OffchainResolver.sol";
 /// - ENS_GATEWAY_SIGNER: trusted gateway signer address (the `/ens/gateway` signer)
 contract DeployOffchainResolver is Script {
     function run() external returns (OffchainResolver resolver) {
-        uint256 key = vm.envOr("DEPLOYER_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
-        string memory url = vm.envOr("ENS_GATEWAY_URL", string("https://ens.darkbox.example/r/{sender}/{data}.json"));
+        uint256 key = vm.envUint("DEPLOYER_KEY");
+        string memory url = vm.envString("ENS_GATEWAY_URL");
         address signer = vm.envAddress("ENS_GATEWAY_SIGNER");
 
         address[] memory signers = new address[](1);

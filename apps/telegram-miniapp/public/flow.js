@@ -102,6 +102,23 @@ function myLeaderboardRow() {
   return live.leaderboard.find((row) => row.agentId && id && row.agentId === id) || null;
 }
 
+// The daemon's name as the server knows it. Prefers a server-authored name
+// (ensName / agentName / daemonName from self-status — once the gateway returns
+// them) then the name the player registered, and finally a STABLE name anchored
+// to the server-issued agentId (not the random per-session mock). Returns null
+// when unauthenticated so the offline preview keeps its mock name.
+function serverDaemonName() {
+  const s = live.self;
+  if (!s) return null;
+  if (s.daemonName) return s.daemonName;
+  if (s.ensName) return s.ensName;
+  if (s.agentName) return s.agentName;
+  const persisted = persistedRegisteredName();
+  if (persisted) return persisted;
+  if (s.agentId) return pick(names, s.agentId); // deterministic, stable per account
+  return null;
+}
+
 // Pull the player's account from the gateway and, on first entry, claim the $5
 // promo. This is what permanently auths the user and assigns their shadow-chain
 // account (idempotent — safe to call every load).
@@ -423,7 +440,9 @@ function renderPrivateState() {
   const instructionSeed = currentSeed();
   const visualSeed = stableVisualSeed();
   const h = hashNumber(visualSeed);
-  const ownName = pick(names, visualSeed);
+  // Server-anchored daemon name when authed (stable, tied to the account); the
+  // random mock name only when there's no gateway (offline / non-Telegram).
+  const ownName = serverDaemonName() || pick(names, visualSeed);
   const status = pick(statuses, visualSeed, 2);
   if (fingerprintEl) fingerprintEl.textContent = fingerprint(instructionSeed);
   const daemonImage = pick(daemonImages, visualSeed, 5);

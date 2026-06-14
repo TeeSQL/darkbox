@@ -27,6 +27,10 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
       ownerIsSynthetic: identity.ownerIsSynthetic,
       telegramId,
       agentId: registration?.agentId ?? deriveAgentId(identity.shadowAccount),
+      // The daemon's name as bound at registration (the UI's source of truth for
+      // the display name). Null until the player seals/registers.
+      agentName: registration?.agentName ?? null,
+      ensName: registration?.ensName ?? null,
       registrationStatus: registration ? "registered" : "unregistered",
       // Funding status reflects whether the player has any credited source.
       // Real-deposit funding is reconciled by the bridge; here we surface the

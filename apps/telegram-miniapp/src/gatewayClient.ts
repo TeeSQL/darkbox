@@ -25,6 +25,11 @@ export interface SelfStatus {
   ownerIsSynthetic: boolean;
   telegramId: string;
   agentId: string;
+  /** Daemon name as bound at registration; null until the player registers. */
+  agentName?: string | null;
+  ensName?: string | null;
+  /** Optional server-authored display name (reserved; preferred when present). */
+  daemonName?: string | null;
   registrationStatus: "registered" | "unregistered";
   fundingStatus: "unfunded" | "promo_funded";
   enteredViaInvite: boolean;

@@ -177,8 +177,6 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   white-space: nowrap;
 }
-/* Topbar logo (replaces the text wordmark). Small horizontal lockup. */
-.wm-logo { height: 16px; width: auto; max-width: 120px; display: block; }
 .wm-home { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.15s ease; }
 .wm-home:hover { opacity: 0.78; }
 .wm-home:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 3px; }

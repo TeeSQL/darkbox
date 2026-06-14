@@ -50,7 +50,8 @@ export const config = {
   // Promo / $5 signup bonus.
   promoAmount: process.env["PROMO_AMOUNT"] ?? "5.00",
   promoCurrency: "USDC",
-  // Promo credits cannot be withdrawn before this instant (Sunday 17:00 event-local).
+  // Legacy field retained for wire compatibility; promo faucet credit is
+  // withdrawable once minted and is no longer locked by the gateway.
   promoUnlockAt: process.env["PROMO_UNLOCK_AT"] ?? "2026-06-15T17:00:00.000Z",
 
   // Registration/commitment freeze: no new/updated commitments after this.

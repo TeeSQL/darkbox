@@ -5,7 +5,6 @@ import { createHmac } from "node:crypto";
 // Configure BEFORE importing app modules (config reads env at import time).
 process.env["TELEGRAM_BOT_TOKEN"] = "test-bot-token:123";
 process.env["REGISTRATION_FREEZE_AT"] = "2999-01-01T00:00:00.000Z";
-process.env["PROMO_UNLOCK_AT"] = "2999-01-01T00:00:00.000Z";
 
 const { buildServer } = await import("../src/server.js");
 const { validateInitData } = await import("../src/auth/telegram.js");
@@ -72,12 +71,16 @@ test("invite claim is idempotent per identity ($5 once)", async () => {
   const a = first.json();
   assert.equal(a.claimStatus, "claimed");
   assert.equal(a.agentFundingCredit.amount, "5.00");
-  assert.equal(a.withdrawalLock.locked, true);
+  assert.match(a.agentFundingCredit.operationId, /^0x[0-9a-f]{64}$/);
+  assert.equal(a.withdrawalLock.locked, false);
 
   const second = await app.inject({ method: "POST", url: "/api/invites/claim", headers, payload: {} });
   const b = second.json();
   assert.equal(b.claimStatus, "already_claimed");
   assert.equal(b.inviteId, a.inviteId, "no second invite id => no double credit");
+  assert.equal(b.agentFundingCredit.operationId, a.agentFundingCredit.operationId);
+  assert.equal(db.listFaucetEnqueues().length, 1);
+  assert.equal(db.listPendingFaucetEnqueues().length, 1);
 });
 
 test("self/status reflects the claim", async () => {
@@ -87,7 +90,7 @@ test("self/status reflects the claim", async () => {
   const s = res.json();
   assert.equal(s.enteredViaInvite, true);
   assert.equal(s.registrationStatus, "unregistered");
-  assert.equal(s.withdrawalLock.locked, true);
+  assert.equal(s.withdrawalLock.locked, false);
 });
 
 test("whisper typed flow produces an instruction commitment", async () => {

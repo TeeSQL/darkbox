@@ -4,13 +4,13 @@
  * Rules (handover 05_MARKETING + 04_DAN_TODO #11):
  *  - one promo claim per Telegram identity (idempotent: re-claim returns the
  *    existing claim, never a second credit — anti-sybil at the identity layer);
- *  - credit is `promo_shadow` USDC, accounted separately from real deposits;
- *  - promo credits are withdrawal-locked until `promoUnlockAt`
- *    (Sunday 17:00 event-local).
+ *  - credit is withdrawable `promo_shadow` USDC, accounted separately from
+ *    real deposits.
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../config.js";
+import { enqueueFaucetMint } from "../faucetClient.js";
 import { db, type InviteClaim } from "../store.js";
 import { resolveIdentity } from "../identity.js";
 import { newId } from "../ids.js";
@@ -31,8 +31,9 @@ function toResponse(claim: InviteClaim, shadowAccount: string, idempotent: boole
       currency: claim.currency,
       amount: claim.amount,
       type: claim.fundingType,
+      operationId: claim.promoOperationId,
     },
-    withdrawalLock: { locked: true, unlockAt: claim.withdrawalUnlockAt },
+    withdrawalLock: { locked: false, unlockAt: null },
     shadowAccount,
     updatedAt: claim.claimedAt,
   };
@@ -56,22 +57,56 @@ export async function invitesRoutes(app: FastifyInstance): Promise<void> {
       return reply.send(toResponse(existing, identity.shadowAccount, true));
     }
 
+    const now = new Date().toISOString();
+    const inviteId = newId("invite");
+    const promoRecord = db.buildHumanPromoFaucetRecord({
+      gameId: config.gameId,
+      telegramId,
+      inviteId,
+      owner: identity.owner,
+      shadowAccount: identity.shadowAccount,
+      amount: config.promoAmount,
+      currency: config.promoCurrency,
+      now,
+    });
+
     const claim: InviteClaim = {
-      inviteId: newId("invite"),
+      inviteId,
       telegramId,
       inviteCode: parsed.data.inviteCode ?? "self_serve",
       amount: config.promoAmount,
       currency: config.promoCurrency,
       fundingType: "promo_shadow",
       withdrawalUnlockAt: config.promoUnlockAt,
-      claimedAt: new Date().toISOString(),
+      claimedAt: now,
+      promoOperationId: promoRecord.operationId,
     };
     db.putInvite(claim);
+    db.putFaucetEnqueue(promoRecord);
 
-    // NOTE: actual promo shadow-USDC mint is the bridge's job (separate promo
-    // operation id). Gateway records the claim and exposes it via self-status;
-    // the bridge mint is wired in services/bridge (mintShadow promo path).
-    req.log.info({ inviteId: claim.inviteId, telegramId }, "promo claim recorded");
+    try {
+      const handoff = await enqueueFaucetMint(promoRecord);
+      if (handoff === "accepted") {
+        db.putFaucetEnqueue({
+          ...promoRecord,
+          status: "accepted",
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      db.putFaucetEnqueue({
+        ...promoRecord,
+        status: "failed",
+        error: err instanceof Error ? err.message : String(err),
+        updatedAt: new Date().toISOString(),
+      });
+      req.log.warn({ err, inviteId: claim.inviteId, telegramId }, "bridge faucet enqueue failed");
+    }
+
+    req.log.info(
+      { inviteId: claim.inviteId, telegramId, operationId: claim.promoOperationId },
+      "promo claim enqueued",
+    );
 
     return reply.send(toResponse(claim, identity.shadowAccount, false));
   });

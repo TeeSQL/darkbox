@@ -31,15 +31,15 @@ or `X-Telegram-Init-Data`). Local dev without a bot token:
 | Endpoint | Status | Notes / shape deltas vs spec |
 |----------|--------|------------------------------|
 | `GET /api/self/status` | ✅ | extra fields added: `ownerIsSynthetic` (bool), `registrationFreezeAt`. `fundingStatus` ∈ `unfunded`\|`promo_funded` (spec said `funded`). `withdrawableAvailableBalance` may be `null` (= "ask the bridge", not zero) while bridge read is unwired. `inviteId` is `null` when no claim. |
-| `POST /api/invites/claim` | ✅ | `claimStatus` ∈ `claimed`\|`already_claimed` (idempotent; second call returns the same `inviteId`, no double credit). Promo mint itself is the bridge's job (recorded here, surfaced via self-status). |
+| `POST /api/invites/claim` | ✅ | `claimStatus` ∈ `claimed`\|`already_claimed` (idempotent; second call returns the same `inviteId` and faucet `operationId`, no double credit). Promo mint itself is the bridge's job; gateway enqueues a bridge faucet handoff when `BRIDGE_URL` is configured. |
 | `POST /api/registrations` | ✅ | adds `frozen` (bool). Rejects with `409 registration_frozen` after `REGISTRATION_FREEZE_AT`. |
 | `POST /api/whispers/transcriptions` | ✅ | accepts `{ text }` (typed fallback) **or** a Telegram `telegramFileId`; no arbitrary `audioUrl` (SSRF-safe). Audio proxies to `darkbox-transcriber` when `TRANSCRIBER_URL` is set, else `503 transcriber_not_configured`. |
 | `GET /api/whispers/transcriptions/{id}` | ✅ | per-user isolation (others get `403`). |
 | `POST /api/whispers/transcriptions/{id}/confirm` | ✅ | returns `instructionHash` + `commitmentPayload`. |
 | `POST /api/deposit-intents` | 🟡 | returns a real intent shape (`depositAddress` = bridge escrow); confirmation/mint is the bridge watcher's job. |
 | `GET /api/deposits/{id}` | 🟡 | returns `pending_bridge_reconciliation` until bridge HTTP is wired. |
-| `GET /api/withdrawable/{owner}` | 🟡 | returns `0.00`/locked for promo; real available balance comes from the bridge once wired. |
-| `POST /api/withdrawals/commands` | 🟡 | **demo-gated OFF** → `403 withdrawals_disabled` (locked until settlement). Validates EIP-712 shape + promo lock when enabled. |
+| `GET /api/withdrawable/{owner}` | 🟡 | returns `null` (= "ask the bridge", not zero) until bridge withdrawable-balance HTTP is wired. Promo faucet credit is not gateway-locked. |
+| `POST /api/withdrawals/commands` | 🟡 | **demo-gated OFF** → `403 withdrawals_disabled` (locked until settlement). Validates EIP-712 shape when enabled; bridge/signer owns available-balance enforcement. |
 | `GET /api/withdrawals/{id}` | 🟡 | lifecycle status; full flow needs bridge + isolated signer. |
 
 ## Out of scope for the frontend (unchanged from spec)

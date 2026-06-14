@@ -9,7 +9,7 @@ It is intentionally **not** a balance/accounting source of truth:
 - canonical money/accounting → `services/bridge` + hidden chain
 - canonical derived public game state → `services/indexer` (`/public/*`)
 - the gateway owns only coordination state: identities, invite claims,
-  registration commitments, and whisper drafts.
+  faucet handoff records, registration commitments, and whisper drafts.
 
 ## Security model
 
@@ -36,7 +36,7 @@ the server logs a loud warning. Never enable it in prod.
 |--------|------|---------|
 | GET  | `/health` | unauthenticated liveness |
 | GET  | `/api/self/status` | player hydration (own safe state) |
-| POST | `/api/invites/claim` | claim the $5 promo (idempotent, one per identity) |
+| POST | `/api/invites/claim` | claim/enqueue the $5 promo faucet mint (idempotent, one per identity) |
 | POST | `/api/registrations` | bind agent commitment before freeze |
 | POST | `/api/whispers/transcriptions` | upload audio **or** typed text → draft |
 | GET  | `/api/whispers/transcriptions/:id` | poll draft |
@@ -56,11 +56,11 @@ the server logs a loud warning. Never enable it in prod.
 | `TELEGRAM_AUTH_MAX_AGE_SEC` | `86400` | initData replay window |
 | `ALLOW_INSECURE_DEV_AUTH` | `false` | local-only escape hatch |
 | `INDEXER_INTERNAL_URL` | `http://localhost:8080` | |
-| `BRIDGE_URL` | _(unset)_ | bridge HTTP once exposed |
+| `BRIDGE_URL` | _(unset)_ | internal bridge URL; when set, `/api/invites/claim` posts the human promo faucet request to `/internal/faucet/human-promo` |
 | `TRANSCRIBER_URL` | _(unset)_ | private transcriber; absent ⇒ typed fallback |
 | `BRIDGE_ADDRESS` | `0x000…0` | deposit escrow address |
 | `PROMO_AMOUNT` | `5.00` | signup bonus |
-| `PROMO_UNLOCK_AT` | `2026-06-15T17:00:00.000Z` | promo withdrawal lock |
+| `PROMO_UNLOCK_AT` | `2026-06-15T17:00:00.000Z` | legacy response field only; promo faucet credit is withdrawable once minted |
 | `REGISTRATION_FREEZE_AT` | `2026-06-14T09:00:00.000Z` | commitment freeze |
 | `WITHDRAWALS_ENABLED` | `false` | demo posture: off until settlement |
 
@@ -76,3 +76,11 @@ ALLOW_INSECURE_DEV_AUTH=true pnpm --filter @darkbox/gateway dev
 curl -s localhost:8090/health
 curl -s -XPOST localhost:8090/api/invites/claim -H 'X-Dev-Telegram-Id: 123'
 ```
+
+## Promo faucet handoff
+
+`POST /api/invites/claim` now creates a deterministic faucet operation id from
+`GAME_ID + telegramId`, stores the invite claim with that id, and records a
+handoff row. When `BRIDGE_URL` is configured, the gateway submits the handoff to
+the bridge's internal faucet endpoint. The gateway never submits shadow-chain
+mints and never needs a mint key.

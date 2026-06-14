@@ -4,28 +4,34 @@ type InlineKeyboardButton = { text: string; callback_data: string };
 
 export function renderProposal(p: ProposalPayload): string {
   const lines = [
-    "🧪 Market approval request",
+    "Market proposal",
     "",
     `ID: ${p.proposalId}`,
     `Question: ${p.question}`,
   ];
   if (p.description) lines.push(`Description: ${p.description}`);
   if (p.agentId) lines.push(`Proposed by: ${p.agentId}`);
+  if (p.proposerTelegramUsername) lines.push(`Telegram proposer: @${p.proposerTelegramUsername}`);
+  else if (p.proposerTelegramId) lines.push(`Telegram proposer: ${p.proposerTelegramId}`);
+  if (p.closeTime) lines.push(`Close time: ${p.closeTime}`);
   if (p.resolveBy) lines.push(`Resolve by: ${p.resolveBy}`);
   if (p.resolutionSource) lines.push(`Resolution: ${p.resolutionSource}`);
   lines.push("Resolution type: DarkBox admin manual");
   lines.push("Creator bond: 0");
   lines.push("Initial liquidity: 0 unless explicitly set at creation");
   if (p.rationale) lines.push("", `Rationale: ${p.rationale}`);
-  lines.push("", "Approve creates the gate signal. Deny keeps it out of the market set.");
+  lines.push("", "One DarkBox group confirmation makes this ready for the market executor. Admin approval is an explicit operator override.");
   return lines.join("\n");
 }
 
 export function approvalKeyboard(proposalId: string): InlineKeyboardButton[][] {
-  return [[
-    { text: "✅ Approve", callback_data: `approve:${proposalId}` },
-    { text: "❌ Deny", callback_data: `deny:${proposalId}` },
-  ]];
+  return [
+    [{ text: "Confirm", callback_data: `confirm:${proposalId}` }],
+    [
+      { text: "Admin approve", callback_data: `approve:${proposalId}` },
+      { text: "Deny", callback_data: `deny:${proposalId}` },
+    ],
+  ];
 }
 
 export class TelegramApi {
@@ -79,7 +85,17 @@ ${statusLine}` : statusLine;
     await this.removeButtons(message);
   }
 
-  async getUpdates(offset: number): Promise<Array<{ update_id: number; callback_query?: unknown }>> {
-    return this.call("getUpdates", { offset, timeout: 20, allowed_updates: ["callback_query"] });
+  async sendText(chatId: string | number, text: string, threadId?: string | number): Promise<TelegramMessage> {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+    };
+    if (threadId) body["message_thread_id"] = Number(threadId);
+    return this.call<TelegramMessage>("sendMessage", body);
+  }
+
+  async getUpdates(offset: number): Promise<Array<{ update_id: number; callback_query?: unknown; message?: unknown }>> {
+    return this.call("getUpdates", { offset, timeout: 20, allowed_updates: ["callback_query", "message"] });
   }
 }

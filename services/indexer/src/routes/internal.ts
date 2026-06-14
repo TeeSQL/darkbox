@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeQuestion, sanitizeBillboardMessage } from "@darkbox/shared";
 import { query, withTransaction } from "../db.js";
 import { config } from "../config.js";
+import { parseMarketCloseTimeSeconds } from "../marketProposalDefaults.js";
 
 
 
@@ -44,6 +45,18 @@ function agentOwnerAddress(agentId: string, identity?: AgentTurnBody["identity"]
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+function proposalActor(body: Record<string, unknown>, prefix: "proposer" | "actor" = "proposer") {
+  const telegramId = asText(body[`${prefix}TelegramId`]);
+  const role = asText(body[`${prefix}Role`], telegramId ? "group_member" : "");
+  return {
+    kind: asText(body[`${prefix}Kind`], telegramId ? "telegram" : "internal"),
+    id: asText(body[`${prefix}Id`], telegramId),
+    telegramId,
+    telegramUsername: asText(body[`${prefix}TelegramUsername`]),
+    role,
+  };
 }
 
 async function ensureV0Market(client: import("pg").PoolClient, marketId: string): Promise<void> {
@@ -183,10 +196,10 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // ── Market proposal (admin-queue-only, deduped, never on-chain) ───────
+      // ── Market proposal (confirmation queue only, deduped, never on-chain) ─
       // Proposals are written ONLY to the market_proposals queue with status
       // 'proposed'. This path NEVER creates a markets row from a proposal —
-      // market creation requires the admin decision endpoint + factory deploy.
+      // market creation requires a separate executor/admin factory deploy.
       let proposalCreated = false;
       let proposalRejected: string | null = null;
       const proposal = output.marketProposal;
@@ -195,7 +208,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         if (question) {
           const normalized = normalizeQuestion(question);
           const existing = await client.query<{ question: string }>(
-            `SELECT question FROM market_proposals WHERE status IN ('proposed','approved','deployed')
+            `SELECT question FROM market_proposals WHERE status IN ('proposed','confirmed','approved','deployed')
              UNION ALL
              SELECT question FROM markets`,
           );
@@ -206,8 +219,9 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
             await client.query(
               `INSERT INTO market_proposals (
                  proposal_id, agent_id, question, description, outcomes, resolve_by,
-                 resolution_source, rationale, status, run_id, turn
-               ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 'proposed', $9, $10)
+                 resolution_source, rationale, status, run_id, turn, proposer_kind,
+                 proposer_id, resolver_type, close_time
+               ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 'proposed', $9, $10, 'agent', $2, 'AdminManual', $11)
                ON CONFLICT (proposal_id) DO NOTHING`,
               [
                 `${runId}-${agentId}-${turn}`,
@@ -216,11 +230,19 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
                 asText(proposal["description"]),
                 JSON.stringify(proposal["outcomes"] ?? ["YES", "NO"]),
                 asText(proposal["resolveBy"]),
-                asText(proposal["resolutionSource"]),
+                asText(proposal["resolutionSource"], "DarkBox admin manual"),
                 asText(proposal["rationale"]),
                 runId,
                 turn,
+                parseMarketCloseTimeSeconds(proposal["closeTime"] ?? proposal["expiry"]),
               ],
+            );
+            await client.query(
+              `INSERT INTO market_proposal_audit (
+                 proposal_id, from_status, to_status, actor_kind, actor_id,
+                 actor_role, note
+               ) VALUES ($1, '', 'proposed', 'agent', $2, 'agent', 'agent_turn_proposal')`,
+              [`${runId}-${agentId}-${turn}`, agentId],
             );
             proposalCreated = true;
           }
@@ -467,7 +489,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
   );
 
 
-  // ─── Market proposal approval gate ────────────────────────────────────────
+  // ─── Market proposal confirmation gate ────────────────────────────────────
 
   app.get("/internal/market-proposals", async (req) => {
     const status = (req.query as Record<string, string>)["status"];
@@ -492,12 +514,21 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     const question = asText(body["question"]);
     if (!proposalId || !question) return reply.status(400).send({ error: "proposalId and question are required" });
     const review = (body["review"] && typeof body["review"] === "object") ? body["review"] as Record<string, unknown> : {};
-    await query(
+    const proposer = proposalActor(body);
+    const closeTime = parseMarketCloseTimeSeconds(body["closeTime"] ?? body["expiry"]);
+    await withTransaction(async (client) => {
+      const existing = await client.query<{ status: string }>(
+        "SELECT status FROM market_proposals WHERE proposal_id = $1",
+        [proposalId],
+      );
+      await client.query(
       `INSERT INTO market_proposals (
          proposal_id, agent_id, question, description, outcomes, resolve_by,
          resolution_source, rationale, metadata_uri, run_id, turn,
-         review_chat_id, review_thread_id, review_message_id
-       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         review_chat_id, review_thread_id, review_message_id, proposer_kind,
+         proposer_id, proposer_telegram_id, proposer_telegram_username,
+         proposer_role, resolver_type, close_time
+       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 'AdminManual', $20)
        ON CONFLICT (proposal_id) DO UPDATE SET
          agent_id = EXCLUDED.agent_id,
          question = EXCLUDED.question,
@@ -511,7 +542,14 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
          turn = EXCLUDED.turn,
          review_chat_id = EXCLUDED.review_chat_id,
          review_thread_id = EXCLUDED.review_thread_id,
-         review_message_id = EXCLUDED.review_message_id`,
+         review_message_id = EXCLUDED.review_message_id,
+         proposer_kind = EXCLUDED.proposer_kind,
+         proposer_id = EXCLUDED.proposer_id,
+         proposer_telegram_id = EXCLUDED.proposer_telegram_id,
+         proposer_telegram_username = EXCLUDED.proposer_telegram_username,
+         proposer_role = EXCLUDED.proposer_role,
+         resolver_type = 'AdminManual',
+         close_time = EXCLUDED.close_time`,
       [
         proposalId,
         asText(body["agentId"]),
@@ -527,27 +565,96 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         asText(review["chatId"]),
         asText(review["threadId"]),
         asText(review["messageId"]),
+        proposer.kind,
+        proposer.id,
+        proposer.telegramId,
+        proposer.telegramUsername,
+        proposer.role,
+        closeTime,
       ],
-    );
-    return { status: "ok", proposalId };
+      );
+      await client.query(
+        `INSERT INTO market_proposal_audit (
+           proposal_id, from_status, to_status, actor_kind, actor_id,
+           actor_telegram_id, actor_telegram_username, actor_role,
+           review_chat_id, review_message_id, note
+         ) VALUES ($1, $2, 'proposed', $3, $4, $5, $6, $7, $8, $9, 'proposal_upsert')`,
+        [
+          proposalId,
+          existing.rows[0]?.status ?? "",
+          proposer.kind,
+          proposer.id,
+          proposer.telegramId,
+          proposer.telegramUsername,
+          proposer.role,
+          asText(review["chatId"]),
+          asText(review["messageId"]),
+        ],
+      );
+    });
+    return { status: "ok", proposalId, resolverType: "AdminManual", closeTime };
   });
 
   app.post<{ Params: { proposalId: string }; Body: Record<string, unknown> }>(
     "/internal/market-proposals/:proposalId/decision",
     async (req, reply) => {
       const status = asText(req.body?.["status"]);
-      if (status !== "approved" && status !== "denied") {
-        return reply.status(400).send({ error: "status must be approved or denied" });
+      if (status !== "confirmed" && status !== "approved" && status !== "denied") {
+        return reply.status(400).send({ error: "status must be confirmed, approved, or denied" });
       }
-      const result = await query(
-        `UPDATE market_proposals
-         SET status = $2, reviewed_by = $3, reviewed_at = NOW(), review_message_id = COALESCE(NULLIF($4, ''), review_message_id)
-         WHERE proposal_id = $1
-         RETURNING *`,
-        [req.params.proposalId, status, asText(req.body?.["reviewedBy"]), asText(req.body?.["reviewMessageId"])],
-      );
-      if (result.rows.length === 0) return reply.status(404).send({ error: "proposal not found" });
-      return result.rows[0];
+      const actor = proposalActor(req.body ?? {}, "actor");
+      const reviewedBy = asText(req.body?.["reviewedBy"], actor.id || actor.telegramId);
+      const reviewMessageId = asText(req.body?.["reviewMessageId"]);
+      const row = await withTransaction(async (client) => {
+        const existing = await client.query<{ status: string }>(
+          "SELECT status FROM market_proposals WHERE proposal_id = $1",
+          [req.params.proposalId],
+        );
+        if (existing.rows.length === 0) return null;
+        const result = await client.query(
+          `UPDATE market_proposals
+           SET status = $2,
+               reviewed_by = $3,
+               reviewed_at = CASE WHEN $2 IN ('approved','denied') THEN NOW() ELSE reviewed_at END,
+               review_message_id = COALESCE(NULLIF($4, ''), review_message_id),
+               confirmer_telegram_id = CASE WHEN $2 = 'confirmed' THEN $5 ELSE confirmer_telegram_id END,
+               confirmer_telegram_username = CASE WHEN $2 = 'confirmed' THEN $6 ELSE confirmer_telegram_username END,
+               confirmed_at = CASE WHEN $2 = 'confirmed' THEN NOW() ELSE confirmed_at END,
+               operator_telegram_id = CASE WHEN $7 IN ('operator','admin') THEN $5 ELSE operator_telegram_id END
+           WHERE proposal_id = $1
+           RETURNING *`,
+          [
+            req.params.proposalId,
+            status,
+            reviewedBy,
+            reviewMessageId,
+            actor.telegramId,
+            actor.telegramUsername,
+            actor.role,
+          ],
+        );
+        await client.query(
+          `INSERT INTO market_proposal_audit (
+             proposal_id, from_status, to_status, actor_kind, actor_id,
+             actor_telegram_id, actor_telegram_username, actor_role,
+             review_message_id, note
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'decision')`,
+          [
+            req.params.proposalId,
+            existing.rows[0]?.status ?? "",
+            status,
+            actor.kind,
+            actor.id || reviewedBy,
+            actor.telegramId,
+            actor.telegramUsername,
+            actor.role,
+            reviewMessageId,
+          ],
+        );
+        return result.rows[0] ?? null;
+      });
+      if (!row) return reply.status(404).send({ error: "proposal not found" });
+      return row;
     },
   );
 

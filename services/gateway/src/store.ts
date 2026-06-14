@@ -9,6 +9,7 @@
  * source of truth for balances.
  */
 import { keccak256, toHex, type Address, type Hex } from "viem";
+import { humanPromoOperationId, humanPromoOperationString } from "@darkbox/shared";
 
 export interface Identity {
   telegramId: string;
@@ -28,6 +29,24 @@ export interface InviteClaim {
   fundingType: "promo_shadow";
   withdrawalUnlockAt: string;
   claimedAt: string;
+  promoOperationId: Hex;
+}
+
+export interface FaucetEnqueueRecord {
+  operationId: Hex;
+  operationString: string;
+  kind: "human_promo";
+  gameId: Hex;
+  telegramId: string;
+  inviteId: string;
+  owner: Address;
+  shadowAccount: Hex;
+  amount: string;
+  currency: string;
+  status: "pending" | "accepted" | "failed";
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Registration {
@@ -110,6 +129,7 @@ interface Store {
   registrationsByTelegram: Map<string, Registration>;
   whispers: Map<string, Whisper>;
   depositIntents: Map<string, DepositIntent>;
+  faucetEnqueues: Map<string, FaucetEnqueueRecord>;
 }
 
 const store: Store = {
@@ -118,6 +138,7 @@ const store: Store = {
   registrationsByTelegram: new Map(),
   whispers: new Map(),
   depositIntents: new Map(),
+  faucetEnqueues: new Map(),
 };
 
 /** Deterministic synthetic owner address for a Telegram-only (no-wallet) player. */
@@ -145,6 +166,56 @@ export const db = {
   putInvite(claim: InviteClaim): InviteClaim {
     store.invitesByTelegram.set(claim.telegramId, claim);
     return claim;
+  },
+  buildHumanPromoFaucetRecord(params: {
+    gameId: Hex;
+    telegramId: string;
+    inviteId: string;
+    owner: Address;
+    shadowAccount: Hex;
+    amount: string;
+    currency: string;
+    now: string;
+  }): FaucetEnqueueRecord {
+    const operationId = humanPromoOperationId({
+      gameId: params.gameId,
+      telegramId: params.telegramId,
+    });
+    return {
+      operationId,
+      operationString: humanPromoOperationString({
+        gameId: params.gameId,
+        telegramId: params.telegramId,
+      }),
+      kind: "human_promo",
+      gameId: params.gameId,
+      telegramId: params.telegramId,
+      inviteId: params.inviteId,
+      owner: params.owner,
+      shadowAccount: params.shadowAccount,
+      amount: params.amount,
+      currency: params.currency,
+      status: "pending",
+      createdAt: params.now,
+      updatedAt: params.now,
+    };
+  },
+  getFaucetEnqueue(operationId: Hex): FaucetEnqueueRecord | undefined {
+    return store.faucetEnqueues.get(operationId.toLowerCase());
+  },
+  putFaucetEnqueue(record: FaucetEnqueueRecord): FaucetEnqueueRecord {
+    store.faucetEnqueues.set(record.operationId.toLowerCase(), record);
+    return record;
+  },
+  listPendingFaucetEnqueues(): FaucetEnqueueRecord[] {
+    return [...store.faucetEnqueues.values()]
+      .filter((r) => r.status === "pending" || r.status === "failed")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  listFaucetEnqueues(): FaucetEnqueueRecord[] {
+    return [...store.faucetEnqueues.values()].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
   },
   getRegistration(telegramId: string): Registration | undefined {
     return store.registrationsByTelegram.get(telegramId);
@@ -174,5 +245,6 @@ export const db = {
     store.registrationsByTelegram.clear();
     store.whispers.clear();
     store.depositIntents.clear();
+    store.faucetEnqueues.clear();
   },
 };

@@ -80,6 +80,7 @@ export async function demoFaucetRoutes(app: FastifyInstance): Promise<void> {
         tokenAddress: config.syntheticUsdcAddress as Address,
         amount: BigInt(config.demoFaucetAmount),
         globalCap: config.demoFaucetGlobalCap,
+        gasWei: BigInt(config.demoFaucetGasWei),
         log: (obj, msg) => req.log.info(obj, msg),
       },
       { address, tgId },

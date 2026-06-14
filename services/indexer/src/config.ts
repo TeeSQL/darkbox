@@ -32,6 +32,9 @@ export const config = {
   demoFaucetAmount: process.env["DEMO_FAUCET_AMOUNT"] ?? "5000000",
   // Small global cap on total grants (anti-drain).
   demoFaucetGlobalCap: parseInt(process.env["DEMO_FAUCET_GLOBAL_CAP"] ?? "100", 10),
+  // Native ETH (wei) dripped with each grant so faucet-funded wallets can pay gas
+  // to approve/split/trade (the chain isn't gasless). Default 0.05 ETH.
+  demoFaucetGasWei: process.env["DEMO_FAUCET_GAS_WEI"] ?? "50000000000000000",
   // Shared sealed secret gating the demo-faucet mint route (x-internal-token).
   // Must match the gateway's value. Unset ⇒ the route fails closed (503).
   internalFaucetToken: process.env["INTERNAL_FAUCET_TOKEN"] ?? "",

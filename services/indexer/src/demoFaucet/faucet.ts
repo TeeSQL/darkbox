@@ -60,6 +60,11 @@ export interface DemoFaucetChain {
   readMinter(): Promise<Address>;
   /** SyntheticUSDC.mint(to, amount); resolves to the tx hash after the receipt. */
   mint(to: Address, amount: bigint): Promise<Hex>;
+  /**
+   * Drip `weiAmount` native ETH to `to` so a faucet-funded wallet can pay gas to
+   * approve/split/trade (the chain isn't gasless). Resolves after the receipt.
+   */
+  fundGas(to: Address, weiAmount: bigint): Promise<Hex>;
 }
 
 export interface DemoFaucetDeps {
@@ -68,6 +73,7 @@ export interface DemoFaucetDeps {
   tokenAddress: Address; // SyntheticUSDC address, echoed back as `token`
   amount: bigint; // micro-USDC to mint per grant (5_000_000)
   globalCap: number;
+  gasWei: bigint; // native ETH (wei) dripped to the recipient so they can pay gas to trade
   /** Optional structured logger (txHash + recipient + signer only — never keys). */
   log?: (obj: Record<string, unknown>, msg: string) => void;
 }
@@ -119,7 +125,7 @@ export async function grantDemoFaucet(
   deps: DemoFaucetDeps,
   input: DemoFaucetInput,
 ): Promise<DemoFaucetResult> {
-  const { chain, store, tokenAddress, amount, globalCap, log } = deps;
+  const { chain, store, tokenAddress, amount, globalCap, gasWei, log } = deps;
 
   // 1. Validate recipient address.
   const raw = (input.address ?? "").trim();
@@ -167,14 +173,18 @@ export async function grantDemoFaucet(
     );
   }
 
-  // 6. Mint, then finalize. If the mint fails, release the reservation so the
-  //    wallet can retry cleanly instead of being stuck on a dead pending row.
+  // 6. Fund gas, then mint, then finalize. Gas first so a faucet-funded wallet can
+  //    actually pay to approve/split/trade (the chain isn't gasless); on any
+  //    failure release the reservation so the wallet can retry cleanly. (A retry
+  //    after a post-gas mint failure only re-drips harmless extra gas — never a
+  //    second sUSDC mint, which the reservation still guards.)
   let txHash: Hex;
   try {
+    await chain.fundGas(address as Address, gasWei);
     txHash = await chain.mint(address as Address, amount);
   } catch (err) {
     await store.releaseGrant(reservation.id);
-    log?.({ recipient: address }, "demo faucet: mint failed, reservation released");
+    log?.({ recipient: address }, "demo faucet: fund/mint failed, reservation released");
     throw err;
   }
   const stored = await store.finalizeGrant(reservation.id, txHash);

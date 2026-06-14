@@ -71,5 +71,12 @@ export function createViemChain(opts: ViemChainOptions): DemoFaucetChain {
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       return txHash;
     },
+    async fundGas(to: Address, weiAmount: bigint): Promise<Hex> {
+      // Native ETH drip from the minter (genesis-funded) so the recipient can pay
+      // gas to trade. Same account/chain as the mint — viem handles gas/fees.
+      const txHash = await walletClient.sendTransaction({ account, chain, to, value: weiAmount });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      return txHash;
+    },
   };
 }

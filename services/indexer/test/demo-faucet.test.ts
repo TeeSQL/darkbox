@@ -81,10 +81,15 @@ class FakeChain implements DemoFaucetChain {
     this.mintCalls.push({ to, amount });
     return this.nextTx;
   }
+  gasCalls: Array<{ to: Address; weiAmount: bigint }> = [];
+  async fundGas(to: Address, weiAmount: bigint): Promise<Hex> {
+    this.gasCalls.push({ to, weiAmount });
+    return this.nextTx;
+  }
 }
 
 function deps(store: DemoFaucetStore, chain: DemoFaucetChain, cap = 100) {
-  return { chain, store, tokenAddress: TOKEN, amount: AMOUNT, globalCap: cap };
+  return { chain, store, tokenAddress: TOKEN, amount: AMOUNT, globalCap: cap, gasWei: 50_000_000_000_000_000n };
 }
 
 describe("grantDemoFaucet", () => {

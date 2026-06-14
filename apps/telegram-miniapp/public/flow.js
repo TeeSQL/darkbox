@@ -1117,8 +1117,10 @@ async function startServerStt() {
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
     return false;
   }
-  rememberMicGrantThisSession();
-  setMainMicGrantState(true);
+  // NB: do NOT call rememberMicGrantThisSession()/setMainMicGrantState() here —
+  // the former dispatches an event that wakes the landing + wait mic-reactive
+  // visuals (a SECOND getUserMedia → the double permission prompt), and the
+  // latter strips the 'listening' class, hiding the recording state.
   sttChunks = [];
   try {
     sttRecorder = new MediaRecorder(sttStream);
@@ -1145,6 +1147,7 @@ async function transcribeStt() {
   const blob = new Blob(chunks, { type });
   releaseMic();
   if (whisperStatus) whisperStatus.textContent = 'transcribing…';
+  voiceButton?.classList.add('transcribing'); // spinner while STT runs
   try {
     const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
     const j = await res.json().catch(() => ({}));
@@ -1159,6 +1162,8 @@ async function transcribeStt() {
     }
   } catch (_) {
     if (whisperStatus) whisperStatus.textContent = 'transcription failed — type your whisper.';
+  } finally {
+    voiceButton?.classList.remove('transcribing');
   }
 }
 

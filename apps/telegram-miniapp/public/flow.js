@@ -144,6 +144,13 @@ async function refreshSelf() {
     live.self = self;
     applyReturningState(self);
     renderPrivateState();
+    // Returning player (has a registered daemon) → jump straight to the daemon
+    // screen if they're still sitting on the landing page.
+    if (self && self.registrationStatus === 'registered') {
+      markOnboarded();
+      const active = document.querySelector('.view.active');
+      if (active && active.id === 'v-landing') showView('v-wait');
+    }
   } catch (_) {
     // unauthenticated (no initData) or gateway down → keep the mock.
   }
@@ -159,7 +166,7 @@ function isReturningPlayer(self) {
 function applyReturningState(self) {
   const returning = isReturningPlayer(self);
   if (chipsEl) chipsEl.hidden = true; // chips retired; funding is the $5 house + Feed the daemon
-  if (feedCtaEl) feedCtaEl.hidden = false; // always offer an optional top-up on the pact
+  applyFeedGate(); // feed button only for allowlisted/opted-in users
   const promoLine = document.querySelector('#seal-promo-line');
   if (promoLine) {
     promoLine.innerHTML = returning
@@ -176,6 +183,36 @@ function openFeedDeposit() {
   window.DarkboxFeed.open({
     onCredited: () => { refreshSelf(); },
   });
+}
+
+// ── Returning players skip onboarding (whisper/seal/reveal) → straight to wait
+const ONBOARDED_KEY = 'daemonhall:onboarded:v1';
+function isOnboarded() {
+  try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch (_) { return false; }
+}
+function markOnboarded() {
+  try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch (_) {}
+}
+
+// ── "Feed the daemon" deposit is gated for the demo: only allowlisted Telegram
+// ids, or a device opted in with ?feed=1. Hidden for everyone else.
+const FEED_ALLOWLIST = []; // Telegram numeric user ids allowed to deposit
+function syncFeedFlagFromUrl() {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get('feed') === '1') localStorage.setItem('daemonhall:feed', '1');
+    if (p.get('feed') === '0') localStorage.removeItem('daemonhall:feed');
+  } catch (_) {}
+}
+function isFeedAllowed() {
+  try { if (localStorage.getItem('daemonhall:feed') === '1') return true; } catch (_) {}
+  const id = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+  return Boolean(id && FEED_ALLOWLIST.includes(id));
+}
+function applyFeedGate() {
+  const allowed = isFeedAllowed();
+  if (feedCtaEl) feedCtaEl.hidden = !allowed;
+  if (addHeatCard) addHeatCard.hidden = !allowed;
 }
 
 async function refreshPublic() {
@@ -274,13 +311,11 @@ function syncFundingCta() {
   }
 }
 
-addHeatCard?.addEventListener('click', () => {
-  if (selectedStake > 5 && gw()) openFundingLab();
-});
+addHeatCard?.addEventListener('click', () => { if (isFeedAllowed()) openFeedDeposit(); });
 addHeatCard?.addEventListener('keydown', (event) => {
-  if ((event.key === 'Enter' || event.key === ' ') && selectedStake > 5 && gw()) {
+  if ((event.key === 'Enter' || event.key === ' ') && isFeedAllowed()) {
     event.preventDefault();
-    openFundingLab();
+    openFeedDeposit();
   }
 });
 
@@ -774,6 +809,7 @@ function showView(id) {
   views.forEach((view) => view.classList.toggle('active', view.id === id));
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderPrivateState();
+  if (id === 'v-wait') markOnboarded(); // reached the daemon screen → onboarded
   if (id === 'v-whisper') {
     window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
     typeWhisperConvo();
@@ -1450,5 +1486,8 @@ handleTerminalInput();
 
 // Pull live account + public data once the gateway client is on window. If the
 // bundle that defines it hasn't executed yet, wait for its ready signal.
+syncFeedFlagFromUrl();
+applyFeedGate();
+if (isOnboarded()) showView('v-wait'); // returning player → straight to the daemon screen
 if (gw()) bootLive();
 else window.addEventListener('darkbox:gateway-ready', bootLive, { once: true });

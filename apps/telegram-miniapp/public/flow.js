@@ -63,6 +63,122 @@ let recognitionBaseText = '';
 let recognitionFinalText = '';
 let selectedStake = 5;
 
+// ── Live backend wiring ────────────────────────────────────────────────────
+// `window.DarkboxGateway` is the shared, tested client (src/gateway-boot.ts),
+// pointed same-origin in prod: `/api/*` (authed Telegram initData) and
+// `/public/*` both proxy to the gateway TEE, which reaches the CVM indexer over
+// the mesh. Every render below falls back to the local hash-mock when a call
+// fails, so the hall never breaks if the gateway is briefly unreachable.
+const REGISTERED_NAME_KEY = 'daemonhall:registered-name:v1';
+const live = {
+  self: null,        // SelfStatus — owner/shadow account, balance, lock, registration
+  leaderboard: null, // LeaderboardRow[] from /public/leaderboard
+  game: null,        // GameStats from /public/game
+  activity: null,    // ActivityStats from /public/activity
+  markets: null,     // PublicMarket[] from /public/markets
+  claimed: false,    // ran claimInvite() this session
+  committed: false,  // sealed a whisper to the mesh this session
+};
+
+function gw() {
+  return (typeof window !== 'undefined' && window.DarkboxGateway) || null;
+}
+
+function persistedRegisteredName() {
+  try { return localStorage.getItem(REGISTERED_NAME_KEY) || ''; }
+  catch (_) { return ''; }
+}
+
+function rememberRegisteredName(name) {
+  try { if (name) localStorage.setItem(REGISTERED_NAME_KEY, name); }
+  catch (_) {}
+}
+
+function myLeaderboardRow() {
+  if (!live.leaderboard || !live.self) return null;
+  const id = live.self.agentId;
+  return live.leaderboard.find((row) => row.agentId && id && row.agentId === id) || null;
+}
+
+// Pull the player's account from the gateway and, on first entry, claim the $5
+// promo. This is what permanently auths the user and assigns their shadow-chain
+// account (idempotent — safe to call every load).
+async function refreshSelf() {
+  const client = gw();
+  if (!client) return;
+  try {
+    let self = await client.selfStatus();
+    if (self && !self.enteredViaInvite) {
+      try { await client.claimInvite(); live.claimed = true; }
+      catch (_) { /* promo may be closed / already claimed elsewhere */ }
+      try { self = await client.selfStatus(); } catch (_) {}
+    }
+    live.self = self;
+    renderPrivateState();
+  } catch (_) {
+    // unauthenticated (no initData) or gateway down → keep the mock.
+  }
+}
+
+async function refreshPublic() {
+  const client = gw();
+  if (!client) return;
+  const [leaderboard, game, activity, markets] = await Promise.all([
+    client.leaderboard().catch(() => null),
+    client.game().catch(() => null),
+    client.activity().catch(() => null),
+    client.markets().catch(() => null),
+  ]);
+  if (Array.isArray(leaderboard) && leaderboard.length) live.leaderboard = leaderboard;
+  if (game) live.game = game;
+  if (activity) live.activity = activity;
+  if (Array.isArray(markets) && markets.length) live.markets = markets;
+  renderPrivateState();
+}
+
+// Seal a whisper to the CVM mesh: draft → confirm (commitment hash) → register
+// the daemon name. Returns the instruction commitment hash, or null on failure
+// (caller keeps the local redacted-receipt UX either way).
+async function commitWhisperToMesh(text) {
+  const client = gw();
+  if (!client || !text) return null;
+  try {
+    const agentName = selectedDaemon.name || persistedRegisteredName() || 'daemon';
+    const result = await client.runJoinFlow({ agentName, whisperText: text });
+    live.committed = true;
+    rememberRegisteredName(agentName);
+    if (result?.after) { live.self = result.after; }
+    renderPrivateState();
+    return result?.confirmed?.instructionHash || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Records a deposit intent against the player's account and returns the real
+// public bridge-escrow address the transfer should target. This moves NO money
+// — it's attribution + the address the funding lab (Blink/Dynamic) deposits to.
+// The bridge watcher credits shadow USDC once the on-chain transfer confirms.
+const deposit = { intent: null };
+async function prepareDeposit(amountUsd) {
+  const client = gw();
+  if (!client || !(amountUsd > 0)) return null;
+  try {
+    const intent = await client.createDepositIntent({ amount: String(amountUsd) });
+    deposit.intent = intent;
+    return intent;
+  } catch (_) {
+    return null;
+  }
+}
+
+function bootLive() {
+  if (!gw()) return;
+  refreshSelf();
+  refreshPublic();
+  window.setInterval(refreshPublic, 15000);
+}
+
 
 const daemonImages = [
   '/daemons/murmur-01.webp', '/daemons/sable-02.webp', '/daemons/veil-03.webp', '/daemons/null-04.webp',
@@ -128,6 +244,13 @@ function signedPercent(seed, offset) {
   const raw = hashNumber(`${seed}:pulse:${offset}`) % 3800;
   const value = (raw - 1200) / 100;
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function formatUsdK(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '$0';
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${n.toFixed(n < 100 ? 2 : 0)}`;
 }
 
 function escapeHtml(value) {
@@ -245,28 +368,91 @@ function renderPrivateState() {
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
   if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(instructionSeed)}`;
   setSelectedDaemon({ image: daemonImage, name: ownName, seed: visualSeed });
-  const balance = selectedStake + (h % 900) / 100;
-  const pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
+  // Balance: real withdrawable from the indexer when authed, else the mock.
+  let balance = selectedStake + (h % 900) / 100;
+  let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
+  let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
+  if (live.self && live.self.withdrawableAvailableBalance != null) {
+    const real = Number(live.self.withdrawableAvailableBalance);
+    if (Number.isFinite(real)) balance = real;
+    const lock = live.self.withdrawalLock;
+    if (lock && lock.locked) {
+      pnlNote = lock.unlockAt
+        ? `locked · unlocks ${new Date(lock.unlockAt).toLocaleDateString([], { weekday: 'short' })}`
+        : 'locked';
+    } else if (live.self.fundingStatus === 'promo_funded') {
+      pnlNote = 'promo balance';
+    }
+  }
+  const liveRow = myLeaderboardRow();
+  if (liveRow && liveRow.pnl != null) {
+    const real = Number(liveRow.pnl);
+    if (Number.isFinite(real)) { pnl = real; pnlNote = real >= 0 ? 'realized' : 'drawdown'; }
+  }
+  // Real instruction fingerprint once a whisper is committed to the mesh.
+  if (live.self && live.self.instructionCommitmentHash && fingerprintEl) {
+    const fh = live.self.instructionCommitmentHash;
+    fingerprintEl.textContent = `${fh.slice(0, 8)}...${fh.slice(-6)}`;
+  }
   if (daemonBalanceEl) daemonBalanceEl.textContent = `$${balance.toFixed(2)}`;
   if (daemonPnlEl) {
     daemonPnlEl.textContent = `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)}`;
     daemonPnlEl.classList.toggle('loss', pnl < 0);
   }
-  if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnl >= 0 ? 'unrealized' : 'drawdown';
+  if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnlNote;
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, visualSeed, 3);
   if (daemonActivityLineEl) daemonActivityLineEl.textContent = pick(activityLines, visualSeed, 4);
   if (stakeEncourageEl) stakeEncourageEl.textContent = stakeEncouragement[selectedStake] || 'add funds when you want more heat.';
-  if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
-  if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
-  if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
-  if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
+  // Aggregate tiles: live indexer counters when present (honest, even at zero),
+  // mock only when the public API is unreachable.
+  const g = live.game;
+  const a = live.activity;
+  if (metricVolumeEl) {
+    metricVolumeEl.textContent = g
+      ? formatUsdK(g.total_volume_usdc)
+      : `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
+  }
+  if (metricTradesEl) metricTradesEl.textContent = g ? String(g.total_trades ?? 0) : String(220 + (h % 260));
+  if (metricSealedEl) metricSealedEl.textContent = g ? String(g.active_agents ?? 0) : String(76 + (h % 35));
+  if (metricFingerprintsEl) {
+    metricFingerprintsEl.textContent = g
+      ? String(g.positions_opened ?? 0)
+      : String(130 + (h % 80));
+  }
+  void a;
   renderMarkets(PUBLIC_MARKET_SEED);
   renderLeaderboard(visualSeed, ownName);
 }
 
+function renderLiveMarkets() {
+  if (!marketRowsEl) return;
+  const all = live.markets || [];
+  const open = all.filter((m) => (m.status || '').toLowerCase() !== 'resolved');
+  const rows = (open.length ? open : all).slice(0, 5);
+  const newest = [...all].sort((a, b) => Number(b.created_at_ts || 0) - Number(a.created_at_ts || 0))[0];
+  if (hallNewMarketEl && newest) hallNewMarketEl.textContent = newest.question;
+  if (hallNewMarketMetaEl && newest) {
+    const ageMin = Math.max(0, Math.round((Date.now() / 1000 - Number(newest.created_at_ts || 0)) / 60));
+    hallNewMarketMetaEl.textContent = Number.isFinite(ageMin) ? `opened ${ageMin}m ago.` : 'live market.';
+  }
+  marketRowsEl.innerHTML = rows.map((row, index) => {
+    const yes = row.latest_yes_price ?? row.latest_trade_price;
+    const priceLabel = yes != null ? `${Math.round(Number(yes) * 100)}¢ yes` : (row.status || 'Active');
+    return `
+    <div class="market-row">
+      <span class="rank">${index + 1}</span>
+      <span class="market-q">${escapeHtml(row.question)}${(row.status || '').toLowerCase() === 'active' ? '<span class="market-badge">LIVE</span>' : ''}</span>
+      <span class="market-size">${escapeHtml(priceLabel)}</span>
+      <span class="market-trades">${escapeHtml(row.status || 'Active')}</span>
+    </div>
+  `;
+  }).join('');
+}
+
 function renderMarkets(seed) {
   if (!marketRowsEl) return;
+  if (live.markets && live.markets.length) { renderLiveMarkets(); return; }
   const rows = marketQuestions.map((question, index) => {
     const base = hashNumber(`${seed}:market:${question}`);
     const size = 650 + (base % 5200);
@@ -287,8 +473,40 @@ function renderMarkets(seed) {
   `).join('');
 }
 
+function shortAgent(id) {
+  if (!id) return 'daemon';
+  return id.startsWith('0x') && id.length > 12 ? `${id.slice(2, 8)}` : id;
+}
+
+function renderLiveLeaderboard() {
+  if (!leaderboardRowsEl) return;
+  const myId = live.self && live.self.agentId;
+  const rows = (live.leaderboard || []).slice(0, 6).map((row) => {
+    const pctRaw = row.pnlPct != null ? Number(row.pnlPct) : null;
+    const pulse = pctRaw != null && Number.isFinite(pctRaw)
+      ? `${pctRaw >= 0 ? '+' : ''}${pctRaw.toFixed(2)}%`
+      : `$${Number(row.pnl || 0).toFixed(2)}`;
+    return {
+      name: row.ensName || shortAgent(row.agentId),
+      pulse,
+      rank: row.rank,
+      mine: Boolean(myId && row.agentId === myId),
+    };
+  });
+  const winner = rows[0];
+  if (hallBigWinEl && winner) hallBigWinEl.textContent = `${winner.name} ${winner.pulse}`;
+  leaderboardRowsEl.innerHTML = rows.map((row) => `
+    <div class="brow ${row.mine ? 'you' : ''}">
+      <span class="rank">${row.rank}</span>
+      <span class="dn">${escapeHtml(row.name)}${row.mine ? ' ◂ you' : ''}</span>
+      <span class="pulse"><span class="pct">${escapeHtml(row.pulse)}</span></span>
+    </div>
+  `).join('');
+}
+
 function renderLeaderboard(seed, ownName) {
   if (!leaderboardRowsEl) return;
+  if (live.leaderboard && live.leaderboard.length) { renderLiveLeaderboard(); return; }
   const rows = [ownName, ...names.filter((name) => name !== ownName)]
     .slice(0, 6)
     .map((name, index) => ({
@@ -461,6 +679,13 @@ function sealTerminalWhisper() {
     return;
   }
   rememberSealedReceipt(text);
+  // Commit the order to the CVM mesh (draft → confirm → register). Non-blocking:
+  // the redacted-receipt UX is the same whether or not the gateway is reachable.
+  commitWhisperToMesh(text).then((hash) => {
+    if (hash && terminalWhisperStatus) {
+      terminalWhisperStatus.textContent = 'sealed to the mesh. commitment recorded · message redacted forever.';
+    }
+  });
   if (terminalInput) terminalInput.value = '';
   handleTerminalInput();
   renderSealedTerminal();
@@ -804,7 +1029,12 @@ navButtons.forEach((button) => {
       return;
     }
     if (!next) return;
-    if (next === 'v-seal') rememberSealedReceipt();
+    if (next === 'v-seal') {
+      rememberSealedReceipt();
+      // Seal the pact for real: whisper → commitment → daemon registration in the
+      // CVM mesh. Fire-and-forget; the reveal screen flows regardless.
+      commitWhisperToMesh((input?.value || '').trim());
+    }
     showView(next);
     if (button.dataset.openMic === 'true' && next === 'v-whisper') {
       try { await grantMicForVisuals({ preventDefault() {} }); }
@@ -817,6 +1047,16 @@ stakeButtons.forEach((button) => {
     selectedStake = Number(button.getAttribute('data-stake') || 5);
     stakeButtons.forEach((choice) => choice.classList.toggle('on', choice === button));
     renderPrivateState();
+    // Above the house stake, ready a real deposit intent against the live bridge
+    // escrow so the funding step can move USDC and credit shadow balance.
+    if (selectedStake > 5 && gw()) {
+      const topUp = selectedStake - 5;
+      prepareDeposit(topUp).then((intent) => {
+        if (intent && stakeEncourageEl) {
+          stakeEncourageEl.textContent = `+$${topUp} ready — fund to your daemon's bridge address to go live.`;
+        }
+      });
+    }
   });
 });
 input?.addEventListener('input', handleInput);
@@ -853,3 +1093,8 @@ setMainMicGrantState();
 setTerminalVoiceState('idle');
 handleInput();
 handleTerminalInput();
+
+// Pull live account + public data once the gateway client is on window. If the
+// bundle that defines it hasn't executed yet, wait for its ready signal.
+if (gw()) bootLive();
+else window.addEventListener('darkbox:gateway-ready', bootLive, { once: true });

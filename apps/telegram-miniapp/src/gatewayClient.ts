@@ -78,7 +78,49 @@ export interface LeaderboardRow {
   ensName?: string;
   pnl: number | string;
   rank: number;
+  realizedPnl?: string;
+  unrealizedPnl?: string;
+  pnlPct?: string;
+  equity?: string;
+  netDeposits?: string;
   updatedAt?: string;
+}
+
+/** Aggregate game counters (indexer `/public/game`, snake_case strings). */
+export interface GameStats {
+  active_markets: string;
+  active_agents: string;
+  total_trades: string;
+  total_volume_usdc: string;
+  positions_opened: string;
+  positions_closed: string;
+}
+
+/** Aggregate activity counters (indexer `/public/activity`, snake_case strings). */
+export interface ActivityStats {
+  total_deposits_count: string;
+  total_withdrawals_count: string;
+  total_trades: string;
+  total_volume_usdc: string;
+  active_markets: string;
+  active_agents: string;
+}
+
+/** Public market row (indexer `/public/markets`, snake_case). */
+export interface PublicMarket {
+  market_id: string;
+  game_id: string;
+  question: string;
+  status: string;
+  close_time: string;
+  resolve_by: string;
+  resolved_outcome: string | null;
+  created_at_ts: string;
+  latest_yes_price: string | null;
+  latest_no_price: string | null;
+  latest_trade_price: string | null;
+  latest_trade_outcome: string | null;
+  latest_trade_ts: string | null;
 }
 
 export interface DepositIntentResult {
@@ -225,6 +267,30 @@ export function createGatewayClient(config: GatewayClientConfig) {
       const res = await doFetch(`${pub}/leaderboard`);
       if (!res.ok) return [];
       return (await res.json()) as LeaderboardRow[];
+    },
+
+    /** Aggregate game counters (active markets/agents, trades, volume). */
+    async game(): Promise<GameStats | null> {
+      if (!pub) return null;
+      const res = await doFetch(`${pub}/game`);
+      if (!res.ok) return null;
+      return (await res.json()) as GameStats;
+    },
+
+    /** Aggregate activity counters (deposits/withdrawals/trades/volume). */
+    async activity(): Promise<ActivityStats | null> {
+      if (!pub) return null;
+      const res = await doFetch(`${pub}/activity`);
+      if (!res.ok) return null;
+      return (await res.json()) as ActivityStats;
+    },
+
+    /** Live public markets (question, status, latest prices). */
+    async markets(): Promise<PublicMarket[]> {
+      if (!pub) return [];
+      const res = await doFetch(`${pub}/markets`);
+      if (!res.ok) return [];
+      return (await res.json()) as PublicMarket[];
     },
 
     /**

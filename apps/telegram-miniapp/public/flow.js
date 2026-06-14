@@ -974,6 +974,9 @@ async function startVoice(event) {
 
 async function grantMicForVisuals(event) {
   event?.preventDefault?.();
+  // On Telegram-Android we request the mic only when recording actually starts
+  // (avoids a redundant permission prompt on screen entry → the "double prompt").
+  if (USE_SERVER_STT) return;
   try {
     const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
     setMainMicGrantState(Boolean(allowed));
@@ -1000,6 +1003,13 @@ let mainMode = 'idle'; // 'idle' | 'recording'
 let micPressTimer = null;
 let micHoldMode = false; // current press has crossed 1s → hold-to-talk (release stops)
 let micPressWillStop = false; // this gesture is a tap-to-stop on an active recording
+// Telegram's Android webview can't run the Web Speech API, so there we record
+// audio and transcribe server-side via /api/stt (Venice stt-xai-v1). iOS/desktop/
+// Android-Chrome keep the live SpeechRecognition path (which works there).
+const USE_SERVER_STT = Boolean(tg && tg.platform === 'android');
+let sttStream = null;
+let sttRecorder = null;
+let sttChunks = [];
 
 function setMainVoiceState(state) {
   // state: 'idle' | 'recording' | 'hold'
@@ -1095,11 +1105,70 @@ async function startOpenMicFallback() {
   return true;
 }
 
+// Telegram-Android: record audio with MediaRecorder (one mic permission) and
+// transcribe it server-side on stop; the words land in the textarea.
+async function startServerStt() {
+  try {
+    sttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    sttStream = null;
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    return false;
+  }
+  rememberMicGrantThisSession();
+  setMainMicGrantState(true);
+  sttChunks = [];
+  try {
+    sttRecorder = new MediaRecorder(sttStream);
+  } catch (_) {
+    // No MediaRecorder → keep the mic open and let the user type.
+    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+    return true;
+  }
+  sttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) sttChunks.push(e.data); };
+  sttRecorder.onstop = () => { void transcribeStt(); };
+  try { sttRecorder.start(); } catch (_) {}
+  if (whisperStatus) whisperStatus.textContent = 'recording. tap the mic again when you’re done.';
+  return true;
+}
+
+async function transcribeStt() {
+  const stream = sttStream;
+  sttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  const chunks = sttChunks;
+  sttChunks = [];
+  if (!chunks.length) { releaseMic(); if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
+  const type = (sttRecorder && sttRecorder.mimeType) || 'audio/webm';
+  const blob = new Blob(chunks, { type });
+  releaseMic();
+  if (whisperStatus) whisperStatus.textContent = 'transcribing…';
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
+    const j = await res.json().catch(() => ({}));
+    const text = (j && typeof j.text === 'string') ? j.text.trim() : '';
+    if (text) {
+      const base = input?.value.trim() || '';
+      if (input) input.value = base ? `${base} ${text}` : text;
+      handleInput();
+      if (whisperStatus) whisperStatus.textContent = 'transcribed. edit it, or seal the whisper.';
+    } else {
+      if (whisperStatus) whisperStatus.textContent = 'couldn’t make out words — try again or type.';
+    }
+  } catch (_) {
+    if (whisperStatus) whisperStatus.textContent = 'transcription failed — type your whisper.';
+  }
+}
+
 async function startMainRecording() {
   if (mainMode === 'recording') return true;
   mainMode = 'recording';
   mainStarted = false;
   setMainVoiceState('recording');
+
+  if (USE_SERVER_STT) return startServerStt();
 
   // Prefer SpeechRecognition for live transcription, but do NOT pre-acquire the
   // mic with getUserMedia first: on Android that double-acquires the mic (two
@@ -1129,6 +1198,13 @@ function stopMainRecording(statusText = 'recording stopped. review before sealin
   mainMode = 'idle';
   mainWanted = false;
   mainStarted = false;
+  if (USE_SERVER_STT) {
+    // Stopping triggers MediaRecorder.onstop → transcribeStt(), which updates the
+    // status and fills the textarea, so don't overwrite the status here.
+    try { if (sttRecorder && sttRecorder.state !== 'inactive') sttRecorder.stop(); } catch (_) {}
+    setMainVoiceState('idle');
+    return;
+  }
   try { mainRecognition?.stop?.(); } catch (_) {}
   if (mainStream) {
     mainStream.getTracks().forEach((track) => track.stop());

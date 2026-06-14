@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { config } from "./config.js";
 import { IndexerClient } from "./indexer.js";
@@ -17,6 +18,13 @@ const ProposalSchema = z.object({
   metadataURI: z.string().optional(),
   runId: z.string().optional(),
   turn: z.number().int().optional(),
+  closeTime: z.union([z.string(), z.number().int()]).optional(),
+  expiry: z.union([z.string(), z.number().int()]).optional(),
+  proposerKind: z.string().optional(),
+  proposerId: z.string().optional(),
+  proposerTelegramId: z.string().optional(),
+  proposerTelegramUsername: z.string().optional(),
+  proposerRole: z.string().optional(),
 });
 
 const telegram = new TelegramApi(config.telegramBotToken);
@@ -40,23 +48,43 @@ async function handleProposal(payload: ProposalPayload): Promise<{ ok: true; mes
   return { ok: true, messageId: message.message_id };
 }
 
+function isApprovalChat(chatId: string | number | undefined): boolean {
+  return Boolean(config.approvalChatId) && String(chatId) === String(config.approvalChatId);
+}
+
+function roleFor(userId: string): "group_member" | "admin" | "operator" {
+  if (config.oceanOperatorTelegramIds.has(userId)) return "operator";
+  if (config.adminUserIds.has(userId)) return "admin";
+  return "group_member";
+}
+
 async function handleCallback(update: TelegramUpdate): Promise<void> {
   const cb = update.callback_query;
   if (!cb?.data || !cb.message) return;
   const [action, proposalId] = cb.data.split(":", 2);
-  if (!proposalId || (action !== "approve" && action !== "deny")) return;
+  if (!proposalId || (action !== "confirm" && action !== "approve" && action !== "deny")) return;
   const userId = String(cb.from.id);
-  if (config.adminUserIds.size > 0 && !config.adminUserIds.has(userId)) {
-    await telegram.answerCallback(cb.id, "Not authorized for DarkBox market approvals");
+  const role = roleFor(userId);
+  if (!isApprovalChat(cb.message.chat.id) && role !== "operator") {
+    await telegram.answerCallback(cb.id, "Use the DarkBox group proposal message");
     return;
   }
-  const status = action === "approve" ? "approved" : "denied";
+  if ((action === "approve" || action === "deny") && role === "group_member") {
+    await telegram.answerCallback(cb.id, "Only admins/operators can approve or deny");
+    return;
+  }
+  const status = action === "confirm" ? "confirmed" : action === "approve" ? "approved" : "denied";
   try {
     await telegram.removeButtons(cb.message);
   } catch (err) {
     console.warn("[market-approval-bot] button removal failed before decision", err);
   }
-  await indexer.decide(proposalId, status, userId, String(cb.message.message_id));
+  await indexer.decide(proposalId, status, {
+    telegramId: userId,
+    telegramUsername: cb.from.username,
+    role,
+    reviewMessageId: String(cb.message.message_id),
+  });
   try {
     await telegram.answerCallback(cb.id, `${status}: ${proposalId}`);
   } catch (err) {
@@ -65,7 +93,36 @@ async function handleCallback(update: TelegramUpdate): Promise<void> {
     console.warn("[market-approval-bot] callback acknowledgement failed", err);
   }
   const who = cb.from.username ? `@${cb.from.username}` : userId;
-  await telegram.editDecision(cb.message, `${action === "approve" ? "✅ APPROVED" : "❌ DENIED"} by ${who}. Proposal ${proposalId}.`);
+  const label = action === "confirm" ? "CONFIRMED" : action === "approve" ? "APPROVED" : "DENIED";
+  await telegram.editDecision(cb.message, `${label} by ${who} (${role}). Proposal ${proposalId}.`);
+}
+
+async function handleMessage(update: TelegramUpdate): Promise<void> {
+  const message = update.message;
+  if (!message?.text || !message.from) return;
+  const userId = String(message.from.id);
+  const role = roleFor(userId);
+  if (!isApprovalChat(message.chat.id) && role !== "operator") return;
+  const match = message.text.match(/^\/propose(?:@\w+)?\s+([\s\S]+)$/i);
+  if (!match) return;
+  const question = match[1]?.trim();
+  if (!question) {
+    await telegram.sendText(message.chat.id, "Usage: /propose Will DarkBox ...?", message.message_thread_id);
+    return;
+  }
+  const payload: ProposalPayload = {
+    proposalId: `tg-${randomUUID()}`,
+    question,
+    outcomes: ["YES", "NO"],
+    resolutionSource: "DarkBox admin manual",
+    proposerKind: "telegram",
+    proposerId: userId,
+    proposerTelegramId: userId,
+    proposerTelegramUsername: message.from.username,
+    proposerRole: role,
+  };
+  const result = await handleProposal(payload);
+  await telegram.sendText(message.chat.id, `Proposal queued: ${payload.proposalId} (message ${result.messageId})`, message.message_thread_id);
 }
 
 function startHttp(): void {
@@ -84,7 +141,9 @@ function startHttp(): void {
         return;
       }
       if (req.method === "POST" && req.url === "/telegram/webhook") {
-        await handleCallback(await readJson(req) as TelegramUpdate);
+        const update = await readJson(req) as TelegramUpdate;
+        await handleCallback(update);
+        await handleMessage(update);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
         return;
@@ -118,6 +177,7 @@ async function startPolling(): Promise<void> {
       for (const update of updates) {
         offset = Math.max(offset, update.update_id + 1);
         await handleCallback(update);
+        await handleMessage(update);
       }
     } catch (err) {
       console.error("[market-approval-bot] polling error", err);

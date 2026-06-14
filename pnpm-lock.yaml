@@ -78,6 +78,7 @@ importers:
         specifier: ^4.2.1
         version: 4.4.3
 
+<<<<<<< HEAD
   services/faucet-mint-worker:
     dependencies:
       '@darkbox/bridge':
@@ -102,6 +103,9 @@ importers:
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
+=======
+  services/ens: {}
+>>>>>>> 7724b4b (Implement darkbox-ens service (records + HTTP API))
 
   services/gateway:
     dependencies:

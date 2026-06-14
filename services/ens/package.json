@@ -1,0 +1,15 @@
+{
+  "name": "@darkbox/ens",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/services/ens/src/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/services/ens/src/index.js",
+    "dev": "node --import tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  }
+}

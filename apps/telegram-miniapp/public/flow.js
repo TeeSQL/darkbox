@@ -542,13 +542,13 @@ function renderPrivateState() {
   if (live.online) {
     if (metricVolumeEl) metricVolumeEl.textContent = formatUsdK(g ? g.total_volume_usdc : 0);
     if (metricTradesEl) metricTradesEl.textContent = String((g && g.total_trades) ?? 0);
-    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_agents) ?? 0);
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.positions_opened) ?? 0);
+    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_markets) ?? 0); // MARKETS
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.active_agents) ?? 0); // DAEMONS
   } else {
     if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
     if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
-    if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
+    if (metricSealedEl) metricSealedEl.textContent = String(6 + (h % 10)); // MARKETS (mock)
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(76 + (h % 35)); // DAEMONS (mock)
   }
   renderMarkets(PUBLIC_MARKET_SEED);
   renderLeaderboard(visualSeed, ownName);

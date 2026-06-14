@@ -1120,3 +1120,6 @@ body.feed-open { overflow: hidden; }
 .deal-list li::before { content: "›"; position: absolute; left: 4px; top: 0; color: var(--violet); font-weight: 700; }
 .deal-list strong { color: var(--bone); font-weight: 600; }
 .deal-list + .feed-cta { margin-top: 22px; }
+
+/* Wait page: single remaining action card spans full width (Telegram-pings card removed). */
+.after-card-grid-single { grid-template-columns: 1fr; }

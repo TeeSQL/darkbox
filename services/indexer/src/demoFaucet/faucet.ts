@@ -14,24 +14,42 @@ import type { Address, Hex } from "viem";
 
 /** Persisted grant record (one per wallet AND per Telegram user). */
 export interface DemoFaucetGrant {
+  id: number;
   address: string; // lowercased recipient wallet
   tgId: string | null;
-  txHash: string;
+  /** null while the slot is reserved (status "pending"); set once minted. */
+  txHash: string | null;
   amount: string; // base-unit string, e.g. "5000000"
+  status: "pending" | "granted";
 }
 
-/** Persistence seam — the real impl wraps the indexer Postgres; tests fake it. */
+/**
+ * Persistence seam — the real impl wraps the indexer Postgres; tests fake it.
+ *
+ * The reserve→finalize pair makes minting at-most-once under concurrency: a
+ * reservation row is inserted (under the unique constraints) BEFORE the mint, so
+ * only one of two simultaneous same-wallet claims can hold the slot and mint.
+ */
 export interface DemoFaucetStore {
   /** First existing grant matching this wallet OR (when given) this tg id. */
   findGrant(address: string, tgId: string | null): Promise<DemoFaucetGrant | null>;
-  /** Total number of grants issued (for the global cap). */
+  /** Total rows (pending + granted) — counts reservations against the cap. */
   countGrants(): Promise<number>;
   /**
-   * Insert a new grant. Returns the stored record, or `null` if a unique
-   * constraint (per-wallet / per-tg) rejected it — i.e. a concurrent claim won
-   * the race; the caller then re-reads the winning record.
+   * Reserve a slot by inserting a `pending` row (tx_hash NULL). Returns the
+   * reservation, or `null` if a unique constraint (per-wallet / per-tg) rejected
+   * it — i.e. a concurrent claim already holds the slot; the caller skips the
+   * mint and replays the winner.
    */
-  insertGrant(grant: DemoFaucetGrant): Promise<DemoFaucetGrant | null>;
+  reserveGrant(reservation: {
+    address: string;
+    tgId: string | null;
+    amount: string;
+  }): Promise<DemoFaucetGrant | null>;
+  /** Promote a reservation to `granted` with the real mint tx hash. */
+  finalizeGrant(id: number, txHash: string): Promise<DemoFaucetGrant>;
+  /** Drop a reservation (mint failed) so the wallet can retry cleanly. */
+  releaseGrant(id: number): Promise<void>;
 }
 
 /** Chain seam — reads minter(), exposes the signer address, mints + waits. */
@@ -70,7 +88,7 @@ function granted(grant: DemoFaucetGrant, token: Address, status: "granted" | "al
   return {
     statusCode: 200,
     body: {
-      txHash: grant.txHash,
+      txHash: grant.txHash, // null only for a reservation still mid-mint (client polls balanceOf)
       amount: grant.amount,
       token,
       recipient: grant.address,
@@ -87,10 +105,15 @@ function granted(grant: DemoFaucetGrant, token: Address, status: "granted" | "al
  *  2. idempotent read (no chain calls)        → 200 already_granted
  *  3. pre-mint minter check (no reverting tx) → 503 demo_faucet_not_minter
  *  4. global cap                              → 429 demo_faucet_cap_reached
- *  5. mint + persist                          → 200 granted
+ *  5. RESERVE the slot (unique insert)        → 200 already_granted if a
+ *                                               concurrent claim won (no mint)
+ *  6. mint, then finalize the reservation     → 200 granted
  *
- * Idempotency is checked BEFORE the minter check so a retry from a flaky mobile
- * client always replays its existing record even if the minter was later rotated.
+ * Reserve-before-mint (step 5) is what makes minting at-most-once: two truly
+ * simultaneous same-wallet claims both pass step 2, but only ONE reservation
+ * survives the unique constraint, so only one mints. Idempotency is checked
+ * before the minter check so a retry always replays its record even if the
+ * minter was later rotated.
  */
 export async function grantDemoFaucet(
   deps: DemoFaucetDeps,
@@ -122,32 +145,39 @@ export async function grantDemoFaucet(
     return { statusCode: 503, body: { error: "demo_faucet_not_minter" } };
   }
 
-  // 4. Global cap.
+  // 4. Global cap (counts pending reservations too).
   const count = await store.countGrants();
   if (count >= globalCap) {
     return { statusCode: 429, body: { error: "demo_faucet_cap_reached" } };
   }
 
-  // 5. Mint, then persist.
-  const txHash = await chain.mint(address as Address, amount);
-  const record: DemoFaucetGrant = {
-    address,
-    tgId,
-    txHash,
-    amount: amount.toString(),
-  };
-  const stored = await store.insertGrant(record);
-  if (!stored) {
-    // Lost a concurrent race after minting; re-read the winning record so the
-    // client still gets a consistent (already_granted) answer.
+  // 5. Reserve the slot BEFORE minting. Losing the unique race means another
+  //    concurrent claim already holds this wallet/tg slot — skip the mint and
+  //    replay the winner (never double-mint).
+  const reservation = await store.reserveGrant({ address, tgId, amount: amount.toString() });
+  if (!reservation) {
     const winner = await store.findGrant(address, tgId);
-    if (winner) {
-      log?.({ recipient: address, txHash, winnerTxHash: winner.txHash }, "demo faucet: concurrent grant race");
-      return granted(winner, tokenAddress, "already_granted");
-    }
-    // Extremely unlikely: insert rejected but no row found. Surface our mint.
-    return granted(record, tokenAddress, "granted");
+    log?.({ recipient: address }, "demo faucet: concurrent claim lost reservation race");
+    // `winner` is virtually always present (the race winner's row); fall back to
+    // already_granted regardless so a loser never mints.
+    return granted(
+      winner ?? { id: -1, address, tgId, txHash: null, amount: amount.toString(), status: "pending" },
+      tokenAddress,
+      "already_granted",
+    );
   }
+
+  // 6. Mint, then finalize. If the mint fails, release the reservation so the
+  //    wallet can retry cleanly instead of being stuck on a dead pending row.
+  let txHash: Hex;
+  try {
+    txHash = await chain.mint(address as Address, amount);
+  } catch (err) {
+    await store.releaseGrant(reservation.id);
+    log?.({ recipient: address }, "demo faucet: mint failed, reservation released");
+    throw err;
+  }
+  const stored = await store.finalizeGrant(reservation.id, txHash);
 
   log?.({ recipient: address, txHash, signer }, "demo faucet: minted demo credit");
   return granted(stored, tokenAddress, "granted");

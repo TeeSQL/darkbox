@@ -14,9 +14,13 @@ const AMOUNT = 5_000_000n;
 const WALLET_A = "0x1111111111111111111111111111111111111111";
 const WALLET_B = "0x2222222222222222222222222222222222222222";
 
-// ─── In-memory store (mirrors the two unique constraints) ──────────────────────
+// ─── In-memory store (mirrors the two unique constraints + reserve/finalize) ───
+// reserveGrant/finalizeGrant/releaseGrant bodies run synchronously (no internal
+// await) so, like Postgres' unique index, exactly one of two concurrent
+// reservations can win the race.
 class FakeStore implements DemoFaucetStore {
   rows: DemoFaucetGrant[] = [];
+  private nextId = 1;
 
   async findGrant(address: string, tgId: string | null): Promise<DemoFaucetGrant | null> {
     return (
@@ -28,13 +32,37 @@ class FakeStore implements DemoFaucetStore {
   async countGrants(): Promise<number> {
     return this.rows.length;
   }
-  async insertGrant(grant: DemoFaucetGrant): Promise<DemoFaucetGrant | null> {
+  async reserveGrant(reservation: {
+    address: string;
+    tgId: string | null;
+    amount: string;
+  }): Promise<DemoFaucetGrant | null> {
     const clash = this.rows.some(
-      (r) => r.address === grant.address || (grant.tgId !== null && r.tgId === grant.tgId),
+      (r) =>
+        r.address === reservation.address ||
+        (reservation.tgId !== null && r.tgId === reservation.tgId),
     );
     if (clash) return null; // unique-violation analogue
-    this.rows.push(grant);
-    return grant;
+    const row: DemoFaucetGrant = {
+      id: this.nextId++,
+      address: reservation.address,
+      tgId: reservation.tgId,
+      txHash: null,
+      amount: reservation.amount,
+      status: "pending",
+    };
+    this.rows.push(row);
+    return row;
+  }
+  async finalizeGrant(id: number, txHash: string): Promise<DemoFaucetGrant> {
+    const row = this.rows.find((r) => r.id === id);
+    if (!row) throw new Error(`reservation ${id} vanished`);
+    row.txHash = txHash;
+    row.status = "granted";
+    return row;
+  }
+  async releaseGrant(id: number): Promise<void> {
+    this.rows = this.rows.filter((r) => r.id !== id);
   }
 }
 
@@ -132,6 +160,36 @@ describe("grantDemoFaucet", () => {
     }
     assert.equal(chain.mintCalls.length, 0);
     assert.equal(store.rows.length, 0);
+  });
+
+  it("two concurrent same-wallet claims mint EXACTLY once (reserve-then-mint)", async () => {
+    const [a, b] = await Promise.all([
+      grantDemoFaucet(deps(store, chain), { address: WALLET_A, tgId: "111" }),
+      grantDemoFaucet(deps(store, chain), { address: WALLET_A, tgId: "111" }),
+    ]);
+    assert.equal(chain.mintCalls.length, 1, "exactly one mint across both racers");
+    assert.equal(store.rows.length, 1, "exactly one stored grant");
+    // Exactly one racer is 'granted', the other replays 'already_granted'.
+    const statuses = [a.body["status"], b.body["status"]].sort();
+    assert.deepEqual(statuses, ["already_granted", "granted"]);
+    assert.equal(a.statusCode, 200);
+    assert.equal(b.statusCode, 200);
+  });
+
+  it("releases the reservation when the mint fails, so a retry can mint", async () => {
+    const failing = new FakeChain();
+    failing.mint = async () => {
+      throw new Error("rpc boom");
+    };
+    await assert.rejects(
+      grantDemoFaucet(deps(store, failing), { address: WALLET_A, tgId: "111" }),
+      /rpc boom/,
+    );
+    assert.equal(store.rows.length, 0, "failed mint must not leave a dangling reservation");
+    // Retry on a healthy chain now succeeds and mints.
+    const retry = await grantDemoFaucet(deps(store, chain), { address: WALLET_A, tgId: "111" });
+    assert.equal(retry.body["status"], "granted");
+    assert.equal(chain.mintCalls.length, 1);
   });
 
   it("works on the body-address-only path (no tg id) and stays per-wallet idempotent", async () => {

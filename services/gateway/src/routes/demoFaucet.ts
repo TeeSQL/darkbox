@@ -11,13 +11,15 @@
  * its own `authenticate()` check — a valid Telegram session is required, which is
  * also what yields the tg id used for the per-Telegram-user guardrail downstream.
  *
- * Recipient = body `{ address }` (a 0x+40hex wallet, e.g. the just-connected
- * trading wallet) when supplied, else the caller's registered identity owner.
+ * Recipient = body `{ address }` ONLY — a caller-supplied, validated 0x+40hex
+ * trading wallet (the wallet the miniapp connects before calling this). There is
+ * deliberately NO fallback to the player's synthetic identity owner: that address
+ * is non-controllable, so minting $5 there would be unusable AND would burn a cap
+ * slot. A missing/invalid address is a hard 400.
  */
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { authenticate } from "../auth/telegram.js";
-import { resolveIdentity } from "../identity.js";
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
@@ -30,17 +32,13 @@ export async function demoFaucetProxyRoutes(app: FastifyInstance): Promise<void>
     }
     const tgId = auth.user.id;
 
-    // Recipient: explicit body address (validated) wins; otherwise fall back to
-    // the player's resolved identity owner (their registered trading address).
+    // Recipient: the caller MUST supply a valid 0x trading wallet. No fallback —
+    // see the module header for why minting to a synthetic owner is wrong.
     const body = (req.body ?? {}) as { address?: unknown };
-    let address: string;
-    if (typeof body.address === "string" && ADDRESS_RE.test(body.address.trim())) {
-      address = body.address.trim();
-    } else if (body.address === undefined || body.address === null || body.address === "") {
-      address = resolveIdentity(tgId).owner;
-    } else {
+    if (typeof body.address !== "string" || !ADDRESS_RE.test(body.address.trim())) {
       return reply.status(400).send({ error: "invalid_address" });
     }
+    const address = body.address.trim();
 
     const base = config.indexerInternalUrl.replace(/\/$/, "");
     const target = `${base}/public/demo-faucet`;

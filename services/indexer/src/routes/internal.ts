@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
+import { normalizeQuestion, sanitizeBillboardMessage } from "@darkbox/shared";
 import { query, withTransaction } from "../db.js";
 
 
@@ -159,42 +160,69 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // ── Billboard (defense-in-depth) ──────────────────────────────────────
+      // The Python agents already gate + sanitize, but the indexer is the trust
+      // boundary for any client: re-sanitize and drop hidden-state leaks.
       let billboardCreated = false;
+      let billboardRejected: string | null = null;
       if (output.billboardPost?.message) {
-        await client.query(
-          `INSERT INTO billboards (message_id, agent_id, message, run_id, turn)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (message_id) DO UPDATE SET message = EXCLUDED.message`,
-          [`${runId}-${agentId}-${turn}`, agentId, output.billboardPost.message, runId, turn],
-        );
-        billboardCreated = true;
+        const sanitized = sanitizeBillboardMessage(output.billboardPost.message);
+        if (sanitized.ok) {
+          await client.query(
+            `INSERT INTO billboards (message_id, agent_id, message, run_id, turn)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (message_id) DO UPDATE SET message = EXCLUDED.message`,
+            [`${runId}-${agentId}-${turn}`, agentId, sanitized.message, runId, turn],
+          );
+          billboardCreated = true;
+        } else {
+          billboardRejected = sanitized.reason === "hidden_state_leak"
+            ? `hidden_state_leak:${sanitized.leakPattern ?? "unknown"}`
+            : sanitized.reason ?? "rejected";
+        }
       }
 
+      // ── Market proposal (admin-queue-only, deduped, never on-chain) ───────
+      // Proposals are written ONLY to the market_proposals queue with status
+      // 'proposed'. This path NEVER creates a markets row from a proposal —
+      // market creation requires the admin decision endpoint + factory deploy.
       let proposalCreated = false;
+      let proposalRejected: string | null = null;
       const proposal = output.marketProposal;
       if (proposal && typeof proposal === "object") {
         const question = asText(proposal["question"]);
         if (question) {
-          await client.query(
-            `INSERT INTO market_proposals (
-               proposal_id, agent_id, question, description, outcomes, resolve_by,
-               resolution_source, rationale, run_id, turn
-             ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
-             ON CONFLICT (proposal_id) DO NOTHING`,
-            [
-              `${runId}-${agentId}-${turn}`,
-              agentId,
-              question,
-              asText(proposal["description"]),
-              JSON.stringify(proposal["outcomes"] ?? ["YES", "NO"]),
-              asText(proposal["resolveBy"]),
-              asText(proposal["resolutionSource"]),
-              asText(proposal["rationale"]),
-              runId,
-              turn,
-            ],
+          const normalized = normalizeQuestion(question);
+          const existing = await client.query<{ question: string }>(
+            `SELECT question FROM market_proposals WHERE status IN ('proposed','approved','deployed')
+             UNION ALL
+             SELECT question FROM markets`,
           );
-          proposalCreated = true;
+          const isDuplicate = existing.rows.some((row) => normalizeQuestion(asText(row.question)) === normalized);
+          if (isDuplicate) {
+            proposalRejected = "duplicate";
+          } else {
+            await client.query(
+              `INSERT INTO market_proposals (
+                 proposal_id, agent_id, question, description, outcomes, resolve_by,
+                 resolution_source, rationale, status, run_id, turn
+               ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 'proposed', $9, $10)
+               ON CONFLICT (proposal_id) DO NOTHING`,
+              [
+                `${runId}-${agentId}-${turn}`,
+                agentId,
+                question,
+                asText(proposal["description"]),
+                JSON.stringify(proposal["outcomes"] ?? ["YES", "NO"]),
+                asText(proposal["resolveBy"]),
+                asText(proposal["resolutionSource"]),
+                asText(proposal["rationale"]),
+                runId,
+                turn,
+              ],
+            );
+            proposalCreated = true;
+          }
         }
       }
 
@@ -211,7 +239,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
          WHERE key='positions_opened'`,
       );
 
-      return { ordersCreated, ordersCancelled, billboardCreated, proposalCreated };
+      return { ordersCreated, ordersCancelled, billboardCreated, billboardRejected, proposalCreated, proposalRejected };
     });
 
     return { status: "ok", agentId, runId, turn, ...result };

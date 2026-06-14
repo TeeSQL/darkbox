@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "maxOrderSize": 2,
+  "maxPositionSize": 12,
+  "minEdgeToTake": 0.07,
+  "quoteSpread": 0.09,
+  "takeProfitEdge": 0.1,
+  "billboardStyle": "cryptic alpha leak"
+}

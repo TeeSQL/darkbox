@@ -19,3 +19,7 @@ infra/node/data/
 packages/contracts/out/
 packages/contracts/cache/
 packages/contracts/broadcast/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/

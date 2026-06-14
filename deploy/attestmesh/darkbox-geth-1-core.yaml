@@ -94,6 +94,17 @@ services:
       - SHOWCASE_EVENT_SLUG=newyork2025
       - SHOWCASE_INTERVAL_SECONDS=900
       - SHOWCASE_OUT=/data/ethglobal
+      # Resolver agent (propose-then-confirm): reads markets + snapshots, asks the
+      # Phala confidential-LLM brain, writes resolution dossiers to
+      # /data/resolutions for human approval. Submits NO on-chain tx.
+      - RESOLVER_ENABLED=true
+      - RESOLVER_DATA=/data
+      - RESOLVER_MIN_CONFIDENCE=0.7
+      # Phala confidential-LLM endpoint (sealed -e values; empty = resolver skips
+      # the brain pass but the showcase pull still runs).
+      - PHALA_LLM_URL=${PHALA_LLM_URL}
+      - PHALA_LLM_MODEL=${PHALA_LLM_MODEL}
+      - PHALA_LLM_API_KEY=${PHALA_LLM_API_KEY}
     volumes:
       - showcase_data:/data
 

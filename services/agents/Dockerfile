@@ -31,6 +31,9 @@ USER darkbox
 
 ENV SHOWCASE_EVENT_SLUG=newyork2025 \
     SHOWCASE_INTERVAL_SECONDS=900 \
-    SHOWCASE_OUT=/data/ethglobal
+    SHOWCASE_OUT=/data/ethglobal \
+    RESOLVER_ENABLED=true \
+    RESOLVER_DATA=/data \
+    RESOLVER_MIN_CONFIDENCE=0.7
 
 CMD ["sh", "services/agents/showcase-loop.sh"]

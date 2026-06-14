@@ -11,7 +11,8 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "demo:random": "tsx src/cli.ts random --turns 5",
     "demo:venice": "tsx src/cli.ts venice --turns 1",
-    "showcase": "tsx src/cli.ts showcase"
+    "showcase": "tsx src/cli.ts showcase",
+    "resolve": "tsx src/cli.ts resolve"
   },
   "dependencies": {
     "@darkbox/shared": "workspace:*"

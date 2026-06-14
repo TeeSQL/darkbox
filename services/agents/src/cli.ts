@@ -7,6 +7,8 @@ import { createRandomStrategy, randomStrategyKinds, type RandomAgentKind } from 
 import { validateTurnOutput } from './validate.js';
 import { createVeniceStrategy } from './venice.js';
 import { cacheEventProjects, DEFAULT_EVENT_SLUG } from './ethglobal.js';
+import { createPhalaBrain } from './phalaBrain.js';
+import { runResolverPass } from './resolver.js';
 
 function loadDotEnv(filePath: string): void {
   if (!fs.existsSync(filePath)) return;
@@ -49,6 +51,33 @@ async function main(): Promise<void> {
     const eventSlug = argValue('--event', DEFAULT_EVENT_SLUG);
     const out = argValue('--out', path.resolve(process.cwd(), '../../data/ethglobal'));
     const result = await cacheEventProjects(eventSlug, out, (msg) => console.error(msg));
+    console.log(JSON.stringify({ mode, ...result }, null, 2));
+    return;
+  }
+
+  if (mode === 'resolve') {
+    // Propose-then-confirm market resolution. Reads markets from the indexer +
+    // cached ETHGlobal snapshots, asks the Phala brain, writes dossiers. Never
+    // submits an on-chain tx.
+    const eventSlug = argValue('--event', DEFAULT_EVENT_SLUG);
+    const dataRoot = argValue('--data', path.resolve(process.cwd(), '../../data'));
+    const indexerInternalUrl =
+      process.env['INDEXER_INTERNAL_URL'] ?? 'http://localhost:8080/internal';
+    const brain = createPhalaBrain();
+    if (!brain) {
+      console.error('resolve: PHALA_LLM_URL/PHALA_LLM_API_KEY not set; skipping resolution pass');
+      console.log(JSON.stringify({ mode, skipped: 'phala_not_configured' }, null, 2));
+      return;
+    }
+    const result = await runResolverPass({
+      indexerInternalUrl,
+      showcaseDir: path.join(dataRoot, 'ethglobal'),
+      eventSlug,
+      outDir: dataRoot,
+      brain,
+      minConfidence: Number(argValue('--min-confidence', process.env['RESOLVER_MIN_CONFIDENCE'] ?? '0.7')),
+      log: (msg) => console.error(msg),
+    });
     console.log(JSON.stringify({ mode, ...result }, null, 2));
     return;
   }

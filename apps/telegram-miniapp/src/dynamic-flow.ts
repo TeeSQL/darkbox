@@ -22,6 +22,14 @@ const statusEl = document.querySelector<HTMLElement>('#status');
 const outputEl = document.querySelector<HTMLElement>('#output');
 const createButton = document.querySelector<HTMLButtonElement>('#create');
 
+// Deep-link from the Daemon Hall stake chips: `?amount=` prefills the funding
+// amount (clamped to the hosted-flow test max of 25 USDC).
+const amountInput = document.querySelector<HTMLInputElement>('#amount');
+const prefillAmount = Number(new URLSearchParams(window.location.search).get('amount'));
+if (amountInput && Number.isFinite(prefillAmount) && prefillAmount > 0) {
+  amountInput.value = String(Math.min(prefillAmount, 25));
+}
+
 const deposit = new Deposit({
   signer: '/api/blink/sign-payment',
   debug: true,

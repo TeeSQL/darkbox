@@ -172,10 +172,58 @@ async function prepareDeposit(amountUsd) {
   }
 }
 
+// ── Funding CTA: deep-link the stake chips to the live funding lab ──────────
+const addHeatCard = document.querySelector('#add-heat-card');
+const stakeSubEl = document.querySelector('#stake-sub');
+
+function fundingTopUp() {
+  // Hosted Blink flow caps test deposits at 25 USDC; clamp the top-up to it.
+  return Math.min(Math.max(0, selectedStake - 5), 25);
+}
+
+function openFundingLab() {
+  const amt = fundingTopUp();
+  if (amt <= 0) return;
+  // Same-origin: the funding lab routes USDC through the hosted flow into the
+  // Base USDC bridge; the watcher credits shadow balance to this Telegram user.
+  window.location.href = `/dynamic-flow.html?amount=${amt}`;
+}
+
+function syncFundingCta() {
+  if (stakeSubEl) {
+    stakeSubEl.textContent = gw()
+      ? 'live — deposits route to the Base USDC bridge.'
+      : 'prototype — no wallet, no backend.';
+  }
+  if (!addHeatCard) return;
+  const fundable = selectedStake > 5 && Boolean(gw());
+  addHeatCard.classList.toggle('fundable', fundable);
+  if (fundable) {
+    addHeatCard.setAttribute('role', 'button');
+    addHeatCard.setAttribute('tabindex', '0');
+    addHeatCard.setAttribute('aria-label', `Fund $${fundingTopUp()} to your daemon via the Base bridge`);
+  } else {
+    addHeatCard.removeAttribute('role');
+    addHeatCard.removeAttribute('tabindex');
+    addHeatCard.removeAttribute('aria-label');
+  }
+}
+
+addHeatCard?.addEventListener('click', () => {
+  if (selectedStake > 5 && gw()) openFundingLab();
+});
+addHeatCard?.addEventListener('keydown', (event) => {
+  if ((event.key === 'Enter' || event.key === ' ') && selectedStake > 5 && gw()) {
+    event.preventDefault();
+    openFundingLab();
+  }
+});
+
 function bootLive() {
   if (!gw()) return;
   refreshSelf();
   refreshPublic();
+  syncFundingCta();
   window.setInterval(refreshPublic, 15000);
 }
 
@@ -1047,13 +1095,14 @@ stakeButtons.forEach((button) => {
     selectedStake = Number(button.getAttribute('data-stake') || 5);
     stakeButtons.forEach((choice) => choice.classList.toggle('on', choice === button));
     renderPrivateState();
+    syncFundingCta();
     // Above the house stake, ready a real deposit intent against the live bridge
     // escrow so the funding step can move USDC and credit shadow balance.
     if (selectedStake > 5 && gw()) {
-      const topUp = selectedStake - 5;
+      const topUp = fundingTopUp();
       prepareDeposit(topUp).then((intent) => {
         if (intent && stakeEncourageEl) {
-          stakeEncourageEl.textContent = `+$${topUp} ready — fund to your daemon's bridge address to go live.`;
+          stakeEncourageEl.textContent = `tap to fund $${topUp} to your daemon via the Base bridge.`;
         }
       });
     }

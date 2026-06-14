@@ -1012,3 +1012,5 @@ html.bestiary-html .daemon-stage {
     animation-duration: 10s, 9s;
   }
 }
+.action-card.fundable { cursor: pointer; }
+.action-card.fundable:active { transform: scale(0.99); }

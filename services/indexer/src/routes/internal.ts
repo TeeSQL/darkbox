@@ -281,6 +281,80 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
+  // ─── ETHGlobal context (internal agent/operator feed) ────────────────────
+
+  app.get("/internal/context/ethglobal", async () => {
+    const events = await query(
+      `SELECT e.*,
+              COALESCE(p.project_count, 0)::int AS project_count,
+              r.id AS latest_run_id,
+              r.status AS latest_run_status,
+              r.error AS latest_run_error,
+              r.created_at AS latest_run_created_at
+       FROM ethglobal_events e
+       LEFT JOIN (
+         SELECT event_slug, COUNT(*) AS project_count
+         FROM ethglobal_projects
+         GROUP BY event_slug
+       ) p ON p.event_slug = e.event_slug
+       LEFT JOIN LATERAL (
+         SELECT id, status, error, created_at
+         FROM ethglobal_ingest_runs
+         WHERE event_slug = e.event_slug
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) r ON TRUE
+       ORDER BY e.updated_at DESC`,
+    );
+    return events.rows;
+  });
+
+  app.get<{ Params: { eventSlug: string } }>(
+    "/internal/context/ethglobal/:eventSlug/projects",
+    async (req) => {
+      const limit = Math.min(Number((req.query as Record<string, string>)["limit"] ?? "500"), 1000);
+      const search = asText((req.query as Record<string, string>)["q"]);
+      const params: unknown[] = [req.params.eventSlug.toLowerCase()];
+      let where = "WHERE event_slug = $1";
+      if (search) {
+        params.push(`%${search}%`);
+        where += ` AND (name ILIKE $${params.length} OR shortest_description ILIKE $${params.length})`;
+      }
+      params.push(limit);
+
+      const result = await query(
+        `SELECT event_slug, external_project_id, external_project_slug, name,
+                shortest_description, sponsors, prizes, source_url, raw_summary,
+                fetched_at, updated_at
+         FROM ethglobal_projects
+         ${where}
+         ORDER BY name ASC
+         LIMIT $${params.length}`,
+        params,
+      );
+      return result.rows;
+    },
+  );
+
+  app.get<{ Params: { eventSlug: string; idOrSlug: string } }>(
+    "/internal/context/ethglobal/:eventSlug/projects/:idOrSlug",
+    async (req, reply) => {
+      const result = await query(
+        `SELECT event_slug, external_project_id, external_project_slug, name,
+                shortest_description, sponsors, prizes, source_url, raw_summary,
+                fetched_at, updated_at
+         FROM ethglobal_projects
+         WHERE event_slug = $1
+           AND (external_project_slug = $2 OR external_project_id = $2)`,
+        [req.params.eventSlug.toLowerCase(), req.params.idOrSlug.toLowerCase()],
+      );
+      if (result.rows.length === 0) {
+        return reply.status(404).send({ error: "ETHGlobal project not found" });
+      }
+      return result.rows[0];
+    },
+  );
+
   // ─── Markets ─────────────────────────────────────────────────────────────
 
   app.get("/internal/markets", async () => {

@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import { apiRoutes } from "./routes/api.js";
 import { publicProxyRoutes } from "./routes/publicProxy.js";
+import { demoFaucetProxyRoutes } from "./routes/demoFaucet.js";
 import { config } from "./config.js";
 
 export async function buildServer() {
@@ -27,6 +28,11 @@ export async function buildServer() {
   // Read-only public spectator data (indexer /public/*) over the single public
   // edge — unauthenticated, registered outside the auth gate.
   await app.register(publicProxyRoutes);
+
+  // Telegram-authed public edge for the demo faucet. It is `/public/*` (outside
+  // the `/api/*` auth gate) but runs its own initData check and forwards a
+  // trusted `{ address }` + tg id to the indexer's mint endpoint.
+  await app.register(demoFaucetProxyRoutes);
 
   // All authenticated player endpoints live under the encapsulated auth gate.
   await app.register(apiRoutes);

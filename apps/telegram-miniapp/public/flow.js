@@ -27,6 +27,7 @@ const daemonNameEl = document.querySelector('#daemon-name');
 const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
 const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
 const waitDaemonImageEl = document.querySelector('#daemon-wait-image');
+const waitDaemonVideoEl = document.querySelector('#daemon-wait-video');
 const daemonBalanceEl = document.querySelector('#daemon-balance');
 const daemonPnlEl = document.querySelector('#daemon-pnl');
 const daemonPnlNoteEl = document.querySelector('#daemon-pnl-note');
@@ -157,8 +158,14 @@ function isReturningPlayer(self) {
 
 function applyReturningState(self) {
   const returning = isReturningPlayer(self);
-  if (chipsEl) chipsEl.hidden = returning;
-  if (feedCtaEl) feedCtaEl.hidden = !returning;
+  if (chipsEl) chipsEl.hidden = true; // chips retired; funding is the $5 house + Feed the daemon
+  if (feedCtaEl) feedCtaEl.hidden = false; // always offer an optional top-up on the pact
+  const promoLine = document.querySelector('#seal-promo-line');
+  if (promoLine) {
+    promoLine.innerHTML = returning
+      ? 'your <strong>$5 is in play</strong> — feed more to go bigger'
+      : '<strong>your first $5 is on the house</strong> — free to play';
+  }
 }
 
 function openFeedDeposit() {
@@ -309,7 +316,7 @@ const murmurs = [
 const activityLines = [
   'your daemon will keep trading for you until reveal. Trying to answer questions... who will win the hackathon?',
   'it is whisper-quiet here; the hall is not.',
-  'the room outside keeps making markets without showing its hands.',
+  'inside the dark hall, your daemon is fighting for your PnL.',
   'your daemon can react while your screen is dark.',
 ];
 const marketQuestions = [
@@ -398,7 +405,7 @@ function rememberSealedReceipt(textOverride) {
   writeSealedReceipts(receipts);
 }
 
-function renderSealedTerminal() {
+function renderSealedTerminal(animateTop) {
   if (!terminalLogEl) return;
   const receipts = readSealedReceipts();
   if (!receipts.length) {
@@ -408,7 +415,7 @@ function renderSealedTerminal() {
   terminalLogEl.innerHTML = receipts.map((row, index) => {
     const when = row.sealedAt ? new Date(row.sealedAt).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'time sealed';
     return `
-      <div class="terminal-line">
+      <div class="terminal-line${animateTop && index === 0 ? ' is-new' : ''}">
         <span class="terminal-prompt">${String(index + 1).padStart(2, '0')}&gt;</span>
         <span class="terminal-main">
           ${escapeHtml(row.fingerprint || '0xsealed')} · ${escapeHtml(row.daemon || 'daemon')} · $${escapeHtml(row.stake || 5)}
@@ -447,6 +454,10 @@ function stableVisualSeed() {
   }
 }
 
+function daemonVideoFor(image) {
+  return image.replace('/daemons/', '/daemons/videos/').replace(/\.(webp|png|jpe?g)$/i, '.mp4');
+}
+
 function setSelectedDaemon({ image, name, seed }) {
   selectedDaemon.image = image;
   selectedDaemon.name = name;
@@ -454,6 +465,24 @@ function setSelectedDaemon({ image, name, seed }) {
   if (waitDaemonImageEl) {
     if (waitDaemonImageEl.getAttribute('src') !== selectedDaemon.image) waitDaemonImageEl.src = selectedDaemon.image;
     waitDaemonImageEl.alt = `${selectedDaemon.name} daemon portrait`;
+  }
+  if (waitDaemonVideoEl) {
+    const videoSrc = daemonVideoFor(selectedDaemon.image);
+    waitDaemonVideoEl.poster = selectedDaemon.image;
+    waitDaemonVideoEl.setAttribute('aria-label', `${selectedDaemon.name} daemon animation`);
+    waitDaemonVideoEl.oncanplay = () => {
+      waitDaemonVideoEl.hidden = false;
+      waitDaemonVideoEl.play().catch(() => {});
+    };
+    waitDaemonVideoEl.onerror = () => {
+      waitDaemonVideoEl.hidden = true;
+      waitDaemonVideoEl.removeAttribute('src');
+    };
+    if (waitDaemonVideoEl.getAttribute('src') !== videoSrc) {
+      waitDaemonVideoEl.hidden = true;
+      waitDaemonVideoEl.src = videoSrc;
+      waitDaemonVideoEl.load();
+    }
   }
   const revealKey = `${selectedDaemon.image}|${selectedDaemon.name}|${selectedDaemon.seed}`;
   if (revealKey !== dispatchedRevealKey) {
@@ -536,13 +565,13 @@ function renderPrivateState() {
   if (live.online) {
     if (metricVolumeEl) metricVolumeEl.textContent = formatUsdK(g ? g.total_volume_usdc : 0);
     if (metricTradesEl) metricTradesEl.textContent = String((g && g.total_trades) ?? 0);
-    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_agents) ?? 0);
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.positions_opened) ?? 0);
+    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_markets) ?? 0); // MARKETS
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.active_agents) ?? 0); // DAEMONS
   } else {
     if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
     if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
-    if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
+    if (metricSealedEl) metricSealedEl.textContent = String(6 + (h % 10)); // MARKETS (mock)
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(76 + (h % 35)); // DAEMONS (mock)
   }
   renderMarkets(PUBLIC_MARKET_SEED);
   renderLeaderboard(visualSeed, ownName);
@@ -799,10 +828,6 @@ function handleTerminalInput() {
   autosizeTerminal();
   const hasText = Boolean(terminalInput?.value.trim());
   if (terminalSealButton) terminalSealButton.disabled = !hasText;
-  if (!terminalWhisperStatus || wantedListening || listening) return;
-  terminalWhisperStatus.textContent = hasText
-    ? 'review it. sealing will redact the words forever.'
-    : 'click the mic to record. click again to stop.';
 }
 
 function sealTerminalWhisper() {
@@ -822,7 +847,7 @@ function sealTerminalWhisper() {
   });
   if (terminalInput) terminalInput.value = '';
   handleTerminalInput();
-  renderSealedTerminal();
+  renderSealedTerminal(true); // slide the new receipt in at the top
   if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'sealed to your existing daemon. message redacted forever.';
 }
 
@@ -966,8 +991,79 @@ function stopVoice(statusText = 'recording stopped. review before sealing.') {
   handleTerminalInput();
 }
 
+// Terminal mic: same server-STT path as the main whisper mic, targeting the
+// terminal input (Telegram-Android can't run Web Speech → record + /api/stt).
+let tsttStream = null;
+let tsttRecorder = null;
+let tsttChunks = [];
+let tsttRecording = false;
+
+async function startTerminalServerStt() {
+  try {
+    tsttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
+    return;
+  }
+  tsttChunks = [];
+  tsttRecording = true;
+  setTerminalVoiceState('recording-toggle');
+  try {
+    tsttRecorder = new MediaRecorder(tsttStream);
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording — type to finish.';
+    return;
+  }
+  tsttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) tsttChunks.push(e.data); };
+  tsttRecorder.onstop = () => { void transcribeTerminalStt(); };
+  try { tsttRecorder.start(); } catch (_) {}
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording. tap the mic again when you’re done.';
+}
+
+function stopTerminalServerStt() {
+  tsttRecording = false;
+  setTerminalVoiceState('idle');
+  try { if (tsttRecorder && tsttRecorder.state !== 'inactive') tsttRecorder.stop(); } catch (_) {}
+}
+
+async function transcribeTerminalStt() {
+  const stream = tsttStream;
+  tsttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  const chunks = tsttChunks;
+  tsttChunks = [];
+  if (!chunks.length) { releaseMic(); return; }
+  const type = (tsttRecorder && tsttRecorder.mimeType) || 'audio/webm';
+  const blob = new Blob(chunks, { type });
+  releaseMic();
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcribing…';
+  terminalVoiceButton?.classList.add('transcribing');
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
+    const j = await res.json().catch(() => ({}));
+    const text = (j && typeof j.text === 'string') ? j.text.trim() : '';
+    if (text) {
+      const base = terminalInput?.value.trim() || '';
+      if (terminalInput) terminalInput.value = base ? `${base} ${text}` : text;
+      handleTerminalInput();
+      if (terminalWhisperStatus) terminalWhisperStatus.textContent = '';
+    } else if (terminalWhisperStatus) {
+      terminalWhisperStatus.textContent = 'couldn’t make out words — try again or type.';
+    }
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcription failed — type instead.';
+  } finally {
+    terminalVoiceButton?.classList.remove('transcribing');
+  }
+}
+
 async function startVoice(event) {
   event.preventDefault();
+  if (USE_SERVER_STT) {
+    if (tsttRecording) stopTerminalServerStt();
+    else await startTerminalServerStt();
+    return;
+  }
   if (wantedListening || listening) stopVoice();
   else await beginVoice();
 }
@@ -1105,8 +1201,10 @@ async function startOpenMicFallback() {
   return true;
 }
 
-// Telegram-Android: record audio with MediaRecorder (one mic permission) and
-// transcribe it server-side on stop; the words land in the textarea.
+// Telegram-Android: record audio with MediaRecorder and transcribe it
+// server-side on stop; the words land in the textarea. Each recording acquires
+// its own stream and stops it on finish (reusing a kept-alive stream broke
+// recording in the Telegram webview), so the webview re-prompts per recording.
 async function startServerStt() {
   try {
     sttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -1117,8 +1215,10 @@ async function startServerStt() {
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
     return false;
   }
-  rememberMicGrantThisSession();
-  setMainMicGrantState(true);
+  // NB: do NOT call rememberMicGrantThisSession()/setMainMicGrantState() here —
+  // the former dispatches an event that wakes the landing + wait mic-reactive
+  // visuals (a SECOND getUserMedia → the double permission prompt), and the
+  // latter strips the 'listening' class, hiding the recording state.
   sttChunks = [];
   try {
     sttRecorder = new MediaRecorder(sttStream);
@@ -1145,6 +1245,7 @@ async function transcribeStt() {
   const blob = new Blob(chunks, { type });
   releaseMic();
   if (whisperStatus) whisperStatus.textContent = 'transcribing…';
+  voiceButton?.classList.add('transcribing'); // spinner while STT runs
   try {
     const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
     const j = await res.json().catch(() => ({}));
@@ -1159,6 +1260,8 @@ async function transcribeStt() {
     }
   } catch (_) {
     if (whisperStatus) whisperStatus.textContent = 'transcription failed — type your whisper.';
+  } finally {
+    voiceButton?.classList.remove('transcribing');
   }
 }
 

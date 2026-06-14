@@ -1077,3 +1077,90 @@ body.feed-open { overflow: hidden; }
   cursor: not-allowed; backdrop-filter: blur(2px);
 }
 @media (max-width: 520px) { .feed-blink:not(:empty) { min-height: 520px; } .feed-cta { max-width: none; } }
+
+/* ── Whisper mic: unmistakable idle / recording / transcribing states ──────── */
+/* Tidier resting button (the big 8px ring read as misaligned/bulky). */
+.voice-button { box-shadow: 0 0 0 3px rgba(255,255,255,.02), 0 10px 26px rgba(0,0,0,.3); }
+.whisper-field .voice-button { align-self: center; }
+
+/* Recording: solid red, white stop-square, expanding ring. */
+.voice-button.listening {
+  color: #fff;
+  border-color: #ff4a7e;
+  background: radial-gradient(circle at 50% 40%, rgba(255,74,126,.96), rgba(214,40,90,.94));
+  animation: recRing 1.25s ease-out infinite;
+}
+.voice-button.listening svg { display: none; }
+.voice-button.listening::before {
+  content: ""; width: 20px; height: 20px; border-radius: 5px; background: #fff;
+  box-shadow: 0 0 14px rgba(255,255,255,.55);
+}
+@keyframes recRing {
+  0%   { box-shadow: 0 0 0 0 rgba(255,74,126,.55), 0 10px 26px rgba(0,0,0,.32); }
+  70%  { box-shadow: 0 0 0 16px rgba(255,74,126,0), 0 10px 26px rgba(0,0,0,.32); }
+  100% { box-shadow: 0 0 0 0 rgba(255,74,126,0), 0 10px 26px rgba(0,0,0,.32); }
+}
+
+/* Transcribing: violet spinner while STT runs (replaces the mic glyph). */
+.voice-button.transcribing {
+  color: var(--violet); border-color: rgba(139,123,255,.6);
+  background: rgba(139,123,255,.12); animation: none;
+}
+.voice-button.transcribing svg { display: none; }
+.voice-button.transcribing::before {
+  content: ""; width: 26px; height: 26px; border-radius: 999px;
+  border: 3px solid rgba(139,123,255,.22); border-top-color: var(--violet);
+  animation: micSpin .8s linear infinite;
+}
+@keyframes micSpin { to { transform: rotate(360deg); } }
+
+/* ── Pact page: the deal list ──────────────────────────────────────────────── */
+.deal-list { width: 100%; margin: 24px 0 6px; padding: 0; list-style: none; display: grid; gap: 14px; text-align: left; }
+.deal-list li { position: relative; padding-left: 22px; color: var(--silver); font-size: 14px; line-height: 1.5; }
+.deal-list li::before { content: "›"; position: absolute; left: 4px; top: 0; color: var(--violet); font-weight: 700; }
+.deal-list strong { color: var(--bone); font-weight: 600; }
+.deal-list + .feed-cta { margin-top: 22px; }
+
+/* Wait page: single remaining action card spans full width (Telegram-pings card removed). */
+.after-card-grid-single { grid-template-columns: 1fr; }
+
+/* ── Prominent floating mic (opens the whisper modal) ──────────────────────── */
+.sealed-terminal-button {
+  width: 34px; height: 34px;
+  color: var(--bone);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(20, 20, 28, 0.82);
+  animation: micGlow 2.6s ease-in-out infinite;
+}
+@keyframes micGlow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 0 10px rgba(255,255,255,.18), 0 8px 22px rgba(0,0,0,.38); }
+  50%      { box-shadow: 0 0 0 2px rgba(255,255,255,.07), 0 0 18px rgba(255,255,255,.32), 0 8px 22px rgba(0,0,0,.38); }
+}
+.sealed-terminal-button svg { width: 16px; height: 16px; }
+
+/* ── Whisper modal: full-page, dismissable via × ───────────────────────────── */
+.sealed-terminal-modal { place-items: stretch; padding: 0; background: rgba(0,0,0,.62); }
+.sealed-terminal-panel {
+  width: 100%; max-width: none; height: 100dvh; max-height: none;
+  border: 0; border-radius: 0;
+  padding: calc(16px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom));
+}
+.sealed-terminal-panel .terminal-close { width: 38px; height: 38px; font-size: 22px; }
+
+/* New sealed whisper slides in at the top of the terminal log. */
+@keyframes sealedSlideIn {
+  from { opacity: 0; transform: translateY(-14px); }
+  to   { opacity: 1; transform: none; }
+}
+.terminal-line.is-new { animation: sealedSlideIn 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .terminal-line.is-new { animation: none; } }
+
+/* Animated daemon loop overlays the static portrait when it can play. */
+.daemon-wait-portrait video {
+  position: absolute; inset: 0; z-index: 2;
+  width: 100%; height: 100%; object-fit: contain;
+  background: #101016;
+  filter: contrast(1.08) brightness(1.08) saturate(1.12);
+}
+.daemon-wait-portrait video[hidden] { display: none; }
+.daemon-wait-portrait.daemon-wait-alive video { animation: daemonWaitPhotoPulse 3.8s ease-in-out infinite; }

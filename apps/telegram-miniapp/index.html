@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260613-admin-console" />
+    <link rel="stylesheet" href="/styles.css?v=vid2" />
   </head>
   <body>
     <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
@@ -35,12 +35,12 @@
         <div class="topbar"><span class="wm-sm wm-home" data-go="v-landing" role="button" tabindex="0" aria-label="Back to start">Daemon Hall</span><span class="st"><span class="dot"></span><span id="whisper-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap">
           <div class="convo" aria-label="why you're here">
-            <p class="cline" id="whisper-thread">whisper your <span class="c-blind">daemon</span>'s orders.</p>
+            <p class="cline" id="whisper-thread">tell your <span class="c-blind">daemon</span> your predictions about the hackathon winners.</p>
           </div>
           <div class="whisper">
             <div class="whisper-field">
               <span class="prompt">&gt;</span>
-              <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>
+              <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="e.g. back the teams using a TEE; fade the overhyped ones" aria-label="whisper"></textarea>
               <button id="voice-button" class="voice-button" type="button" aria-label="Allow microphone for hall effects" aria-pressed="false">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
               </button>
@@ -57,29 +57,23 @@
       <section class="view" id="v-seal">
         <div class="topbar"><span class="wm-sm wm-home" data-go="v-landing" role="button" tabindex="0" aria-label="Back to start">Daemon Hall</span><span class="st"><span class="dot"></span><span id="seal-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap">
-          <div class="eyebrow">the pact waits</div>
-          <h2 class="headline">what you're agreeing to.</h2>
-          <div class="steps">
-            <div class="step"><span class="n">01</span><span class="x">your whisper is sealed</span></div>
-            <div class="step"><span class="n">02</span><span class="x">a fingerprint is posted — <span id="fingerprint" class="hash">0x9b813e...4d832d</span></span></div>
-            <div class="step"><span class="n">03</span><span class="x"><span class="tell">your key. your eyes only. not the house.</span></span></div>
-            <div class="step"><span class="n">04</span><span class="x">the house stakes you $5 — or add more before the hall opens</span></div>
-            <div class="step"><span class="n">05</span><span class="x">available cash is yours to claim Sunday afternoon</span></div>
-          </div>
-          <div class="chips" aria-label="Stake selection">
-            <button class="chip on" type="button" data-stake="5">$5 house</button>
-            <button class="chip" type="button" data-stake="25">$25</button>
-            <button class="chip" type="button" data-stake="100">$100</button>
-          </div>
-          <button class="feed-cta" id="feed-cta" type="button" hidden>
+          <div class="eyebrow">the deal</div>
+          <h2 class="headline">send your daemon to work.</h2>
+          <ul class="deal-list">
+            <li>it trades for you, following your orders</li>
+            <li id="seal-promo-line"><strong>your first $5 is on the house</strong> — free to play</li>
+            <li>feed it more whenever you want</li>
+            <li>winners revealed <strong>Sunday afternoon</strong></li>
+          </ul>
+          <button class="feed-cta" id="feed-cta" type="button">
             <span class="feed-cta-main">Feed the daemon $$</span>
-            <span class="feed-cta-sub">deposit USDC · pay from any chain</span>
+            <span class="feed-cta-sub">optional · deposit USDC, pay from any chain</span>
           </button>
-          <div class="sub" id="stake-sub">prototype — no wallet, no backend.</div>
+          <div class="sub" id="stake-sub">you can change its orders and top up any time.</div>
         </div></div>
         <div class="cmdbar">
-          <span class="hint">this can't be undone.</span>
-          <div class="actions"><button class="btn-primary" data-go="v-reveal">seal the pact <span class="ret">&#8629;</span></button></div>
+          <span class="hint">first $5 is on us.</span>
+          <div class="actions"><button class="btn-primary" data-go="v-reveal">send it to work <span class="ret">&#8629;</span></button></div>
         </div>
       </section>
 
@@ -125,28 +119,23 @@
             </div>
             <div class="daemon-wait-portrait daemon-wait-alive" aria-label="Your daemon portrait">
               <img id="daemon-wait-image" src="/daemons/rasp-05.webp" alt="your daemon portrait" />
+              <video id="daemon-wait-video" muted loop playsinline preload="metadata" poster="/daemons/rasp-05.webp" hidden></video>
             </div>
             <div class="wait-card-footer">
               <span id="daemon-murmur">▸ a daemon laughed without opening its mouth</span>
             </div>
           </div>
-          <div class="after-card-grid" aria-label="Next actions">
+          <div class="after-card-grid after-card-grid-single" aria-label="Next actions">
             <div class="action-card" id="add-heat-card">
-              <span class="k">ADD HEAT</span>
-              <strong>put more behind it</strong>
-              <span id="stake-encourage">+$25 changes the way the room feels.</span>
-            </div>
-            <div class="action-card alert-card">
-              <span class="k">TELEGRAM PINGS</span>
-              <strong>demo alerts armed</strong>
-              <span>big wins and relevant new markets.</span>
+              <span class="k">FEED THE DAEMON</span>
+              <strong>top up any time</strong>
+              <span id="stake-encourage">add USDC to give it more to trade with.</span>
             </div>
           </div>
         </div></div>
         <div class="cmdbar">
-          <span class="hint">status, hall, whisper: one tap away.</span>
+          <span class="hint"></span>
           <div class="actions">
-            <button class="btn-ghost" data-go="v-whisper">whisper again</button>
             <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
           </div>
         </div>
@@ -159,14 +148,14 @@
           <h2 class="headline">something is happening in the hall.</h2>
           <div class="sub">public signals only: size, trade count, new markets, coarse daemon pulse.</div>
           <div class="event-strip" aria-label="Public hall signals">
-            <div class="event-card hot"><span class="k">BIG WIN</span><strong id="hall-big-win">rugd spiked +17%</strong><span>Telegram would ping.</span></div>
+            <div class="event-card hot"><span class="k">BIG WIN</span><strong id="hall-big-win">rugd spiked +17%</strong><span>the hall noticed.</span></div>
             <div class="event-card"><span class="k">NEW MARKET</span><strong id="hall-new-market">consumer UX vs infra</strong><span id="hall-new-market-meta">opened minutes ago.</span></div>
           </div>
           <div class="stats">
             <div class="stat"><div class="k">VOLUME</div><div id="metric-volume" class="v">$14.4k</div></div>
             <div class="stat"><div class="k">TRADES</div><div id="metric-trades" class="v">405</div></div>
-            <div class="stat"><div class="k">SEALED</div><div id="metric-sealed" class="v">95</div></div>
-            <div class="stat"><div class="k">FINGERPRINTS</div><div id="metric-fingerprints" class="v">155</div></div>
+            <div class="stat"><div class="k">MARKETS</div><div id="metric-sealed" class="v">12</div></div>
+            <div class="stat"><div class="k">DAEMONS</div><div id="metric-fingerprints" class="v">95</div></div>
           </div>
           <div class="board market-board">
             <div class="board-title">MARKETS BY SIZE</div>
@@ -178,19 +167,11 @@
             <div class="brow head"><span class="rank">#</span><span class="dn">DAEMON</span><span class="pulse">PULSE</span></div>
             <div id="leaderboard-rows"></div>
           </div>
-          <div class="notification-stub" aria-label="Notification preferences">
-            <div>
-              <span class="k">REMIND ME IN TELEGRAM</span>
-              <strong>big wins + new relevant markets</strong>
-              <p>Demo preference only. Production wiring can subscribe the bot to public-safe events.</p>
-            </div>
-            <button id="notify-toggle" class="mini-toggle" type="button" aria-pressed="true">on</button>
-          </div>
           <div class="board-note">markets show public size and trade counts first. daemon names and coarse pulse only — private details stay sealed until the boxes open.</div>
         </div></div>
         <div class="cmdbar">
           <span class="hint">you can feel the crowd you cannot read.</span>
-          <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; status</button><button class="btn-primary" data-go="v-whisper">new whisper <span class="ret">&#8629;</span></button></div>
+          <div class="actions"><button class="btn-primary" data-go="v-wait">&#8592; back to your daemon</button></div>
         </div>
       </section>
     </main>
@@ -213,7 +194,7 @@
             </button>
           </div>
           <div class="terminal-compose-actions">
-            <span id="terminal-whisper-status" class="terminal-compose-status">click the mic to record. click again to stop.</span>
+            <span id="terminal-whisper-status" class="terminal-compose-status"></span>
             <button id="terminal-seal-whisper" class="btn-ghost terminal-send" type="button" disabled>seal to daemon <span class="ret">&#8629;</span></button>
           </div>
         </div>
@@ -228,6 +209,6 @@
     <script src="/src/daemon-reveal.ts" type="module"></script>
     <script src="/src/gateway-boot.ts" type="module"></script>
     <script src="/src/blink-checkout.ts" type="module"></script>
-    <script src="/flow.js?v=20260614-feed-daemon-android-mic-stt" type="module"></script>
+    <script src="/flow.js?v=vid2" type="module"></script>
   </body>
 </html>

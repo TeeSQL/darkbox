@@ -26,9 +26,22 @@ export const config = {
   gameId: (process.env["GAME_ID"] ??
     "0x0000000000000000000000000000000000000000000000000000000000000001") as `0x${string}`,
   publicChainId: parseInt(process.env["PUBLIC_CHAIN_ID"] ?? "8453", 10),
-  // Public escrow/bridge address used to compose deposit instructions.
+  // Public escrow/bridge address used to compose deposit instructions. Defaults
+  // to the canonical Base USDC bridge escrow so the gateway intent, the miniapp
+  // Blink signer allowlist, and the Blink request all settle to the same place.
   bridgeAddress: (process.env["BRIDGE_ADDRESS"] ??
-    "0x0000000000000000000000000000000000000000") as `0x${string}`,
+    "0x55E84818FCEDc3E892A22b46715Ee2B4A947E138") as `0x${string}`,
+  // USDC token deposits settle in (Base USDC by default).
+  usdcAddress: (process.env["USDC_ADDRESS"] ??
+    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as `0x${string}`,
+  // How long a deposit order stays open before it expires unmatched.
+  depositIntentTtlMs: parseInt(process.env["DEPOSIT_INTENT_TTL_MS"] ?? "1800000", 10),
+  // Max USDC a single deposit order may request. MUST equal the miniapp Blink
+  // signer cap (BLINK_MAX_AMOUNT_USD) — the order's tagged exact amount has to
+  // stay <= this or the signer rejects it. The reconciliation tag (≤ $0.01) is
+  // reserved as headroom under this cap, so the effective max requestable is
+  // `depositMaxUsdc - 0.01`.
+  depositMaxUsdc: process.env["DEPOSIT_MAX_USDC"] ?? "25",
 
   // Team decision: withdrawals are LOCKED until settlement for the demo
   // (the isolated TEE signer is not the demo critical path). Default off.

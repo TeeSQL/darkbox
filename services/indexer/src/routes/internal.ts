@@ -346,6 +346,31 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
+  // Credited-balance read keyed by shadow account, used by the gateway to
+  // reconcile a deposit order against on-chain settlement. Sums across assets
+  // (one stablecoin in this game) so it's robust to asset-naming drift between
+  // services. Amounts are micro-USDC (uint as decimal string); zeros when the
+  // shadow account has no balance row yet.
+  app.get<{ Params: { shadowAccount: string } }>(
+    "/internal/balances/:shadowAccount",
+    async (req) => {
+      const shadowAccount = req.params.shadowAccount.toLowerCase();
+      const result = await query<{ total_deposited: string; current_balance: string }>(
+        `SELECT
+           COALESCE(SUM(total_deposited::numeric), 0)::text AS total_deposited,
+           COALESCE(SUM(current_balance::numeric), 0)::text AS current_balance
+         FROM balances WHERE shadow_account = $1`,
+        [shadowAccount],
+      );
+      const row = result.rows[0];
+      return {
+        shadowAccount,
+        totalDepositedMicro: row?.total_deposited ?? "0",
+        currentBalanceMicro: row?.current_balance ?? "0",
+      };
+    },
+  );
+
   app.get<{ Params: { agentId: string } }>(
     "/internal/agents/:agentId/state",
     async (req, reply) => {

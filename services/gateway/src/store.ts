@@ -41,6 +41,53 @@ export interface Registration {
   registeredAt: string;
 }
 
+/**
+ * An authenticated deposit order ("intent").
+ *
+ * Created when a returning player taps "Feed the daemon": it binds an off-chain
+ * order to the player's resolved identity (owner + shadowAccount) and a unique
+ * on-chain reconciliation tag, so a confirmed deposit to the shared bridge
+ * escrow can be attributed back to the right account — the same account the
+ * player keeps control of (synthetic owner now, upgradeable to a real wallet).
+ *
+ * The gateway is NOT the balance source of truth. Canonical attribution +
+ * shadow mint is the bridge's job; the gateway records the order and reconciles
+ * its own view from the indexer's credited-balance read.
+ */
+export type DepositIntentStatus =
+  | "intent_created"
+  | "awaiting_settlement"
+  | "credited"
+  | "expired";
+
+export interface DepositIntent {
+  depositOpId: string;
+  telegramId: string;
+  owner: Address;
+  shadowAccount: Hex;
+  /** Unique per-order reconciliation tag (bytes32) for operator/watcher match. */
+  depositRef: Hex;
+  chainId: number;
+  currency: string;
+  /** Requested amount in USDC decimal string, e.g. "25.00". */
+  amount: string;
+  /** Amount the player must send, base + unique micro-USDC tag, e.g. "25.004213". */
+  exactDepositAmount: string;
+  /** The unique micro-USDC tag added on top of `amount` (integer micro-USDC). */
+  amountTagMicroUsdc: number;
+  /** Public bridge escrow the deposit settles to. */
+  depositAddress: Address;
+  /** Token contract for the deposit (USDC). */
+  tokenAddress: Address;
+  /** Indexer total_deposited (micro-USDC) at creation, the reconciliation floor. */
+  baselineDepositedMicro: string;
+  status: DepositIntentStatus;
+  /** Set once the indexer shows the credit; null until then. */
+  creditedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export type WhisperStatus = "draft_ready" | "confirmed";
 
 export interface Whisper {
@@ -62,6 +109,7 @@ interface Store {
   invitesByTelegram: Map<string, InviteClaim>;
   registrationsByTelegram: Map<string, Registration>;
   whispers: Map<string, Whisper>;
+  depositIntents: Map<string, DepositIntent>;
 }
 
 const store: Store = {
@@ -69,6 +117,7 @@ const store: Store = {
   invitesByTelegram: new Map(),
   registrationsByTelegram: new Map(),
   whispers: new Map(),
+  depositIntents: new Map(),
 };
 
 /** Deterministic synthetic owner address for a Telegram-only (no-wallet) player. */
@@ -111,11 +160,19 @@ export const db = {
     store.whispers.set(w.whisperId, w);
     return w;
   },
+  getDepositIntent(depositOpId: string): DepositIntent | undefined {
+    return store.depositIntents.get(depositOpId);
+  },
+  putDepositIntent(intent: DepositIntent): DepositIntent {
+    store.depositIntents.set(intent.depositOpId, intent);
+    return intent;
+  },
   /** test-only reset */
   _reset(): void {
     store.identities.clear();
     store.invitesByTelegram.clear();
     store.registrationsByTelegram.clear();
     store.whispers.clear();
+    store.depositIntents.clear();
   },
 };

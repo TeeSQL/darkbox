@@ -241,7 +241,21 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 12px;
   letter-spacing: 0.14em;
 }
-.sealed .dot { width: 7px; height: 7px; margin-right: 2px; }
+.sealed .dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  background: var(--violet);
+  box-shadow: 0 0 8px var(--violet);
+  animation: sealedBreath 3.4s ease-in-out infinite;
+}
+@keyframes sealedBreath {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 5px rgba(139, 123, 255, 0.45); }
+  50% { opacity: 1; box-shadow: 0 0 15px rgba(139, 123, 255, 0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sealed .dot { animation: none; }
+}
 .sep { color: #54545e; }
 .loop-strip {
   width: min(680px, 100%);

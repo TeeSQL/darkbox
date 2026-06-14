@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_WEBROOT="${REMOTE_WEBROOT:-fran@204.168.190.248:/var/www/repo.box/subdomains/darkbox-mic}"
+# Default output now belongs to the standalone admin app, not the player Mini App.
+OUTPUT_PATH="${OUTPUT_PATH:-/home/xiko/darkbox/apps/admin-miniapp/dist/agent-feed.json}"
+REMOTE_WEBROOT="${REMOTE_WEBROOT:-}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
@@ -59,5 +61,12 @@ tail -n 240 "$LOG_DIR/$RUN_ID.jsonl" | jq -s \
 ' > "$TMP"
 
 python3 -m json.tool "$TMP" >/dev/null
-scp "$TMP" "$REMOTE_WEBROOT/agent-feed.json.tmp"
-ssh "${REMOTE_WEBROOT%%:*}" "mv /var/www/repo.box/subdomains/darkbox-mic/agent-feed.json.tmp /var/www/repo.box/subdomains/darkbox-mic/agent-feed.json && chmod 644 /var/www/repo.box/subdomains/darkbox-mic/agent-feed.json"
+mkdir -p "$(dirname "$OUTPUT_PATH")"
+install -m 0644 "$TMP" "$OUTPUT_PATH"
+
+if [ -n "$REMOTE_WEBROOT" ]; then
+  remote_host="${REMOTE_WEBROOT%%:*}"
+  remote_dir="${REMOTE_WEBROOT#*:}"
+  scp "$TMP" "$REMOTE_WEBROOT/agent-feed.json.tmp"
+  ssh "$remote_host" "mv '$remote_dir/agent-feed.json.tmp' '$remote_dir/agent-feed.json' && chmod 644 '$remote_dir/agent-feed.json'"
+fi

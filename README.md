@@ -11,6 +11,7 @@ Participants either claim a disposable invite link with a $5 starter bonus or de
 apps/
   frontend/        Public web UI. Talks only to public indexer endpoints.
   telegram-miniapp/ Stretch Telegram bot / Mini App public onboarding surface.
+  admin-miniapp/   Separate Daemon Hall operator/admin Mini App.
 
 services/
   indexer/         Hidden-chain indexer, internal trading APIs, public leaderboard APIs.
@@ -42,6 +43,7 @@ Each runtime service is intended to build into a separate Docker container for C
 - `darkbox-ens` — ENS subnames and commitment/reveal records.
 - `darkbox-frontend` — public UI; only talks to public indexer endpoints.
 - `darkbox-telegram-miniapp` — stretch Telegram bot / Mini App for hackathon onboarding; same public API boundary as frontend.
+- `darkbox-admin-miniapp` — separate operator/admin Mini App hosted on its own subdomain/bot; no admin pages belong in the player Mini App.
 - `darkbox-reveal` — final reveal bundle, replay, and bridge accounting artifacts.
 
 ## Design docs

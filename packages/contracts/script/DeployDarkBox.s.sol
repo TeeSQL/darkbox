@@ -14,9 +14,7 @@ import {PermissionRegistry} from "frontier/permissions/PermissionRegistry.sol";
 import {SyntheticUSDC} from "../src/SyntheticUSDC.sol";
 import {DarkBoxMarketFactory} from "../src/markets/DarkBoxMarketFactory.sol";
 import {DarkBoxBinaryMarket} from "../src/markets/DarkBoxBinaryMarket.sol";
-import {
-    CreateMarketParams, ResolverConfig, ResolverType, Outcome
-} from "../src/markets/MarketTypes.sol";
+import {CreateMarketParams, ResolverConfig, ResolverType, Outcome} from "../src/markets/MarketTypes.sol";
 
 /// @notice Deploys the full DarkBox stack on top of the real Frontier orderbook:
 ///         Frontier (registry/deployers/factory/lens/router), synthetic USDC,
@@ -27,17 +25,19 @@ import {
 /// - DEPLOYER_KEY : private key (defaults to anvil account[0])
 /// - DEPLOY_OUT   : output JSON path (defaults to deployments/darkbox-latest.json)
 /// - TAKER_FEE_BPS / MAKER_FEE_BPS : Frontier fees for the seeded books
+///   Defaults: 100 bps (1%) taker fee, 0 bps maker fee.
 contract DeployDarkBox is Script {
     // anvil account[0]
-    uint256 internal constant DEFAULT_KEY =
-        0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+    uint256 internal constant DEFAULT_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+    uint256 internal constant DEFAULT_MAKER_FEE_BPS = 0;
+    uint256 internal constant DEFAULT_TAKER_FEE_BPS = 100; // 1%
 
     function run() external {
         uint256 pk = vm.envOr("DEPLOYER_KEY", DEFAULT_KEY);
         address deployer = vm.addr(pk);
         string memory out = vm.envOr("DEPLOY_OUT", string("deployments/darkbox-latest.json"));
-        uint16 makerFeeBps = uint16(vm.envOr("MAKER_FEE_BPS", uint256(0)));
-        uint16 takerFeeBps = uint16(vm.envOr("TAKER_FEE_BPS", uint256(30)));
+        uint16 makerFeeBps = uint16(vm.envOr("MAKER_FEE_BPS", DEFAULT_MAKER_FEE_BPS));
+        uint16 takerFeeBps = uint16(vm.envOr("TAKER_FEE_BPS", DEFAULT_TAKER_FEE_BPS));
 
         vm.startBroadcast(pk);
 
@@ -71,7 +71,7 @@ contract DeployDarkBox is Script {
             description: "Canonical DarkBox hackathon-winner market.",
             metadataURI: "ipfs://darkbox/canonical-market.json",
             resolver: ResolverConfig({
-                resolverType: ResolverType.CanonicalWinner,
+                resolverType: ResolverType.AdminManual,
                 resolver: deployer,
                 sourceId: keccak256("hackathon-judges"),
                 data: ""
@@ -83,7 +83,7 @@ contract DeployDarkBox is Script {
         });
 
         (bytes32 marketId, address market) = pmFactory.createMarket(params);
-        (address yesBook, address noBook) = pmFactory.createBooks(marketId);
+        (address yesBook, address noBook) = pmFactory.getBooks(marketId);
 
         vm.stopBroadcast();
 
@@ -91,25 +91,61 @@ contract DeployDarkBox is Script {
 
         string memory json = string.concat(
             "{\n",
-            '  "chainId": ', vm.toString(block.chainid), ",\n",
-            '  "deployer": "', vm.toString(deployer), '",\n',
+            '  "chainId": ',
+            vm.toString(block.chainid),
+            ",\n",
+            '  "deployer": "',
+            vm.toString(deployer),
+            '",\n',
             '  "frontier": {\n',
-            '    "registry": "', vm.toString(address(registry)), '",\n',
-            '    "factory": "', vm.toString(address(frontier)), '",\n',
-            '    "lens": "', vm.toString(address(lens)), '",\n',
-            '    "router": "', vm.toString(address(router)), '"\n',
+            '    "registry": "',
+            vm.toString(address(registry)),
+            '",\n',
+            '    "factory": "',
+            vm.toString(address(frontier)),
+            '",\n',
+            '    "lens": "',
+            vm.toString(address(lens)),
+            '",\n',
+            '    "router": "',
+            vm.toString(address(router)),
+            '"\n',
+            "  },\n",
+            '  "feeConfig": {\n',
+            '    "makerFeeBps": ',
+            vm.toString(makerFeeBps),
+            ",\n",
+            '    "takerFeeBps": ',
+            vm.toString(takerFeeBps),
+            "\n",
             "  },\n",
             '  "darkbox": {\n',
-            '    "syntheticUSDC": "', vm.toString(address(sUSDC)), '",\n',
-            '    "marketFactory": "', vm.toString(address(pmFactory)), '"\n',
+            '    "syntheticUSDC": "',
+            vm.toString(address(sUSDC)),
+            '",\n',
+            '    "marketFactory": "',
+            vm.toString(address(pmFactory)),
+            '"\n',
             "  },\n",
             '  "canonicalMarket": {\n',
-            '    "marketId": "', vm.toString(marketId), '",\n',
-            '    "market": "', vm.toString(market), '",\n',
-            '    "yesToken": "', vm.toString(m.yesToken()), '",\n',
-            '    "noToken": "', vm.toString(m.noToken()), '",\n',
-            '    "yesBook": "', vm.toString(yesBook), '",\n',
-            '    "noBook": "', vm.toString(noBook), '"\n',
+            '    "marketId": "',
+            vm.toString(marketId),
+            '",\n',
+            '    "market": "',
+            vm.toString(market),
+            '",\n',
+            '    "yesToken": "',
+            vm.toString(m.yesToken()),
+            '",\n',
+            '    "noToken": "',
+            vm.toString(m.noToken()),
+            '",\n',
+            '    "yesBook": "',
+            vm.toString(yesBook),
+            '",\n',
+            '    "noBook": "',
+            vm.toString(noBook),
+            '"\n',
             "  }\n",
             "}\n"
         );

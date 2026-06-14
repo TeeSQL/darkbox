@@ -14,19 +14,18 @@ interface IERC20 {
 
 /// @title DarkBoxMarketFactory
 /// @notice Creates and tracks DarkBox binary prediction markets, enforces
-///         creation rules + creator bonds, registers Frontier books for the
+///         creation rules, automatically registers Frontier books for the
 ///         YES/sUSDC and NO/sUSDC pairs, and drives lifecycle transitions under
 ///         role authorization (market spec §3.1).
-/// @dev Book creation is a separate coordinator step (`createBooks`) so market
-///      creation and order placement stay decoupled (spec §5.4/§7). PM contracts
-///      touch Frontier only through `IFrontierGeoBookFactory`.
+/// @dev Market creation is admin/coordinator gated. Public/agent proposals are
+///      approved off-chain first, then an admin/coordinator creates the on-chain
+///      market and books in one transaction. PM contracts touch Frontier only
+///      through `IFrontierGeoBookFactory`.
 contract DarkBoxMarketFactory {
     struct MarketInfo {
         address market;
         address creator;
         bytes32 gameId;
-        uint256 bond;
-        bool bondSettled;
         address yesBook;
         address noBook;
         bool booksRegistered;
@@ -41,7 +40,7 @@ contract DarkBoxMarketFactory {
     address public treasury; // destination for slashed bonds
 
     // creation rules
-    uint256 public minCreatorBond = 10e6; // 10 sUSDC
+    uint256 public minCreatorBond = 0; // deprecated/no bond gate; kept for ABI/admin config compatibility
     uint256 public maxMarketsPerCreator = 20;
     uint256 public maxQuestionLen = 256;
     uint64 public creationDeadline; // 0 = no deadline; else markets must be created before
@@ -78,9 +77,6 @@ contract DarkBoxMarketFactory {
     event BooksRegistered(
         bytes32 indexed marketId, address indexed yesBook, address indexed noBook, address yesToken, address noToken
     );
-    event CreatorBondLocked(bytes32 indexed marketId, address indexed creator, uint256 amount);
-    event CreatorBondReturned(bytes32 indexed marketId, address indexed creator, uint256 amount);
-    event CreatorBondSlashed(bytes32 indexed marketId, address indexed creator, uint256 amount, string reason);
 
     event OwnerUpdated(address indexed previousOwner, address indexed newOwner);
     event CoordinatorUpdated(address indexed previousCoordinator, address indexed newCoordinator);
@@ -97,14 +93,11 @@ contract DarkBoxMarketFactory {
     error BadTimes();
     error CreationClosed();
     error UnsupportedResolver();
-    error BondTooLow();
     error TooManyMarkets();
     error DuplicateQuestion();
     error UnknownMarket();
     error BooksAlreadyRegistered();
     error FrontierNotSet();
-    error BondAlreadySettled();
-    error CanonicalRestricted();
     error TransferFailed();
     error InvalidBook();
 
@@ -134,19 +127,13 @@ contract DarkBoxMarketFactory {
     // Market creation
     // ---------------------------------------------------------------------
 
-    function createMarket(CreateMarketParams calldata params)
-        external
-        returns (bytes32 marketId, address market)
-    {
+    function createMarket(CreateMarketParams calldata params) external returns (bytes32 marketId, address market) {
+        if (msg.sender != owner && msg.sender != coordinator) revert NotCoordinator();
         _validate(params);
-
-        // CanonicalWinner markets are privileged: only owner/coordinator create.
-        if (params.resolver.resolverType == ResolverType.CanonicalWinner) {
-            if (msg.sender != owner && msg.sender != coordinator) revert CanonicalRestricted();
-        }
+        if (address(frontierFactory) == address(0)) revert FrontierNotSet();
 
         bytes32 questionHash = computeQuestionHash(
-            params.gameId, params.question, params.resolver.resolverType, params.closeTime, params.metadataURI
+            params.gameId, params.question, ResolverType.AdminManual, params.closeTime, params.metadataURI
         );
         if (questionHashUsed[questionHash]) revert DuplicateQuestion();
         questionHashUsed[questionHash] = true;
@@ -155,11 +142,19 @@ contract DarkBoxMarketFactory {
         require(markets[marketId].market == address(0), "marketId exists");
 
         // Deploy the market vault (which deploys YES + NO outcome tokens).
+        // Resolution is deliberately admin-only for the MVP: whatever the caller
+        // supplied, the market resolver is pinned to the current factory owner.
         string memory qSym = _shortSymbol(marketId);
+        ResolverConfig memory resolver = ResolverConfig({
+            resolverType: ResolverType.AdminManual,
+            resolver: owner,
+            sourceId: params.resolver.sourceId,
+            data: params.resolver.data
+        });
         DarkBoxBinaryMarket m = new DarkBoxBinaryMarket(
             marketId,
             collateralToken,
-            params.resolver,
+            resolver,
             params.closeTime,
             params.resolveBy,
             string.concat("DarkBox YES ", qSym),
@@ -169,18 +164,10 @@ contract DarkBoxMarketFactory {
         );
         market = address(m);
 
-        // Lock creator bond.
-        if (params.creatorBond > 0) {
-            _pull(msg.sender, params.creatorBond);
-            emit CreatorBondLocked(marketId, msg.sender, params.creatorBond);
-        }
-
         markets[marketId] = MarketInfo({
             market: market,
             creator: msg.sender,
             gameId: params.gameId,
-            bond: params.creatorBond,
-            bondSettled: params.creatorBond == 0,
             yesBook: address(0),
             noBook: address(0),
             booksRegistered: false
@@ -197,8 +184,10 @@ contract DarkBoxMarketFactory {
             params.metadataURI,
             params.closeTime,
             params.resolveBy,
-            params.resolver.resolverType
+            ResolverType.AdminManual
         );
+
+        _createBooks(marketId);
 
         // Optional initial liquidity: pull, then split to the creator.
         if (params.initialLiquidity > 0) {
@@ -215,10 +204,9 @@ contract DarkBoxMarketFactory {
         if (bytes(params.metadataURI).length == 0) revert EmptyMetadata();
         if (params.closeTime <= block.timestamp || params.resolveBy < params.closeTime) revert BadTimes();
         if (creationDeadline != 0 && block.timestamp > creationDeadline) revert CreationClosed();
-        // MVP supports manual + canonical resolvers (spec §5.1).
-        ResolverType rt = params.resolver.resolverType;
-        if (rt != ResolverType.AdminManual && rt != ResolverType.CanonicalWinner) revert UnsupportedResolver();
-        if (params.creatorBond < minCreatorBond) revert BondTooLow();
+        // MVP supports exactly one resolution mechanism: DarkBox admin manual resolution.
+        if (params.resolver.resolverType != ResolverType.AdminManual) revert UnsupportedResolver();
+        // creatorBond is intentionally ignored/deprecated: proposal approval is the gate.
         if (marketCountOf[msg.sender] >= maxMarketsPerCreator) revert TooManyMarkets();
     }
 
@@ -240,9 +228,13 @@ contract DarkBoxMarketFactory {
     // Frontier book registration (coordinator-gated; spec §7)
     // ---------------------------------------------------------------------
 
-    /// @notice Create the YES/sUSDC and NO/sUSDC geometric books for a market.
+    /// @notice Legacy/recovery hook. Normal market creation calls this automatically.
     function createBooks(bytes32 marketId) external returns (address yesBook, address noBook) {
         if (msg.sender != coordinator && msg.sender != owner) revert NotCoordinator();
+        return _createBooks(marketId);
+    }
+
+    function _createBooks(bytes32 marketId) internal returns (address yesBook, address noBook) {
         MarketInfo storage info = markets[marketId];
         if (info.market == address(0)) revert UnknownMarket();
         if (info.booksRegistered) revert BooksAlreadyRegistered();
@@ -298,7 +290,6 @@ contract DarkBoxMarketFactory {
         if (msg.sender != owner && msg.sender != m.resolver()) revert NotResolver();
 
         m.resolve(outcome, resolutionHash);
-        _returnBond(marketId, info);
     }
 
     /// @notice Void a market (admin only). Slashes the creator bond to treasury.
@@ -306,7 +297,6 @@ contract DarkBoxMarketFactory {
         MarketInfo storage info = markets[marketId];
         if (info.market == address(0)) revert UnknownMarket();
         DarkBoxBinaryMarket(info.market).voidMarket(reason, evidenceHash);
-        _slashBond(marketId, info, reason);
     }
 
     function _adminOrResolver(bytes32 marketId) internal view returns (DarkBoxBinaryMarket m) {
@@ -314,24 +304,6 @@ contract DarkBoxMarketFactory {
         if (info.market == address(0)) revert UnknownMarket();
         m = DarkBoxBinaryMarket(info.market);
         if (msg.sender != owner && msg.sender != m.resolver()) revert NotResolver();
-    }
-
-    function _returnBond(bytes32 marketId, MarketInfo storage info) internal {
-        if (info.bondSettled) return;
-        info.bondSettled = true;
-        if (info.bond > 0) {
-            _push(info.creator, info.bond);
-            emit CreatorBondReturned(marketId, info.creator, info.bond);
-        }
-    }
-
-    function _slashBond(bytes32 marketId, MarketInfo storage info, string calldata reason) internal {
-        if (info.bondSettled) return;
-        info.bondSettled = true;
-        if (info.bond > 0) {
-            _push(treasury, info.bond);
-            emit CreatorBondSlashed(marketId, info.creator, info.bond, reason);
-        }
     }
 
     // ---------------------------------------------------------------------

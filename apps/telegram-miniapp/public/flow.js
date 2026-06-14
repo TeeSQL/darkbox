@@ -7,6 +7,11 @@ const navButtons = [...document.querySelectorAll('[data-go]')];
 const input = document.querySelector('#whisper-input');
 const voiceButton = document.querySelector('#voice-button');
 const voiceStateEl = document.querySelector('#voice-state');
+const terminalInput = document.querySelector('#terminal-whisper-input');
+const terminalVoiceButton = document.querySelector('#terminal-voice-button');
+const terminalVoiceStateEl = document.querySelector('#terminal-voice-state');
+const terminalSealButton = document.querySelector('#terminal-seal-whisper');
+const terminalWhisperStatus = document.querySelector('#terminal-whisper-status');
 const sealWhisperButton = document.querySelector('#seal-whisper');
 const whisperStatus = document.querySelector('#whisper-status');
 const landingCountdownEl = document.querySelector('#landing-countdown');
@@ -27,12 +32,18 @@ const daemonPnlEl = document.querySelector('#daemon-pnl');
 const daemonPnlNoteEl = document.querySelector('#daemon-pnl-note');
 const daemonStatusEl = document.querySelector('#daemon-status');
 const daemonMurmurEl = document.querySelector('#daemon-murmur');
+const daemonActivityLineEl = document.querySelector('#daemon-activity-line');
+const stakeEncourageEl = document.querySelector('#stake-encourage');
 const metricVolumeEl = document.querySelector('#metric-volume');
 const metricTradesEl = document.querySelector('#metric-trades');
 const metricSealedEl = document.querySelector('#metric-sealed');
 const metricFingerprintsEl = document.querySelector('#metric-fingerprints');
 const leaderboardRowsEl = document.querySelector('#leaderboard-rows');
 const marketRowsEl = document.querySelector('#market-rows');
+const hallBigWinEl = document.querySelector('#hall-big-win');
+const hallNewMarketEl = document.querySelector('#hall-new-market');
+const hallNewMarketMetaEl = document.querySelector('#hall-new-market-meta');
+const notifyToggle = document.querySelector('#notify-toggle');
 const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
 const terminalButton = document.querySelector('#sealed-terminal-button');
 const terminalModal = document.querySelector('#sealed-terminal-modal');
@@ -43,15 +54,13 @@ const RESULTS_AT = new Date('2026-06-15T00:00:00Z');
 const SEALED_LOG_KEY = 'daemonhall:sealed-receipts:v1';
 const VISUAL_SEED_KEY = 'daemonhall:visual-seed:v1';
 const PUBLIC_MARKET_SEED = 'daemonhall:public-markets:v1';
+const NOTIFY_PREF_KEY = 'daemonhall:notify-demo:v1';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let listening = false;
 let wantedListening = false;
 let recognitionBaseText = '';
 let recognitionFinalText = '';
-let holdTimer = 0;
-let holdRecording = false;
-let suppressNextVoiceClick = false;
 let selectedStake = 5;
 
 
@@ -72,8 +81,14 @@ const murmurs = [
   '▸ a daemon laughed without opening its mouth',
   '▸ something moved behind the wall',
   '▸ the hall counted wrong, then counted again',
-  '▸ a sealed order learned patience',
+  '▸ a sealed instinct learned patience',
   '▸ no one outside saw what changed',
+];
+const activityLines = [
+  'your daemon keeps moving after you close the phone.',
+  'it is whisper-quiet here; the hall is not.',
+  'the room outside keeps making markets without showing its hands.',
+  'your daemon can react while your screen is dark.',
 ];
 const marketQuestions = [
   'Will a dark horse win the demo day?',
@@ -84,6 +99,11 @@ const marketQuestions = [
   'Will the crowd favorite finish top three?',
   'Will a tiny team beat a funded team?',
 ];
+const stakeEncouragement = {
+  5: 'house stake is live. add funds when you want more heat.',
+  25: '+$25 gives your daemon more room to move.',
+  100: '+$100 makes every public signal feel louder.',
+};
 
 function hashNumber(seed) {
   let h = 2166136261;
@@ -134,10 +154,10 @@ function writeSealedReceipts(receipts) {
   catch (_) {}
 }
 
-function rememberSealedReceipt() {
-  const text = input?.value.trim();
+function rememberSealedReceipt(textOverride) {
+  const text = (textOverride ?? input?.value ?? '').trim();
   if (!text) return;
-  const seed = currentSeed();
+  const seed = `${text}:${selectedStake}`;
   const fp = fingerprint(seed);
   const receipts = readSealedReceipts().filter((row) => row.fingerprint !== fp);
   receipts.unshift({
@@ -235,6 +255,8 @@ function renderPrivateState() {
   if (daemonPnlNoteEl) daemonPnlNoteEl.textContent = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (daemonStatusEl) daemonStatusEl.textContent = status;
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, visualSeed, 3);
+  if (daemonActivityLineEl) daemonActivityLineEl.textContent = pick(activityLines, visualSeed, 4);
+  if (stakeEncourageEl) stakeEncourageEl.textContent = stakeEncouragement[selectedStake] || 'add funds when you want more heat.';
   if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
   if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
   if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
@@ -249,12 +271,16 @@ function renderMarkets(seed) {
     const base = hashNumber(`${seed}:market:${question}`);
     const size = 650 + (base % 5200);
     const trades = 18 + (hashNumber(`${seed}:market:${question}:trades`) % 160);
-    return { question, size, trades, score: size };
+    const age = 4 + (hashNumber(`${seed}:market:${question}:age`) % 44);
+    return { question, size, trades, age, fresh: index > 2 && age < 24, score: size + (age < 12 ? 950 : 0) };
   }).sort((a, b) => b.score - a.score).slice(0, 5);
+  const newest = rows.slice().sort((a, b) => a.age - b.age)[0];
+  if (hallNewMarketEl && newest) hallNewMarketEl.textContent = newest.question;
+  if (hallNewMarketMetaEl && newest) hallNewMarketMetaEl.textContent = `opened ${newest.age}m ago.`;
   marketRowsEl.innerHTML = rows.map((row, index) => `
     <div class="market-row">
       <span class="rank">${index + 1}</span>
-      <span class="market-q">${escapeHtml(row.question)}</span>
+      <span class="market-q">${escapeHtml(row.question)}${row.fresh ? '<span class="market-badge">NEW</span>' : ''}</span>
       <span class="market-size">$${(row.size / 1000).toFixed(1)}k</span>
       <span class="market-trades">${row.trades} trades</span>
     </div>
@@ -273,6 +299,8 @@ function renderLeaderboard(seed, ownName) {
     }))
     .sort((a, b) => b.score - a.score)
     .map((row, index) => ({ ...row, rank: index + 1 }));
+  const winner = rows.find((row) => row.pulse.startsWith('+')) || rows[0];
+  if (hallBigWinEl && winner) hallBigWinEl.textContent = `${winner.name} ${winner.pulse}`;
   leaderboardRowsEl.innerHTML = rows.map((row) => `
     <div class="brow ${row.name === ownName ? 'you' : ''}">
       <span class="rank">${row.rank}</span>
@@ -280,6 +308,15 @@ function renderLeaderboard(seed, ownName) {
       <span class="pulse"><span class="pct">${row.pulse}</span> · ${row.status}</span>
     </div>
   `).join('');
+}
+
+function syncNotifyToggle() {
+  if (!notifyToggle) return;
+  let enabled = true;
+  try { enabled = localStorage.getItem(NOTIFY_PREF_KEY) !== '0'; }
+  catch (_) {}
+  notifyToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  notifyToggle.textContent = enabled ? 'on' : 'off';
 }
 
 function showView(id) {
@@ -310,9 +347,9 @@ function tickCountdown() {
 }
 
 function autosize() {
+  // Composer height is fixed so the mic target never shifts while the user talks/types.
   if (!input) return;
-  input.style.height = 'auto';
-  input.style.height = `${Math.min(input.scrollHeight, Math.max(84, window.innerHeight * 0.26))}px`;
+  input.style.height = '';
 }
 
 function handleInput() {
@@ -325,6 +362,37 @@ function handleInput() {
       : 'read it back. you can\'t unsay it.<br /><span class="tell">no one else will ever hear this — not the players, not the house.</span>';
   }
   renderPrivateState();
+}
+
+
+function autosizeTerminal() {
+  // Keep terminal composer stable too; long messages scroll inside the field.
+  if (!terminalInput) return;
+  terminalInput.style.height = '';
+}
+
+function handleTerminalInput() {
+  autosizeTerminal();
+  const hasText = Boolean(terminalInput?.value.trim());
+  if (terminalSealButton) terminalSealButton.disabled = !hasText;
+  if (!terminalWhisperStatus || wantedListening || listening) return;
+  terminalWhisperStatus.textContent = hasText
+    ? 'review it. sealing will redact the words forever.'
+    : 'click the mic to record. click again to stop.';
+}
+
+function sealTerminalWhisper() {
+  const text = terminalInput?.value.trim();
+  if (!text) {
+    terminalInput?.focus({ preventScroll: true });
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'the daemon needs an order first.';
+    return;
+  }
+  rememberSealedReceipt(text);
+  if (terminalInput) terminalInput.value = '';
+  handleTerminalInput();
+  renderSealedTerminal();
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'sealed to your existing daemon. message redacted forever.';
 }
 
 function hasMicGrantThisSession() {
@@ -359,25 +427,34 @@ async function requestMicFallback() {
   await requestMicAccess('mic allowed. speech transcription is unavailable here. type the final whisper.');
 }
 
-function setVoiceVisualState(state = 'idle') {
-  const active = state === 'recording-toggle' || state === 'recording-hold';
-  voiceButton?.classList.toggle('listening', active);
-  voiceButton?.classList.toggle('arming', state === 'hold-arming');
-  voiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
-  if (voiceButton) voiceButton.dataset.recordingMode = state;
+function setMainMicGrantState(allowed = hasMicGrantThisSession()) {
+  voiceButton?.classList.remove('listening', 'arming');
+  voiceButton?.setAttribute('aria-pressed', 'false');
   if (!voiceStateEl) return;
-  voiceStateEl.dataset.state = state;
-  voiceStateEl.textContent = {
-    idle: 'tap / hold',
-    'hold-arming': 'hold…',
-    'recording-toggle': 'recording · tap to stop',
-    'recording-hold': 'recording · release to stop',
-    stopping: 'stopping…',
-  }[state] || 'tap / hold';
+  voiceStateEl.dataset.state = allowed ? 'mic-allowed' : 'idle';
+  voiceStateEl.textContent = allowed ? 'mic allowed' : 'allow mic';
 }
 
-function setVoiceButtonState(active, mode = '') {
-  setVoiceVisualState(active ? (mode === 'hold' ? 'recording-hold' : 'recording-toggle') : 'idle');
+function setTerminalVoiceState(state = 'idle') {
+  const active = state === 'recording-toggle';
+  terminalVoiceButton?.classList.toggle('listening', active);
+  terminalVoiceButton?.classList.remove('arming');
+  terminalVoiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
+  terminalVoiceButton?.setAttribute('aria-label', active ? 'Stop terminal recording' : 'Start terminal recording');
+  if (terminalVoiceButton) terminalVoiceButton.dataset.recordingMode = state;
+  if (terminalVoiceStateEl) {
+    terminalVoiceStateEl.dataset.state = state;
+    terminalVoiceStateEl.textContent = {
+      idle: 'off',
+      'recording-toggle': 'recording · click to stop',
+      stopping: 'stopping…',
+    }[state] || 'off';
+  }
+  if (terminalWhisperStatus && active) terminalWhisperStatus.textContent = 'recording in private terminal. click mic again to stop.';
+}
+
+function setVoiceButtonState(active) {
+  setTerminalVoiceState(active ? 'recording-toggle' : 'idle');
 }
 
 function ensureRecognition() {
@@ -388,15 +465,15 @@ function ensureRecognition() {
   recognition.continuous = true;
   recognition.onstart = () => {
     listening = true;
-    setVoiceButtonState(true, holdRecording ? 'hold' : 'toggle');
-    if (whisperStatus) whisperStatus.textContent = holdRecording ? 'recording while you hold. release to stop.' : 'recording. tap the mic again to stop.';
+    setVoiceButtonState(true);
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording in private terminal. click mic again to stop.';
   };
   recognition.onerror = () => {
     wantedListening = false;
     listening = false;
     setVoiceButtonState(false);
-    setVoiceVisualState('idle');
-    if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
+    setTerminalVoiceState('idle');
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'voice broke. type or try again.';
   };
   recognition.onend = () => {
     listening = false;
@@ -405,11 +482,11 @@ function ensureRecognition() {
       window.setTimeout(() => {
         if (!wantedListening || listening) return;
         try { recognition.start(); }
-        catch (_) { wantedListening = false; handleInput(); }
+        catch (_) { wantedListening = false; handleTerminalInput(); }
       }, 120);
       return;
     }
-    handleInput();
+    handleTerminalInput();
   };
   recognition.onresult = (event) => {
     let interim = '';
@@ -419,28 +496,28 @@ function ensureRecognition() {
       else interim += result[0].transcript;
     }
     const spoken = `${recognitionFinalText}${interim}`.trim();
-    if (input) input.value = [recognitionBaseText, spoken].filter(Boolean).join(recognitionBaseText && spoken ? ' ' : '').trimStart();
-    handleInput();
+    if (terminalInput) terminalInput.value = [recognitionBaseText, spoken].filter(Boolean).join(recognitionBaseText && spoken ? ' ' : '').trimStart();
+    handleTerminalInput();
   };
   return recognition;
 }
 
-async function beginVoice(mode = 'toggle') {
+async function beginVoice() {
   if (!SpeechRecognition) {
     try { await requestMicFallback(); }
-    catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
+    catch (_) { if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.'; }
     return false;
   }
   try {
-    const allowed = await requestMicAccess(mode === 'hold' ? 'hold to record. release to stop.' : 'mic ready. tap again when done.');
+    const allowed = await requestMicAccess('mic ready. terminal recording starts now.');
     if (!allowed) return false;
   } catch (_) {
-    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
     return false;
   }
   const recognizer = ensureRecognition();
   if (!recognizer) return false;
-  recognitionBaseText = input?.value.trim() || '';
+  recognitionBaseText = terminalInput?.value.trim() || '';
   recognitionFinalText = '';
   wantedListening = true;
   try { recognizer.start(); }
@@ -450,23 +527,30 @@ async function beginVoice(mode = 'toggle') {
 
 function stopVoice(statusText = 'recording stopped. review before sealing.') {
   wantedListening = false;
-  holdRecording = false;
-  setVoiceVisualState('stopping');
-  if (whisperStatus) whisperStatus.textContent = statusText;
+  setTerminalVoiceState('stopping');
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = statusText;
   try { recognition?.stop?.(); }
   catch (_) {}
   if (!listening) setVoiceButtonState(false);
-  handleInput();
+  handleTerminalInput();
 }
 
 async function startVoice(event) {
   event.preventDefault();
-  if (suppressNextVoiceClick) {
-    suppressNextVoiceClick = false;
-    return;
-  }
   if (wantedListening || listening) stopVoice();
-  else await beginVoice('toggle');
+  else await beginVoice();
+}
+
+async function grantMicForVisuals(event) {
+  event?.preventDefault?.();
+  try {
+    const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
+    setMainMicGrantState(Boolean(allowed));
+    if (whisperStatus && allowed) whisperStatus.textContent = 'mic allowed for hall effects. open the private terminal to record.';
+  } catch (_) {
+    setMainMicGrantState(false);
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+  }
 }
 
 function syncKeyboardState() {
@@ -487,7 +571,7 @@ navButtons.forEach((button) => {
     if (next === 'v-seal') rememberSealedReceipt();
     showView(next);
     if (button.dataset.openMic === 'true' && next === 'v-whisper') {
-      try { await startVoice({ preventDefault() {} }); }
+      try { await grantMicForVisuals({ preventDefault() {} }); }
       catch (_) { if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.'; }
     }
   });
@@ -502,40 +586,18 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
-voiceButton?.addEventListener('pointerdown', (event) => {
-  if (event.button !== undefined && event.button !== 0) return;
-  if (wantedListening || listening) return;
-  voiceButton.setPointerCapture?.(event.pointerId);
-  setVoiceVisualState('hold-arming');
-  holdTimer = window.setTimeout(async () => {
-    holdTimer = 0;
-    holdRecording = true;
-    suppressNextVoiceClick = true;
-    await beginVoice('hold');
-  }, 260);
-});
-voiceButton?.addEventListener('pointerup', (event) => {
-  if (holdTimer) {
-    window.clearTimeout(holdTimer);
-    holdTimer = 0;
-    setVoiceVisualState('idle');
-    return;
-  }
-  if (holdRecording) {
-    suppressNextVoiceClick = true;
-    stopVoice('recording stopped. review before sealing.');
-  }
-  voiceButton.releasePointerCapture?.(event.pointerId);
-});
-voiceButton?.addEventListener('pointercancel', () => {
-  if (holdTimer) window.clearTimeout(holdTimer);
-  holdTimer = 0;
-  if (holdRecording) stopVoice('recording cancelled. review before sealing.');
-  else setVoiceVisualState('idle');
-});
-voiceButton?.addEventListener('click', startVoice);
+voiceButton?.addEventListener('click', grantMicForVisuals);
+terminalInput?.addEventListener('input', handleTerminalInput);
+terminalSealButton?.addEventListener('click', sealTerminalWhisper);
+terminalVoiceButton?.addEventListener('click', startVoice);
 terminalButton?.addEventListener('click', openSealedTerminal);
 terminalCloseButtons.forEach((button) => button.addEventListener('click', closeSealedTerminal));
+notifyToggle?.addEventListener('click', () => {
+  const enabled = notifyToggle.getAttribute('aria-pressed') !== 'true';
+  try { localStorage.setItem(NOTIFY_PREF_KEY, enabled ? '1' : '0'); }
+  catch (_) {}
+  syncNotifyToggle();
+});
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !terminalModal?.hasAttribute('hidden')) closeSealedTerminal();
 });
@@ -544,4 +606,8 @@ window.addEventListener('pagehide', () => recognition?.stop?.());
 
 tickCountdown();
 window.setInterval(tickCountdown, 1000);
+syncNotifyToggle();
+setMainMicGrantState();
+setTerminalVoiceState('idle');
 handleInput();
+handleTerminalInput();

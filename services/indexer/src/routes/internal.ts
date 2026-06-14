@@ -440,6 +440,91 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+
+  // ─── Market proposal approval gate ────────────────────────────────────────
+
+  app.get("/internal/market-proposals", async (req) => {
+    const status = (req.query as Record<string, string>)["status"];
+    const limit = Math.min(Number((req.query as Record<string, string>)["limit"] ?? "100"), 500);
+    const params: unknown[] = [];
+    let where = "";
+    if (status) {
+      params.push(status);
+      where = "WHERE status = $1";
+    }
+    params.push(limit);
+    const result = await query(
+      `SELECT * FROM market_proposals ${where} ORDER BY created_at DESC LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows;
+  });
+
+  app.post<{ Body: Record<string, unknown> }>("/internal/market-proposals", async (req, reply) => {
+    const body = req.body ?? {};
+    const proposalId = asText(body["proposalId"]);
+    const question = asText(body["question"]);
+    if (!proposalId || !question) return reply.status(400).send({ error: "proposalId and question are required" });
+    const review = (body["review"] && typeof body["review"] === "object") ? body["review"] as Record<string, unknown> : {};
+    await query(
+      `INSERT INTO market_proposals (
+         proposal_id, agent_id, question, description, outcomes, resolve_by,
+         resolution_source, rationale, metadata_uri, run_id, turn,
+         review_chat_id, review_thread_id, review_message_id
+       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       ON CONFLICT (proposal_id) DO UPDATE SET
+         agent_id = EXCLUDED.agent_id,
+         question = EXCLUDED.question,
+         description = EXCLUDED.description,
+         outcomes = EXCLUDED.outcomes,
+         resolve_by = EXCLUDED.resolve_by,
+         resolution_source = EXCLUDED.resolution_source,
+         rationale = EXCLUDED.rationale,
+         metadata_uri = EXCLUDED.metadata_uri,
+         run_id = EXCLUDED.run_id,
+         turn = EXCLUDED.turn,
+         review_chat_id = EXCLUDED.review_chat_id,
+         review_thread_id = EXCLUDED.review_thread_id,
+         review_message_id = EXCLUDED.review_message_id`,
+      [
+        proposalId,
+        asText(body["agentId"]),
+        question,
+        asText(body["description"]),
+        JSON.stringify(body["outcomes"] ?? ["YES", "NO"]),
+        asText(body["resolveBy"]),
+        asText(body["resolutionSource"], "DarkBox admin manual"),
+        asText(body["rationale"]),
+        asText(body["metadataURI"]),
+        asText(body["runId"]),
+        Number.isInteger(body["turn"]) ? Number(body["turn"]) : 0,
+        asText(review["chatId"]),
+        asText(review["threadId"]),
+        asText(review["messageId"]),
+      ],
+    );
+    return { status: "ok", proposalId };
+  });
+
+  app.post<{ Params: { proposalId: string }; Body: Record<string, unknown> }>(
+    "/internal/market-proposals/:proposalId/decision",
+    async (req, reply) => {
+      const status = asText(req.body?.["status"]);
+      if (status !== "approved" && status !== "denied") {
+        return reply.status(400).send({ error: "status must be approved or denied" });
+      }
+      const result = await query(
+        `UPDATE market_proposals
+         SET status = $2, reviewed_by = $3, reviewed_at = NOW(), review_message_id = COALESCE(NULLIF($4, ''), review_message_id)
+         WHERE proposal_id = $1
+         RETURNING *`,
+        [req.params.proposalId, status, asText(req.body?.["reviewedBy"]), asText(req.body?.["reviewMessageId"])],
+      );
+      if (result.rows.length === 0) return reply.status(404).send({ error: "proposal not found" });
+      return result.rows[0];
+    },
+  );
+
   // ─── Leaderboard ──────────────────────────────────────────────────────────
 
   app.get("/internal/leaderboard/raw", async () => {

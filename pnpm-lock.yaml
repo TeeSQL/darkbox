@@ -51,6 +51,12 @@ importers:
 
   packages/contracts: {}
 
+  packages/deployments:
+    dependencies:
+      zod:
+        specifier: ^4.2.1
+        version: 4.4.3
+
   packages/shared:
     dependencies:
       viem:
@@ -108,7 +114,6 @@ importers:
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
-
 
   services/gateway:
     dependencies:

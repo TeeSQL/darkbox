@@ -1,0 +1,26 @@
+{
+  "name": "@darkbox/deployments",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "darkbox-gen-arc-env": "dist/gen-env.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "gen-env": "tsx src/gen-env.ts"
+  },
+  "dependencies": {
+    "zod": "^4.2.1"
+  }
+}

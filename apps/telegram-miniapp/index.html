@@ -39,9 +39,13 @@
       <section class="view" id="v-whisper">
         <div class="topbar"><span class="wm-sm">Daemon Hall</span><span class="st"><span class="dot"></span><span id="whisper-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap">
-          <div class="eyebrow">everybody here plays provably blind</div>
-          <h2 class="headline">whisper your daemon's orders.</h2>
-          <div class="whisper">
+          <div class="convo" aria-label="why you're here">
+            <p class="line eyebrow">everybody here plays provably blind.</p>
+            <h2 class="line headline">whisper your daemon's orders.</h2>
+            <p class="line beat">it walks into the hall alone.</p>
+            <p class="line beat">and on Sunday, 5:00&nbsp;PM, it confesses.</p>
+          </div>
+          <div class="whisper line whisper-line">
             <div class="whisper-field">
               <span class="prompt">&gt;</span>
               <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>
@@ -50,7 +54,7 @@
               </button>
             </div>
           </div>
-          <div id="whisper-status" class="sub">it goes to the daemon hall alone, and confesses Sunday 5:00&nbsp;PM.<br /><span class="tell">only you ever hear this — not the players, not the house.</span></div>
+          <div id="whisper-status" class="sub line"><span class="tell">only you ever hear this — not the players, not the house.</span></div>
         </div></div>
         <div class="cmdbar">
           <span class="hint">&#8629; to seal</span>

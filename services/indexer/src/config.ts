@@ -11,6 +11,12 @@ export const config = {
   marketFactoryAddress: (process.env["MARKET_FACTORY_ADDRESS"] ?? "0x0000000000000000000000000000000000000000") as `0x${string}`,
   pollIntervalMs: parseInt(process.env["POLL_INTERVAL_MS"] ?? "2000", 10),
   pollBatchSize: parseInt(process.env["POLL_BATCH_SIZE"] ?? "100", 10),
+  // Per-RPC-request timeout so a dropped/half-open geth socket REJECTS instead of
+  // hanging the scan loop forever (a frozen await would stall the cursor silently).
+  rpcTimeoutMs: parseInt(process.env["RPC_TIMEOUT_MS"] ?? "15000", 10),
+  // Max backoff applied between scan cycles after consecutive RPC failures (e.g.
+  // geth down for a restart window). Exponential, capped here.
+  scanMaxBackoffMs: parseInt(process.env["SCAN_MAX_BACKOFF_MS"] ?? "30000", 10),
   snapshotIntervalMs: parseInt(process.env["SNAPSHOT_INTERVAL_MS"] ?? "60000", 10),
   marketLifecycleEnabled: process.env["MARKET_LIFECYCLE_ENABLED"] !== "false",
   marketLifecycleIntervalMs: parseInt(process.env["MARKET_LIFECYCLE_INTERVAL_MS"] ?? "60000", 10),

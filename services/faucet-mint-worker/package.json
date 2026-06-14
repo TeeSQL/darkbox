@@ -1,0 +1,26 @@
+{
+  "name": "@darkbox/faucet-mint-worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/services/faucet-mint-worker/src/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/services/faucet-mint-worker/src/index.js",
+    "dev": "node --import tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@darkbox/bridge": "workspace:*",
+    "@darkbox/shared": "workspace:*",
+    "@fastify/sensible": "^6.0.3",
+    "fastify": "^5.3.3",
+    "viem": "^2.21.0",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3"
+  }
+}

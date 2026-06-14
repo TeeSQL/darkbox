@@ -17,6 +17,12 @@
       ],
       "@darkbox/shared/*": [
         "packages/shared/src/*"
+      ],
+      "@darkbox/bridge": [
+        "services/bridge/src/index.ts"
+      ],
+      "@darkbox/bridge/*": [
+        "services/bridge/src/*"
       ]
     },
     "ignoreDeprecations": "6.0",

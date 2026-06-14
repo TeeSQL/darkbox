@@ -327,7 +327,7 @@ function syncNotifyToggle() {
 let convoTyped = false;
 
 const WHISPER_THREAD = [
-  [{ t: 'everybody here plays ' }, { t: 'provably blind', c: 'c-blind' }, { t: '.' }],
+  [{ t: 'everybody here are ' }, { t: 'provably blind', c: 'c-blind' }, { t: '.' }],
   [{ t: 'it walks into the hall alone.' }],
   [{ t: 'and on Sunday, 5:00 PM, it ' }, { t: 'confesses', c: 'c-confess' }, { t: '.' }],
 ];

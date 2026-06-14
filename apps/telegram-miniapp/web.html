@@ -51,8 +51,9 @@
   .tell{color:var(--violet)}
 
   .whisper{margin-top:28px;width:100%;text-align:left}
-  .whisper-field{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;min-height:116px;border-bottom:1px solid var(--hair2);padding:12px 4px 14px}
-  .whisper-field .prompt{color:var(--violet);font-size:16px}
+  .whisper-field{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:14px;min-height:116px;border-bottom:1px solid var(--hair2);padding:12px 4px 14px}
+  .whisper-field .voice-button{align-self:center}
+  .whisper-field .prompt{color:var(--violet);font-size:16px;line-height:1.45}
   .whisper-field input,.whisper-field textarea{width:100%;height:84px;min-height:84px;max-height:84px;overflow-y:auto;background:transparent;border:none;outline:none;color:var(--silver);font-family:var(--mono);font-size:16px;resize:none;line-height:1.45}
   .whisper-field input::placeholder,.whisper-field textarea::placeholder{color:#54545e}
   .voice-button{width:72px;height:72px;min-width:72px;border:1px solid rgba(231,227,217,.22);border-radius:999px;background:radial-gradient(circle at 50% 38%,rgba(255,255,255,.10),rgba(255,255,255,.035) 62%,rgba(139,123,255,.08));color:var(--bone);display:grid;place-items:center;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent;box-shadow:0 0 0 8px rgba(255,255,255,.025),0 14px 34px rgba(0,0,0,.32);transition:transform .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,background .16s ease}

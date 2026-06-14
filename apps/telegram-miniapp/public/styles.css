@@ -320,13 +320,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .whisper-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start; /* top-align the prompt with the first line of the field */
   gap: 14px;
   min-height: 116px;
   border-bottom: 1px solid var(--hair2);
   padding: 12px 4px 14px;
 }
-.prompt { color: var(--violet); font-size: 16px; line-height: 1.4; padding-bottom: 2px; }
+.whisper-field .voice-button { align-self: center; } /* keep the mic centred */
+.prompt { color: var(--violet); font-size: 16px; line-height: 1.45; }
 textarea {
   width: 100%;
   min-width: 0;

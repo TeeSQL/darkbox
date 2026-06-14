@@ -351,7 +351,7 @@ function typeSegments(el, segs, done) {
     span.textContent += ch;
     ci += 1;
     if (ci >= seg.t.length) { si += 1; ci = 0; }
-    window.setTimeout(step, ch === ' ' ? 55 : 30);
+    window.setTimeout(step, ch === ' ' ? 95 : 58);
   })();
 }
 
@@ -362,7 +362,7 @@ function eraseEl(el, done) {
     if (!span) { el.textContent = ''; done(); return; }
     if (span.textContent.length > 1) span.textContent = span.textContent.slice(0, -1);
     else span.remove();
-    window.setTimeout(step, 14);
+    window.setTimeout(step, 22);
   })();
 }
 
@@ -378,7 +378,7 @@ function typeWhisperConvo() {
   let i = 0;
   function nextTransient() {
     if (i >= WHISPER_THREAD.length) {
-      el.className = 'cline headline';
+      el.className = 'cline';
       typeSegments(el, WHISPER_FINAL, () => el.classList.remove('typing'));
       return;
     }

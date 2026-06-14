@@ -288,12 +288,19 @@ button { -webkit-tap-highlight-color: transparent; }
    provides the caret and the accent colours. The .convo reserves a fixed
    height so swapping lines never shifts the field below it. */
 .convo {
-  min-height: 4.6rem;
+  min-height: 2.6rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-#whisper-thread { margin: 0; }
+/* One consistent size for every thread line, so they all stay on a single row. */
+#whisper-thread {
+  margin: 0;
+  font-size: clamp(0.8rem, 3.8vw, 1.25rem);
+  line-height: 1.3;
+  color: var(--silver);
+  white-space: nowrap;
+}
 .c-blind { color: var(--violet); }   /* "provably blind" — the cold of the seal */
 .c-confess { color: var(--ember); }  /* "confesses" — the heat */
 .cline.typing::after {

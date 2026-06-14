@@ -621,7 +621,7 @@ async function grantMicForVisuals(event) {
   try {
     const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
     setMainMicGrantState(Boolean(allowed));
-    if (whisperStatus && allowed) whisperStatus.textContent = 'mic allowed for hall effects. open the private terminal to record.';
+    if (whisperStatus && allowed) whisperStatus.textContent = 'keep your voice down. everyone in here does.';
   } catch (_) {
     setMainMicGrantState(false);
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';

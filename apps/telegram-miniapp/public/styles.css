@@ -182,6 +182,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .wm-home:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 3px; }
 .st { display: inline-flex; align-items: center; min-width: 0; text-align: right; }
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--silver); box-shadow: 0 0 8px var(--silver); margin-right: 7px; flex: 0 0 auto; }
+/* Topbar SEALED dot: violet + slow breath, consistent with the landing seal. */
+.st .dot { background: var(--violet); box-shadow: 0 0 8px var(--violet); animation: sealedBreath 3.4s ease-in-out infinite; }
 .content {
   flex: 1;
   display: flex;
@@ -254,7 +256,7 @@ button { -webkit-tap-highlight-color: transparent; }
   50% { opacity: 1; box-shadow: 0 0 15px rgba(139, 123, 255, 0.9); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sealed .dot { animation: none; }
+  .sealed .dot, .st .dot { animation: none; }
 }
 .sep { color: #54545e; }
 .loop-strip {

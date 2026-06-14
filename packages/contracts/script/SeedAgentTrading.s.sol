@@ -36,12 +36,26 @@ contract SeedAgentTrading is Script {
 
     function run() external {
         uint256 deployerPk = vm.envUint("DEPLOYER_KEY"); // minter + coordinator + gas funder
-        bytes32 seed = vm.envOr("DAEMON_SEED", keccak256("darkbox-demo-daemons-v1"));
+        // DAEMON_SEED is REQUIRED (sealed env, generated inside core) — NO fallback.
+        // A hardcoded default would derive KNOWN private keys and fund/trade from them,
+        // so envBytes32 reverts hard if it's missing/misnamed (Ocean's review).
+        bytes32 seed = vm.envBytes32("DAEMON_SEED");
         uint256 n = vm.envOr("SEED_DAEMONS", uint256(4));
         uint256 rounds = vm.envOr("SEED_ROUNDS", uint256(6));
         uint256 fundUsdc = vm.envOr("SEED_FUND_USDC", uint256(2_000e6));
         uint256 splitAmt = vm.envOr("SEED_SPLIT", uint256(1_000e6));
         uint256 buyIn = vm.envOr("SEED_BUY_IN", uint256(40e6));
+
+        // Bound every param BEFORE any mint/broadcast so an env typo can't fund/trade
+        // absurd amounts, and require >=2 daemons so nobody self-trades (Ocean's review).
+        require(n >= 2 && n <= 16, "SEED_DAEMONS out of range (need 2..16)");
+        require(rounds >= 1 && rounds <= 50, "SEED_ROUNDS out of range (1..50)");
+        require(fundUsdc > 0 && fundUsdc <= 100_000e6, "SEED_FUND_USDC out of range (<=100k)");
+        require(splitAmt > 0 && splitAmt <= fundUsdc, "SEED_SPLIT out of range (<=fund)");
+        require(buyIn > 0 && buyIn <= fundUsdc, "SEED_BUY_IN out of range (<=fund)");
+        console2.log("seed params -- daemons:", n, "rounds:", rounds);
+        console2.log("seed params -- fundUsdc:", fundUsdc, "splitAmt:", splitAmt);
+        console2.log("seed params -- buyIn (per take):", buyIn);
 
         uint256[] memory pk = new uint256[](n);
         address[] memory dae = new address[](n);

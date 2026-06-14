@@ -10,6 +10,7 @@ export interface RawEventMeta {
   blockNumber: bigint;
   blockTimestamp: bigint;
   txHash: `0x${string}`;
+  txFrom?: string;
   logIndex: number;
   contractAddress: `0x${string}`;
   adapter: AdapterName;

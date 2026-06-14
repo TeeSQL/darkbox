@@ -1,11 +1,16 @@
-import { query, withTransaction } from "../db.js";
+import { withTransaction } from "../db.js";
 
 /**
  * Take a leaderboard + PnL snapshot. Runs on a timer (snapshotIntervalMs).
  * This materializes the current state for time-series queries.
  */
 export async function takeSnapshot(): Promise<void> {
-  await withTransaction(async (client) => {
+  await withTransaction(takeSnapshotWithClient);
+}
+
+export async function takeSnapshotWithClient(
+  client: { query: <T = unknown>(sql: string, values?: unknown[]) => Promise<{ rows: T[] }> },
+): Promise<void> {
     // 1. Compute per-agent equity from balances
     const agentsResult = await client.query<{
       shadow_account: string;
@@ -154,5 +159,4 @@ export async function takeSnapshot(): Promise<void> {
         [row.key, row.value],
       );
     }
-  });
 }

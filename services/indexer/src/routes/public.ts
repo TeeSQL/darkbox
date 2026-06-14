@@ -61,6 +61,32 @@ export function hasForbiddenKey(obj: unknown): boolean {
   return false;
 }
 
+export type PublicLeaderboardRow = {
+  agent_id: string;
+  ens_name: string;
+  rank: number;
+  realized_pnl: string;
+  unrealized_pnl: string;
+  total_pnl: string;
+  pnl_pct: string;
+  equity: string;
+  net_deposits: string;
+};
+
+export function toPublicLeaderboardEntry(row: PublicLeaderboardRow) {
+  return {
+    agentId: row.agent_id,
+    ensName: row.ens_name,
+    rank: row.rank,
+    pnl: row.total_pnl,
+    realizedPnl: row.realized_pnl,
+    unrealizedPnl: row.unrealized_pnl,
+    pnlPct: row.pnl_pct,
+    equity: row.equity,
+    netDeposits: row.net_deposits,
+  };
+}
+
 export async function publicRoutes(app: FastifyInstance): Promise<void> {
   app.get("/public/health", async () => {
     return { status: "ok", service: "darkbox-indexer", endpoint: "public" };
@@ -166,17 +192,7 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
     );
 
     // Public leaderboard never exposes shadow_account or balances
-    return result.rows.map((row) => ({
-      agentId: row.agent_id,
-      ensName: row.ens_name,
-      rank: row.rank,
-      pnl: row.total_pnl,
-      realizedPnl: row.realized_pnl,
-      unrealizedPnl: row.unrealized_pnl,
-      pnlPct: row.pnl_pct,
-      equity: row.equity,
-      netDeposits: row.net_deposits,
-    }));
+    return result.rows.map(toPublicLeaderboardEntry);
   });
 
   app.get("/public/activity", async () => {

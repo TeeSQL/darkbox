@@ -86,16 +86,18 @@ async function resolveMarketFromBook(
 async function resolveBookContext(
   client: pg.PoolClient,
   bookAddress: string,
-): Promise<{ marketId: string; outcome: "Yes" | "No" } | null> {
-  const r = await client.query<{ market_id: string; yes_book: string; no_book: string }>(
-    "SELECT market_id, yes_book, no_book FROM markets WHERE yes_book=$1 OR no_book=$1 LIMIT 1",
+): Promise<{ marketId: string; outcome: "Yes" | "No"; outcomeToken: string } | null> {
+  const r = await client.query<{ market_id: string; yes_book: string; no_book: string; yes_token: string; no_token: string }>(
+    "SELECT market_id, yes_book, no_book, yes_token, no_token FROM markets WHERE yes_book=$1 OR no_book=$1 LIMIT 1",
     [bookAddress.toLowerCase()],
   );
   const row = r.rows[0];
   if (!row) return null;
+  const isYes = row.yes_book?.toLowerCase() === bookAddress.toLowerCase();
   return {
     marketId: row.market_id,
-    outcome: row.yes_book?.toLowerCase() === bookAddress.toLowerCase() ? "Yes" : "No",
+    outcome: isYes ? "Yes" : "No",
+    outcomeToken: (isYes ? row.yes_token : row.no_token)?.toLowerCase() ?? "",
   };
 }
 
@@ -108,6 +110,31 @@ async function resolveOwnerToShadowAccount(
     [owner.toLowerCase()],
   );
   return r.rows[0]?.shadow_account ?? null;
+}
+
+async function resolveTxFromToShadowAccount(
+  client: pg.PoolClient,
+  event: NormalizedEvent,
+): Promise<{ owner: string; shadowAccount: string } | null> {
+  const owner = event.txFrom?.toLowerCase();
+  if (!owner) return null;
+  const shadowAccount = await resolveOwnerToShadowAccount(client, owner);
+  return shadowAccount ? { owner, shadowAccount } : null;
+}
+
+async function adjustUsdcBalance(
+  client: pg.PoolClient,
+  shadowAccount: string,
+  delta: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO balances (shadow_account, asset, current_balance)
+     VALUES ($1, 'USDC', GREATEST(0::numeric, $2::numeric)::text)
+     ON CONFLICT (shadow_account, asset) DO UPDATE SET
+       current_balance = GREATEST(0::numeric, balances.current_balance::numeric + $2::numeric)::text,
+       updated_at = NOW()`,
+    [shadowAccount.toLowerCase(), delta],
+  );
 }
 
 export async function applyFrontierEvent(
@@ -156,13 +183,6 @@ export async function applyFrontierEvent(
           event.blockTimestamp.toString(),
         ],
       );
-
-      if (shadowAccount && marketId) {
-        const outcome = side === "ask" ? "Yes" : "No";
-        const priceMicro = tickToMicroPrice(lower, upper);
-        const costBasis = mulDivDecimalString(liquidity, priceMicro, 1_000_000n);
-        await updatePosition(client, shadowAccount, marketId, outcome, liquidity, costBasis, "0");
-      }
 
       await client.query(
         `UPDATE aggregate_stats SET value = (value::bigint + 1)::text, updated_at = NOW()
@@ -235,12 +255,12 @@ export async function applyFrontierEvent(
            WHERE key = 'positions_closed'`,
         );
 
-        // Update latest trade mark and realized PnL on the filled position.
+        // Update latest trade mark and inventory. Frontier Deposit only locks
+        // order liquidity; it does not prove a new user holding. Ask fills sell
+        // already-owned outcome tokens, while bid fills acquire outcome tokens.
         if (o.shadow_account && o.market_id) {
           const outcome = o.side === "ask" ? "Yes" : "No";
           const priceMicro = tickToMicroPrice(Number(o.lower_tick), Number(o.upper_tick));
-          const costBasis = mulDivDecimalString(o.liquidity, priceMicro, 1_000_000n);
-          const realizedPnl = (BigInt(proceeds1 || "0") - BigInt(costBasis || "0")).toString();
           await recordLatestTradePrice(
             client,
             o.market_id,
@@ -249,15 +269,12 @@ export async function applyFrontierEvent(
             event.blockNumber.toString(),
             event.blockTimestamp.toString(),
           );
-          await updatePosition(
-            client,
-            o.shadow_account,
-            o.market_id,
-            outcome,
-            `-${o.liquidity}`,
-            `-${costBasis}`,
-            realizedPnl,
-          );
+          if (o.side === "ask") {
+            await reducePositionForProceeds(client, o.shadow_account, o.market_id, outcome, o.liquidity, proceeds1);
+            await adjustUsdcBalance(client, o.shadow_account, proceeds1);
+          } else {
+            await addPosition(client, o.shadow_account, o.market_id, outcome, o.liquidity, proceeds1);
+          }
         }
       }
       break;
@@ -292,6 +309,7 @@ export async function applyFrontierEvent(
       const fillTick = Number.isFinite(toBoundary) ? toBoundary : fromLevel;
       const priceMicro = tickLevelToMicroPrice(fillTick);
       const approxNotional = mulDivDecimalString(startSize, priceMicro, 1_000_000n);
+      const taker = await resolveTxFromToShadowAccount(client, event);
 
       if (ctx) {
         await recordLatestTradePrice(
@@ -309,8 +327,10 @@ export async function applyFrontierEvent(
            (chain_id, tx_hash, log_index, book_address, owner_address,
             shadow_account, market_id, side, token0, token1, amount0, amount1, fee,
             fill_clock, block_number, block_timestamp)
-         VALUES ($1,$2,$3,$4,'','',$5,'taker','','',$6,$7,'0',$8,$9,$10)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'taker','','',$8,$9,'0',$10,$11,$12)
          ON CONFLICT (chain_id, tx_hash, log_index) DO UPDATE SET
+           owner_address = EXCLUDED.owner_address,
+           shadow_account = EXCLUDED.shadow_account,
            market_id = EXCLUDED.market_id,
            amount0 = EXCLUDED.amount0,
            amount1 = EXCLUDED.amount1,
@@ -320,6 +340,8 @@ export async function applyFrontierEvent(
           event.txHash,
           event.logIndex,
           bookAddress,
+          taker?.owner ?? "",
+          taker?.shadowAccount ?? "",
           ctx?.marketId ?? null,
           startSize,
           approxNotional,
@@ -328,6 +350,16 @@ export async function applyFrontierEvent(
           event.blockTimestamp.toString(),
         ],
       );
+
+      if (ctx && taker && Number.isFinite(fromLevel) && Number.isFinite(toBoundary) && toBoundary !== fromLevel) {
+        if (toBoundary > fromLevel) {
+          await addPosition(client, taker.shadowAccount, ctx.marketId, ctx.outcome, startSize, approxNotional);
+          await adjustUsdcBalance(client, taker.shadowAccount, `-${approxNotional}`);
+        } else {
+          await reducePositionForProceeds(client, taker.shadowAccount, ctx.marketId, ctx.outcome, startSize, approxNotional);
+          await adjustUsdcBalance(client, taker.shadowAccount, approxNotional);
+        }
+      }
 
       await client.query(
         `UPDATE aggregate_stats SET value = (value::bigint + 1)::text, updated_at = NOW()
@@ -348,6 +380,7 @@ export async function applyFrontierEvent(
       const clock = bigStr(d["clock"]);
       const ctx = await resolveBookContext(client, bookAddress);
       const priceMicro = tickLevelToMicroPrice(lowerTick);
+      const taker = await resolveTxFromToShadowAccount(client, event);
 
       if (ctx) {
         await recordLatestTradePrice(
@@ -365,8 +398,10 @@ export async function applyFrontierEvent(
            (chain_id, tx_hash, log_index, book_address, owner_address,
             shadow_account, market_id, side, token0, token1, amount0, amount1, fee,
             fill_clock, block_number, block_timestamp)
-         VALUES ($1,$2,$3,$4,'','',$5,'taker','','',$6,$7,'0',$8,$9,$10)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'taker','','',$8,$9,'0',$10,$11,$12)
          ON CONFLICT (chain_id, tx_hash, log_index) DO UPDATE SET
+           owner_address = EXCLUDED.owner_address,
+           shadow_account = EXCLUDED.shadow_account,
            market_id = EXCLUDED.market_id,
            amount0 = EXCLUDED.amount0,
            amount1 = EXCLUDED.amount1,
@@ -376,6 +411,8 @@ export async function applyFrontierEvent(
           event.txHash,
           event.logIndex,
           bookAddress,
+          taker?.owner ?? "",
+          taker?.shadowAccount ?? "",
           ctx?.marketId ?? null,
           liquidity,
           proceeds1,
@@ -384,6 +421,11 @@ export async function applyFrontierEvent(
           event.blockTimestamp.toString(),
         ],
       );
+
+      if (ctx && taker) {
+        await addPosition(client, taker.shadowAccount, ctx.marketId, ctx.outcome, liquidity, proceeds1);
+        await adjustUsdcBalance(client, taker.shadowAccount, `-${proceeds1}`);
+      }
 
       await client.query(
         `UPDATE aggregate_stats SET value = (value::bigint + 1)::text, updated_at = NOW()
@@ -404,7 +446,7 @@ export async function applyFrontierEvent(
       const fee = bigStr(d["fee"]);
       const totalPaid = bigStr(d["totalPaid"]);
       const shadowAccount = await resolveOwnerToShadowAccount(client, payer);
-      const marketId = await resolveMarketFromBook(client, bookAddress);
+      const ctx = await resolveBookContext(client, bookAddress);
 
       await client.query(
         `INSERT INTO fills
@@ -420,7 +462,7 @@ export async function applyFrontierEvent(
           bookAddress,
           payer,
           shadowAccount,
-          marketId,
+          ctx?.marketId ?? null,
           token,
           totalPaid,
           fee,
@@ -428,6 +470,15 @@ export async function applyFrontierEvent(
           event.blockTimestamp.toString(),
         ],
       );
+
+      if (shadowAccount && ctx && BigInt(fee || "0") > 0n) {
+        if (token === ctx.outcomeToken) {
+          await reducePositionForProceeds(client, shadowAccount, ctx.marketId, ctx.outcome, fee, "0");
+        } else {
+          await addPosition(client, shadowAccount, ctx.marketId, ctx.outcome, "0", fee);
+          await adjustUsdcBalance(client, shadowAccount, `-${fee}`);
+        }
+      }
 
       await client.query(
         `UPDATE aggregate_stats SET value = (value::bigint + 1)::text, updated_at = NOW()
@@ -443,22 +494,20 @@ export async function applyFrontierEvent(
   }
 }
 
-async function updatePosition(
+export async function addPosition(
   client: pg.PoolClient,
   shadowAccount: string,
   marketId: string,
   outcome: string,
   quantityDelta: string,
   costBasisDelta: string,
-  realizedPnlDelta: string,
 ): Promise<void> {
   await client.query(
     `INSERT INTO positions (shadow_account, market_id, outcome, token_address, quantity, cost_basis, realized_pnl)
-     VALUES ($1, $2, $3, '', $4, $5, $6)
+     VALUES ($1, $2, $3, '', $4, $5, '0')
      ON CONFLICT (shadow_account, market_id, outcome) DO UPDATE SET
        quantity = GREATEST(0::numeric, positions.quantity::numeric + $4::numeric)::text,
        cost_basis = GREATEST(0::numeric, positions.cost_basis::numeric + $5::numeric)::text,
-       realized_pnl = (positions.realized_pnl::numeric + $6::numeric)::text,
        updated_at = NOW()`,
     [
       shadowAccount.toLowerCase(),
@@ -466,7 +515,44 @@ async function updatePosition(
       outcome,
       quantityDelta,
       costBasisDelta,
-      realizedPnlDelta,
+    ],
+  );
+}
+
+export async function reducePositionForProceeds(
+  client: pg.PoolClient,
+  shadowAccount: string,
+  marketId: string,
+  outcome: string,
+  quantityDelta: string,
+  proceeds: string,
+): Promise<void> {
+  await client.query(
+    `WITH current_position AS (
+       SELECT quantity::numeric AS quantity, cost_basis::numeric AS cost_basis
+       FROM positions
+       WHERE shadow_account=$1 AND market_id=$2 AND outcome=$3
+     ), reduction AS (
+       SELECT
+         LEAST(quantity, $4::numeric) AS quantity_sold,
+         CASE
+           WHEN quantity > 0 THEN cost_basis * (LEAST(quantity, $4::numeric) / quantity)
+           ELSE 0::numeric
+         END AS cost_removed
+       FROM current_position
+     )
+     UPDATE positions SET
+       quantity = GREATEST(0::numeric, positions.quantity::numeric - (SELECT quantity_sold FROM reduction))::text,
+       cost_basis = GREATEST(0::numeric, positions.cost_basis::numeric - (SELECT cost_removed FROM reduction))::text,
+       realized_pnl = (positions.realized_pnl::numeric + ($5::numeric - (SELECT cost_removed FROM reduction)))::text,
+       updated_at = NOW()
+     WHERE shadow_account=$1 AND market_id=$2 AND outcome=$3`,
+    [
+      shadowAccount.toLowerCase(),
+      marketId.toLowerCase(),
+      outcome,
+      quantityDelta,
+      proceeds,
     ],
   );
 }

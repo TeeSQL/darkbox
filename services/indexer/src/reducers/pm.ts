@@ -1,6 +1,6 @@
 import type pg from "pg";
 import type { NormalizedEvent } from "../adapters/types.js";
-import { registerFrontierBook } from "./frontier.js";
+import { addPosition, reducePositionForProceeds, registerFrontierBook } from "./frontier.js";
 import { registerDynamicFrontierBook, registerDynamicPmMarket } from "../ingestion/poller.js";
 
 const RESOLVER_TYPE_NAMES: Record<number, string> = {
@@ -17,6 +17,32 @@ const OUTCOME_NAMES: Record<number, string> = {
   2: "No",
   3: "Invalid",
 };
+
+async function resolveOwnerToShadowAccount(
+  client: pg.PoolClient,
+  owner: string,
+): Promise<string | null> {
+  const r = await client.query<{ shadow_account: string }>(
+    "SELECT shadow_account FROM agents WHERE owner_address=$1 OR shadow_account=$1 LIMIT 1",
+    [owner.toLowerCase()],
+  );
+  return r.rows[0]?.shadow_account ?? null;
+}
+
+async function adjustUsdcBalance(
+  client: pg.PoolClient,
+  shadowAccount: string,
+  delta: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO balances (shadow_account, asset, current_balance)
+     VALUES ($1, 'USDC', GREATEST(0::numeric, $2::numeric)::text)
+     ON CONFLICT (shadow_account, asset) DO UPDATE SET
+       current_balance = GREATEST(0::numeric, balances.current_balance::numeric + $2::numeric)::text,
+       updated_at = NOW()`,
+    [shadowAccount.toLowerCase(), delta],
+  );
+}
 
 function bigStr(v: unknown): string {
   if (typeof v === "bigint") return v.toString();
@@ -155,6 +181,44 @@ export async function applyPmMarketEvent(
         `UPDATE aggregate_stats SET value = GREATEST('0', (value::bigint - 1))::text, updated_at = NOW()
          WHERE key = 'active_markets'`,
       );
+      break;
+    }
+    case "Split": {
+      const marketId = String(d["marketId"]).toLowerCase();
+      const receiver = String(d["receiver"] ?? d["caller"]).toLowerCase();
+      const amount = bigStr(d["amount"]);
+      const shadowAccount = await resolveOwnerToShadowAccount(client, receiver);
+      if (shadowAccount) {
+        const halfCost = (BigInt(amount || "0") / 2n).toString();
+        await addPosition(client, shadowAccount, marketId, "Yes", amount, halfCost);
+        await addPosition(client, shadowAccount, marketId, "No", amount, halfCost);
+        await adjustUsdcBalance(client, shadowAccount, `-${amount}`);
+      }
+      break;
+    }
+    case "Joined": {
+      const marketId = String(d["marketId"]).toLowerCase();
+      const caller = String(d["caller"]).toLowerCase();
+      const amount = bigStr(d["amount"]);
+      const shadowAccount = await resolveOwnerToShadowAccount(client, caller);
+      if (shadowAccount) {
+        const halfProceeds = (BigInt(amount || "0") / 2n).toString();
+        await reducePositionForProceeds(client, shadowAccount, marketId, "Yes", amount, halfProceeds);
+        await reducePositionForProceeds(client, shadowAccount, marketId, "No", amount, halfProceeds);
+        await adjustUsdcBalance(client, shadowAccount, amount);
+      }
+      break;
+    }
+    case "Redeemed": {
+      const marketId = String(d["marketId"]).toLowerCase();
+      const receiver = String(d["receiver"] ?? d["caller"]).toLowerCase();
+      const outcome = OUTCOME_NAMES[Number(d["outcome"] ?? 0)] ?? "Unset";
+      const amount = bigStr(d["amount"]);
+      const shadowAccount = await resolveOwnerToShadowAccount(client, receiver);
+      if (shadowAccount && (outcome === "Yes" || outcome === "No")) {
+        await reducePositionForProceeds(client, shadowAccount, marketId, outcome, amount, amount);
+        await adjustUsdcBalance(client, shadowAccount, amount);
+      }
       break;
     }
   }

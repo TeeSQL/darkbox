@@ -1,5 +1,6 @@
 import type { AgentObservation, Identity, LeaderboardEntry, MarketSnapshot, OrderSnapshot } from '@darkbox/shared';
 import { MarketEngine, type PlaceOrderInput, type PlaceOrderResult } from './engine/engine.js';
+import type { EngineEvent } from './engine/events.js';
 import type { Outcome } from './engine/types.js';
 import { IdentityRepository, type RegisterIdentityInput } from './identity.js';
 import type { Store } from './store.js';
@@ -37,37 +38,83 @@ export class IndexerService {
     return this.identities.getByTelegramUserId(telegramUserId);
   }
 
-  // --- engine mutations -----------------------------------------------------
-
-  createMarket(marketId: string, question: string): void {
-    this.engine.createMarket(marketId, question);
+  /**
+   * Rebuild engine state by replaying the durable event log. Call once on boot
+   * before serving traffic. Replay is side-effect free beyond engine mutation
+   * (no events re-appended, no snapshots re-persisted).
+   */
+  async init(): Promise<void> {
+    for (const event of await this.store.loadEngineEvents()) {
+      this.apply(event);
+    }
   }
 
-  deposit(agentId: string, amount: number): void {
-    this.engine.deposit(agentId, amount);
+  // --- engine mutations (event-sourced) -------------------------------------
+
+  async createMarket(marketId: string, question: string): Promise<void> {
+    await this.commit({ type: 'createMarket', marketId, question });
   }
 
-  split(agentId: string, marketId: string, amount: number): void {
-    this.engine.split(agentId, marketId, amount);
+  async deposit(agentId: string, amount: number): Promise<void> {
+    await this.commit({ type: 'deposit', agentId, amount });
   }
 
-  merge(agentId: string, marketId: string, amount: number): void {
-    this.engine.merge(agentId, marketId, amount);
+  async split(agentId: string, marketId: string, amount: number): Promise<void> {
+    await this.commit({ type: 'split', agentId, marketId, amount });
+  }
+
+  async merge(agentId: string, marketId: string, amount: number): Promise<void> {
+    await this.commit({ type: 'merge', agentId, marketId, amount });
   }
 
   async placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
-    const result = this.engine.placeOrder(input);
+    const result = (await this.commit({ type: 'placeOrder', input })) as PlaceOrderResult;
     if (result.fills.length > 0) await this.persistSnapshots();
     return result;
   }
 
-  cancelOrder(orderId: string, agentId: string): void {
-    this.engine.cancelOrder(orderId, agentId);
+  async cancelOrder(orderId: string, agentId: string): Promise<void> {
+    await this.commit({ type: 'cancelOrder', orderId, agentId });
   }
 
   async resolveMarket(marketId: string, winningOutcome: Outcome): Promise<void> {
-    this.engine.resolveMarket(marketId, winningOutcome);
+    await this.commit({ type: 'resolveMarket', marketId, winningOutcome });
     await this.persistSnapshots();
+  }
+
+  /**
+   * Apply to the engine first, then append to the log. The engine validates
+   * synchronously and throws (EngineError) on bad input before we ever write,
+   * so the log never contains an event the engine would reject — replay is
+   * always clean. The narrow risk is a successful apply followed by a failed
+   * append (e.g. DB down): that surfaces as a 5xx and is the rare case to
+   * reconcile, in exchange for never corrupting the replay log on validation
+   * errors (the common case).
+   */
+  private async commit(event: EngineEvent): Promise<PlaceOrderResult | void> {
+    const result = this.apply(event);
+    await this.store.appendEngineEvent(event);
+    return result;
+  }
+
+  /** Apply an event to the engine. Used by both live commits and replay. */
+  private apply(event: EngineEvent): PlaceOrderResult | void {
+    switch (event.type) {
+      case 'createMarket':
+        return this.engine.createMarket(event.marketId, event.question), undefined;
+      case 'deposit':
+        return this.engine.deposit(event.agentId, event.amount);
+      case 'split':
+        return this.engine.split(event.agentId, event.marketId, event.amount);
+      case 'merge':
+        return this.engine.merge(event.agentId, event.marketId, event.amount);
+      case 'placeOrder':
+        return this.engine.placeOrder(event.input);
+      case 'cancelOrder':
+        return this.engine.cancelOrder(event.orderId, event.agentId);
+      case 'resolveMarket':
+        return this.engine.resolveMarket(event.marketId, event.winningOutcome);
+    }
   }
 
   // --- derived views --------------------------------------------------------

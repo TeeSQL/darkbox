@@ -112,7 +112,7 @@ export function createServer(deps: ServerDeps): http.Server {
         const marketId = str(body.marketId);
         const question = str(body.question);
         if (!marketId || !question) return send(res, 400, { error: 'marketId and question are required' });
-        service.createMarket(marketId, question);
+        await service.createMarket(marketId, question);
         return send(res, 200, { ok: true });
       }
       if (method === 'POST' && pathname === '/internal/deposits') {
@@ -120,7 +120,7 @@ export function createServer(deps: ServerDeps): http.Server {
         const agentId = str(body.agentId);
         const amount = num(body.amount);
         if (!agentId || amount === null) return send(res, 400, { error: 'agentId and numeric amount required' });
-        service.deposit(agentId, amount);
+        await service.deposit(agentId, amount);
         return send(res, 200, { balance: service.engine.getBalance(agentId) });
       }
       if (method === 'POST' && (pathname === '/internal/split' || pathname === '/internal/merge')) {
@@ -129,8 +129,8 @@ export function createServer(deps: ServerDeps): http.Server {
         const marketId = str(body.marketId);
         const amount = num(body.amount);
         if (!agentId || !marketId || amount === null) return send(res, 400, { error: 'agentId, marketId, amount required' });
-        if (pathname.endsWith('split')) service.split(agentId, marketId, amount);
-        else service.merge(agentId, marketId, amount);
+        if (pathname.endsWith('split')) await service.split(agentId, marketId, amount);
+        else await service.merge(agentId, marketId, amount);
         return send(res, 200, { balance: service.engine.getBalance(agentId) });
       }
       if (method === 'POST' && pathname === '/internal/orders') {
@@ -160,7 +160,7 @@ export function createServer(deps: ServerDeps): http.Server {
         const orderId = str(body.orderId);
         const agentId = str(body.agentId);
         if (!orderId || !agentId) return send(res, 400, { error: 'orderId and agentId required' });
-        service.cancelOrder(orderId, agentId);
+        await service.cancelOrder(orderId, agentId);
         return send(res, 200, { ok: true });
       }
       // POST /internal/markets/:marketId/resolve { winningOutcome }

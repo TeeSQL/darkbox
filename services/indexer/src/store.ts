@@ -1,4 +1,5 @@
 import type { Identity, IdentitySource, LeaderboardEntry } from '@darkbox/shared';
+import type { EngineEvent } from './engine/events.js';
 
 /** Raised when a write violates a UNIQUE constraint (daemon_name, telegram_user_id). */
 export class UniqueViolationError extends Error {
@@ -45,5 +46,9 @@ export interface Store {
   upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void>;
   /** Returns leaderboard entries joined with identity, sorted by pnl desc, ranked. */
   getLeaderboard(): Promise<LeaderboardEntry[]>;
+  /** Append an engine event to the durable log. */
+  appendEngineEvent(event: EngineEvent): Promise<void>;
+  /** Load all engine events in seq order, for replay on boot. */
+  loadEngineEvents(): Promise<EngineEvent[]>;
   close(): Promise<void>;
 }

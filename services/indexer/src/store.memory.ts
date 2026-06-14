@@ -1,4 +1,5 @@
 import type { Identity, LeaderboardEntry } from '@darkbox/shared';
+import type { EngineEvent } from './engine/events.js';
 import {
   type IdentityInsert,
   type LeaderboardSnapshotInput,
@@ -14,6 +15,7 @@ import {
 export class MemoryStore implements Store {
   private readonly identities = new Map<string, Identity>();
   private readonly snapshots = new Map<string, LeaderboardSnapshotInput>();
+  private readonly events: EngineEvent[] = [];
 
   async migrate(): Promise<void> {
     // No-op: schema is implicit for the in-memory store.
@@ -94,8 +96,17 @@ export class MemoryStore implements Store {
       }));
   }
 
+  async appendEngineEvent(event: EngineEvent): Promise<void> {
+    this.events.push(event);
+  }
+
+  async loadEngineEvents(): Promise<EngineEvent[]> {
+    return [...this.events];
+  }
+
   async close(): Promise<void> {
     this.identities.clear();
     this.snapshots.clear();
+    this.events.length = 0;
   }
 }

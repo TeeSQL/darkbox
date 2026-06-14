@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import type { Identity } from '@darkbox/shared';
+import type { EngineEvent } from './engine/events.js';
 import {
   type IdentityInsert,
   type LeaderboardSnapshotInput,
@@ -160,6 +161,15 @@ export class PostgresStore implements Store {
       pnl: row.pnl,
       rank: Number(row.rank),
     }));
+  }
+
+  async appendEngineEvent(event: EngineEvent): Promise<void> {
+    await this.pool.query('INSERT INTO engine_event (type, payload) VALUES ($1, $2)', [event.type, JSON.stringify(event)]);
+  }
+
+  async loadEngineEvents(): Promise<EngineEvent[]> {
+    const result = await this.pool.query<{ payload: EngineEvent }>('SELECT payload FROM engine_event ORDER BY seq ASC');
+    return result.rows.map((row) => row.payload);
   }
 
   async close(): Promise<void> {

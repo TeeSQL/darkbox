@@ -408,35 +408,6 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Balance + realized PnL by shadow account. The gateway keys players by their
-  // shadow account (not the indexer's agentId), so self/status reads here to
-  // surface the player's own indexer-sourced balance.
-  app.get<{ Params: { shadowAccount: string } }>(
-    "/internal/balances/:shadowAccount",
-    async (req) => {
-      const sa = req.params.shadowAccount;
-      const balancesResult = await query(
-        "SELECT * FROM balances WHERE LOWER(shadow_account) = LOWER($1)",
-        [sa],
-      );
-      const pnlResult = await query<{ realized_pnl: string }>(
-        `SELECT COALESCE(SUM(realized_pnl::numeric), 0)::text as realized_pnl
-         FROM positions WHERE LOWER(shadow_account) = LOWER($1)`,
-        [sa],
-      );
-      const currentBalance = balancesResult.rows.reduce(
-        (sum, r) => sum + Number((r as Record<string, unknown>)["current_balance"] ?? 0),
-        0,
-      );
-      return {
-        shadowAccount: sa,
-        currentBalance: currentBalance.toFixed(2),
-        realizedPnl: pnlResult.rows[0]?.realized_pnl ?? "0",
-        balances: balancesResult.rows,
-      };
-    },
-  );
-
   app.get<{ Params: { agentId: string } }>(
     "/internal/agents/:agentId/orders",
     async (req, reply) => {

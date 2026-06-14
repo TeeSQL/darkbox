@@ -22,11 +22,11 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
     const unlockAt = invite ? Date.parse(invite.withdrawalUnlockAt) : 0;
     const promoLocked = Boolean(invite) && now < unlockAt;
 
-    // Best-effort: the player's own indexer-sourced balance + realized PnL. Keyed
-    // by shadow account. Never block self/status on the indexer (it can be briefly
-    // unreachable) — on any failure we simply omit it and the promo view stands.
+    // Best-effort: the player's own indexer-sourced holdings (the CVM-reported
+    // balance), keyed by shadow account. Reads the canonical /internal/balances
+    // route (micro-USDC) and converts to a USDC decimal string. Never blocks
+    // self/status on the indexer — on any failure we omit it and the promo stands.
     let shadowBalance: string | null = null;
-    let realizedPnl: string | null = null;
     try {
       const base = config.indexerInternalUrl.replace(/\/$/, "");
       const res = await fetch(
@@ -34,9 +34,12 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
         { signal: AbortSignal.timeout(2000) },
       );
       if (res.ok) {
-        const data = (await res.json()) as { currentBalance?: string; realizedPnl?: string };
-        shadowBalance = data.currentBalance ?? null;
-        realizedPnl = data.realizedPnl ?? null;
+        const data = (await res.json()) as { currentBalanceMicro?: string };
+        const micro = data.currentBalanceMicro;
+        if (micro && /^\d+$/.test(micro)) {
+          const m = BigInt(micro);
+          shadowBalance = `${m / 1_000_000n}.${(m % 1_000_000n).toString().padStart(6, "0")}`;
+        }
       }
     } catch {
       /* indexer unreachable → omit; the promo-funded view still applies */
@@ -61,10 +64,9 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
       // Withdrawable balance is owned by the bridge; until that read is wired we
       // report the conservative locked-promo view rather than inventing a number.
       withdrawableAvailableBalance: promoLocked ? "0.00" : null,
-      // Indexer-sourced holdings + realized PnL (null when the indexer has no row
+      // Indexer-sourced holdings (USDC decimal; null when the indexer has no row
       // for this account yet, or was briefly unreachable).
       shadowBalance,
-      realizedPnl,
       instructionCommitmentHash: registration?.instructionHash ?? null,
       withdrawalLock: invite
         ? {

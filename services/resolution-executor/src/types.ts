@@ -1,15 +1,21 @@
 import type { Address, Hex } from "viem";
 
 /**
- * On-chain intent types emitted by Ocean's market-closing lane (PR #22) on
- * `market_lifecycle_actions.onchain_intent.type`.
+ * Settlement intent types this worker executes. These are the only
+ * `onchain_intent.type` values that ever reach the executor, because the feed
+ * is sourced from markets whose `lifecycle_status === 'resolution_pending'`, and
+ * #22 only ever writes a `prepare_resolution` action for those — whose intent is
+ * `resolveMarket` (Yes/No) or `voidMarket` (Invalid).
  *
  *  - `resolveMarket` — settle to a definite YES/NO outcome.
  *  - `voidMarket`    — settle the market as Invalid (refund / void).
- *  - `closeMarket`   — stop trading (Active/Paused -> Closed); no outcome. This
- *                      is a precursor to resolution, not a settlement itself.
+ *
+ * NOTE: `closeMarket` is deliberately NOT a settlement intent here. Closing
+ * (Active/Paused -> Closed) is owned by the indexer close route + the expiry
+ * worker; it must never be sourced or written back via complete-resolution
+ * (that route is settlement-only). See decisionSource.ts / executor.ts.
  */
-export type IntentType = "resolveMarket" | "voidMarket" | "closeMarket";
+export type IntentType = "resolveMarket" | "voidMarket";
 
 /**
  * The EXPLICIT, already-approved outcome an intent settles to. This worker does

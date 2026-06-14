@@ -41,3 +41,18 @@ export const binaryMarketAbi = parseAbi([
   "event MarketResolved(bytes32 indexed marketId, uint8 outcome, bytes32 resolutionHash)",
   "event MarketVoided(bytes32 indexed marketId, string reason, bytes32 evidenceHash)",
 ]);
+
+/**
+ * Standalone, name-addressed event items for `getLogs` idempotency scans
+ * (mirrors services/faucet-mint-worker/src/abis.ts `shadowMintedEvent`). The
+ * market emits these on `DarkBoxBinaryMarket`, keyed by the indexed `marketId`,
+ * so the executor can recover the tx hash of an already-applied resolution
+ * instead of sending (and reverting on) a second one.
+ */
+export const marketResolvedEvent = parseAbi([
+  "event MarketResolved(bytes32 indexed marketId, uint8 outcome, bytes32 resolutionHash)",
+])[0];
+
+export const marketVoidedEvent = parseAbi([
+  "event MarketVoided(bytes32 indexed marketId, string reason, bytes32 evidenceHash)",
+])[0];

@@ -12,7 +12,8 @@
     "ingest:ethglobal:prod": "node dist/services/indexer/src/ethglobal/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "smoke:market": "node --import tsx scripts/market-lifecycle.smoke.ts"
   },
   "dependencies": {
     "@darkbox/shared": "workspace:*",

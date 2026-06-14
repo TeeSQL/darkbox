@@ -56,12 +56,30 @@ async function fetchBlockTimestamp(blockNumber: bigint): Promise<bigint> {
   }
 }
 
+async function fetchTransactionSender(
+  txHash: `0x${string}`,
+  cache: Map<string, string | null>,
+): Promise<string | null> {
+  const key = txHash.toLowerCase();
+  if (cache.has(key)) return cache.get(key) ?? null;
+  try {
+    const tx = await getClient().getTransaction({ hash: txHash });
+    const from = tx.from?.toLowerCase() ?? null;
+    cache.set(key, from);
+    return from;
+  } catch {
+    cache.set(key, null);
+    return null;
+  }
+}
+
 async function processLogs(
   watchedContract: WatchedContract,
   logs: Log[],
 ): Promise<void> {
   if (logs.length === 0) return;
 
+  const txFromCache = new Map<string, string | null>();
   await withTransaction(async (txClient) => {
     for (const log of logs) {
       if (!log.blockNumber || !log.transactionHash || log.logIndex == null) continue;
@@ -81,12 +99,14 @@ async function processLogs(
       }
 
       const blockTs = await fetchBlockTimestamp(log.blockNumber);
+      const txFrom = await fetchTransactionSender(log.transactionHash as `0x${string}`, txFromCache);
 
       const event: NormalizedEvent = {
         chainId: watchedContract.chainId,
         blockNumber: log.blockNumber,
         blockTimestamp: blockTs,
         txHash: log.transactionHash as `0x${string}`,
+        txFrom: txFrom ?? undefined,
         logIndex: log.logIndex,
         contractAddress: log.address as `0x${string}`,
         adapter: watchedContract.adapter,

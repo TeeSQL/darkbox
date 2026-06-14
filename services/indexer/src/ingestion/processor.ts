@@ -8,6 +8,7 @@ export interface StoredRawEvent {
   blockNumber: bigint;
   blockTimestamp: bigint;
   txHash: string;
+  txFrom?: string | null;
   logIndex: number;
   contractAddress: string;
   eventName: string;
@@ -27,8 +28,8 @@ export async function storeEvent(
   const result = await client.query<{ id: string }>(
     `INSERT INTO raw_events
        (chain_id, block_number, block_timestamp, tx_hash, log_index,
-        contract_address, event_name, adapter, raw_data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        contract_address, event_name, adapter, raw_data, tx_from)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
      RETURNING id`,
     [
@@ -41,6 +42,7 @@ export async function storeEvent(
       event.eventName,
       event.adapter,
       JSON.stringify(rawData),
+      event.txFrom?.toLowerCase() ?? null,
     ],
   );
   if (result.rows.length === 0) return null;

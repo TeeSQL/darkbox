@@ -22,8 +22,8 @@ export const frontierBookAbi = parseAbi([
   "event PositionTransferred(uint256 indexed positionId, address indexed from, address indexed to)",
   "event InternalCredit(address indexed user, uint256 amount0, uint256 amount1)",
   "event InternalWithdraw(address indexed user, uint256 amount0, uint256 amount1)",
-  "event MakerFee(uint256 indexed positionId, address indexed token, uint256 grossProceeds, uint256 fee, uint256 netProceeds, uint64 clock)",
-  "event TakerFee(address indexed payer, address indexed token, uint256 grossInput, uint256 fee, uint256 totalPaid, uint64 clock)",
+  "event MakerFee(uint256 indexed positionId, address indexed token, uint256 grossProceeds, uint256 fee, uint256 netProceeds, address recipient)",
+  "event TakerFee(address indexed payer, address indexed token, uint256 grossInput, uint256 fee, uint256 totalPaid, address recipient)",
 ]);
 
 export const pmFactoryAbi = parseAbi([

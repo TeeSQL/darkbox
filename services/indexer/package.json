@@ -10,6 +10,7 @@
     "dev": "node --import tsx src/index.ts",
     "ingest:ethglobal": "node --import tsx src/ethglobal/cli.ts",
     "ingest:ethglobal:prod": "node dist/services/indexer/src/ethglobal/cli.js",
+    "lifecycle": "node --import tsx src/marketLifecycleCli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts"

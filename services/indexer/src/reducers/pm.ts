@@ -67,11 +67,13 @@ export async function applyPmFactoryEvent(
         `INSERT INTO markets
            (market_id, game_id, creator_address, market_address, question,
             metadata_uri, close_time, resolve_by, resolver_type,
-            status, created_at_block, created_at_ts)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Active',$10,$11)
+            status, expires_at, lifecycle_status, created_at_block, created_at_ts)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Active',$7,'active',$10,$11)
          ON CONFLICT (market_id) DO UPDATE SET
            question = EXCLUDED.question,
-           metadata_uri = EXCLUDED.metadata_uri`,
+           metadata_uri = EXCLUDED.metadata_uri,
+           close_time = EXCLUDED.close_time,
+           expires_at = CASE WHEN markets.expires_at = 0 THEN EXCLUDED.expires_at ELSE markets.expires_at END`,
         [
           marketId,
           String(d["gameId"]).toLowerCase(),
@@ -144,8 +146,14 @@ export async function applyPmMarketEvent(
     }
     case "MarketClosed": {
       await client.query(
-        "UPDATE markets SET status='Closed', updated_at=NOW() WHERE market_id=$1",
-        [String(d["marketId"]).toLowerCase()],
+        `UPDATE markets
+         SET status='Closed',
+             lifecycle_status='closed',
+             closed_at=COALESCE(closed_at, $2),
+             close_tx_hash=COALESCE(close_tx_hash, $3),
+             updated_at=NOW()
+         WHERE market_id=$1`,
+        [String(d["marketId"]).toLowerCase(), event.blockTimestamp.toString(), event.txHash],
       );
       await client.query(
         `UPDATE aggregate_stats SET value = GREATEST('0', (value::bigint - 1))::text, updated_at = NOW()
@@ -157,12 +165,22 @@ export async function applyPmMarketEvent(
       const outcomeNum = Number(d["outcome"] ?? 0);
       const outcome = OUTCOME_NAMES[outcomeNum] ?? "Unset";
       await client.query(
-        `UPDATE markets SET status='Resolved', resolved_outcome=$1, resolution_hash=$2, updated_at=NOW()
+        `UPDATE markets
+         SET status='Resolved',
+             lifecycle_status='resolved',
+             resolved_outcome=$1,
+             outcome=$1,
+             resolution_hash=$2,
+             resolved_at=COALESCE(resolved_at, $4),
+             resolve_tx_hash=COALESCE(resolve_tx_hash, $5),
+             updated_at=NOW()
          WHERE market_id=$3`,
         [
           outcome,
           String(d["resolutionHash"]),
           String(d["marketId"]).toLowerCase(),
+          event.blockTimestamp.toString(),
+          event.txHash,
         ],
       );
       await client.query(
@@ -173,9 +191,16 @@ export async function applyPmMarketEvent(
     }
     case "MarketVoided": {
       await client.query(
-        `UPDATE markets SET status='Voided', resolved_outcome='Invalid', updated_at=NOW()
+        `UPDATE markets
+         SET status='Voided',
+             lifecycle_status='resolved',
+             resolved_outcome='Invalid',
+             outcome='Invalid',
+             resolved_at=COALESCE(resolved_at, $2),
+             resolve_tx_hash=COALESCE(resolve_tx_hash, $3),
+             updated_at=NOW()
          WHERE market_id=$1`,
-        [String(d["marketId"]).toLowerCase()],
+        [String(d["marketId"]).toLowerCase(), event.blockTimestamp.toString(), event.txHash],
       );
       await client.query(
         `UPDATE aggregate_stats SET value = GREATEST('0', (value::bigint - 1))::text, updated_at = NOW()

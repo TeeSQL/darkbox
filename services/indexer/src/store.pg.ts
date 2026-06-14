@@ -122,6 +122,10 @@ export class PostgresStore implements Store {
     return this.getIdentityBy('daemon_name', daemonName);
   }
 
+  getIdentityByAgentId(agentId: string): Promise<Identity | null> {
+    return this.getIdentityBy('agent_id', agentId);
+  }
+
   async upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void> {
     await this.pool.query(
       `INSERT INTO leaderboard_snapshot (shadow_account, agent_id, starting_balance, current_equity, pnl, updated_at)

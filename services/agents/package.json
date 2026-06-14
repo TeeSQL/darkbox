@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "demo:random": "tsx src/cli.ts random --turns 5",
-    "demo:venice": "tsx src/cli.ts venice --turns 1"
+    "demo:venice": "tsx src/cli.ts venice --turns 1",
+    "showcase": "tsx src/cli.ts showcase"
   },
   "dependencies": {
     "@darkbox/shared": "workspace:*"

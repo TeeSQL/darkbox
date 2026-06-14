@@ -64,6 +64,13 @@ export class MemoryStore implements Store {
     return null;
   }
 
+  async getIdentityByAgentId(agentId: string): Promise<Identity | null> {
+    for (const identity of this.identities.values()) {
+      if (identity.agentId === agentId) return identity;
+    }
+    return null;
+  }
+
   async upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void> {
     this.snapshots.set(input.shadowAccount, input);
   }

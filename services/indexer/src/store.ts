@@ -41,6 +41,7 @@ export interface Store {
   getIdentityByShadowAccount(shadowAccount: string): Promise<Identity | null>;
   getIdentityByTelegramUserId(telegramUserId: string): Promise<Identity | null>;
   getIdentityByDaemonName(daemonName: string): Promise<Identity | null>;
+  getIdentityByAgentId(agentId: string): Promise<Identity | null>;
   upsertLeaderboardSnapshot(input: LeaderboardSnapshotInput): Promise<void>;
   /** Returns leaderboard entries joined with identity, sorted by pnl desc, ranked. */
   getLeaderboard(): Promise<LeaderboardEntry[]>;

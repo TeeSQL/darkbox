@@ -245,23 +245,29 @@ button { -webkit-tap-highlight-color: transparent; }
    mic click can't shrink it and re-center the column — keeps the composer fixed. */
 #whisper-status { min-height: 5.2em; }
 
-/* Conversational reveal: the whisper beats arrive one at a time, like the hall
-   leaning in and telling you the rules, then the field, then the promise. */
+/* Terminal-typed intro: the hall writes the beats out line by line, with a
+   blinking caret on the active line. JS (typeWhisperConvo) drives the typing;
+   CSS provides the caret, the accent colors, and the reveal of the field +
+   promise once the typing finishes. */
 .convo { display: flex; flex-direction: column; gap: 10px; }
 .convo .eyebrow { margin-bottom: 2px; }
 .beat { color: var(--mut); font-size: 14px; line-height: 1.55; }
-.line { opacity: 0; }
-.view.active .line { animation: lineIn 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.view.active .convo .line:nth-child(1) { animation-delay: 0.15s; }
-.view.active .convo .line:nth-child(2) { animation-delay: 0.6s; }
-.view.active .convo .line:nth-child(3) { animation-delay: 1.15s; }
-.view.active .convo .line:nth-child(4) { animation-delay: 1.6s; }
-.view.active .whisper-line { animation-delay: 2.15s; }
-.view.active #whisper-status { animation-delay: 2.6s; }
-@keyframes lineIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+.cline { min-height: 1.2em; } /* hold each line's height while empty (pre-type) */
+.c-blind { color: var(--violet); }   /* "provably blind" — the cold of the seal */
+.c-confess { color: var(--ember); }  /* "confesses" — the heat */
+.cline.typing::after {
+  content: '▌';
+  margin-left: 2px;
+  color: var(--mut);
+  animation: caret 1.05s steps(1) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+/* While typing, hold the field + promise hidden; reveal them when done. */
+.wrap.term .whisper-line, .wrap.term #whisper-status { opacity: 0; }
+.wrap.term.term-done .whisper-line,
+.wrap.term.term-done #whisper-status { opacity: 1; transition: opacity 0.55s ease; }
 @media (prefers-reduced-motion: reduce) {
-  .line { opacity: 1; }
-  .view.active .line { animation: none; }
+  .cline.typing::after { display: none; }
 }
 .tell { color: var(--violet); }
 .whisper { width: 100%; margin-top: 28px; text-align: left; }

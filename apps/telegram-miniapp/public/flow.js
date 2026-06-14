@@ -319,11 +319,75 @@ function syncNotifyToggle() {
   notifyToggle.textContent = enabled ? 'on' : 'off';
 }
 
+// ── Terminal-typed whisper intro ──────────────────────────────────────────
+// The hall "writes" each beat into the view, char by char, with a blinking
+// caret on the active line — then reveals the field and the secrecy promise.
+let convoTyped = false;
+
+function revealWhisperField() {
+  document.querySelector('#v-whisper .wrap')?.classList.add('term-done');
+}
+
+function typeWhisperConvo() {
+  if (convoTyped) return;
+  const wrap = document.querySelector('#v-whisper .wrap');
+  const convo = wrap?.querySelector('.convo');
+  if (!wrap || !convo) return;
+  convoTyped = true;
+  const lines = [...convo.querySelectorAll('.cline')];
+  // Snapshot each line's segments (text + accent class) before clearing.
+  const plan = lines.map((el) => [...el.childNodes].map((node) => ({
+    text: node.textContent || '',
+    cls: node.nodeType === 1 ? (node.getAttribute('class') || '') : '',
+  })));
+
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { revealWhisperField(); return; } // leave text as-is, just reveal field
+
+  wrap.classList.add('term');
+  lines.forEach((el) => { el.textContent = ''; });
+
+  let li = 0;
+  function typeLine() {
+    if (li >= lines.length) { revealWhisperField(); return; }
+    const el = lines[li];
+    el.classList.add('typing');
+    const segs = plan[li];
+    let si = 0;
+    let ci = 0;
+    let span = null;
+    function step() {
+      if (si >= segs.length) {
+        el.classList.remove('typing');
+        li += 1;
+        window.setTimeout(typeLine, 340);
+        return;
+      }
+      const seg = segs[si];
+      if (ci === 0) {
+        span = document.createElement('span');
+        if (seg.cls) span.className = seg.cls;
+        el.appendChild(span);
+      }
+      const ch = seg.text[ci];
+      span.textContent += ch;
+      ci += 1;
+      if (ci >= seg.text.length) { si += 1; ci = 0; }
+      window.setTimeout(step, ch === ' ' ? 55 : 26);
+    }
+    step();
+  }
+  window.setTimeout(typeLine, 280);
+}
+
 function showView(id) {
   views.forEach((view) => view.classList.toggle('active', view.id === id));
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderPrivateState();
-  if (id === 'v-whisper') window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
+  if (id === 'v-whisper') {
+    window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
+    typeWhisperConvo();
+  }
   tg?.HapticFeedback?.impactOccurred?.('light');
 }
 

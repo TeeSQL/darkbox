@@ -11,8 +11,8 @@ import {
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { binaryMarketAbi, marketFactoryAbi } from "./abis.js";
-import { MarketStatus, OUTCOME_CODE, type PendingResolution } from "./types.js";
+import { marketFactoryAbi, marketResolvedEvent, marketVoidedEvent } from "./abis.js";
+import { OUTCOME_CODE, type PendingResolution } from "./types.js";
 
 /** Result of an executed on-chain resolution. */
 export interface ResolveResult {
@@ -32,12 +32,14 @@ export interface MarketResolver {
    */
   resolveMarket(intent: PendingResolution): Promise<ResolveResult>;
   /**
-   * Idempotency guard: true if the market is already in a terminal state for
-   * this intent, so we must NOT send a second tx. For resolve/void that means
-   * the market already reads Resolved or Voided; for closeMarket it means the
-   * market is already Closed (or beyond).
+   * Idempotency lookup: return the tx hash of the resolution/void already
+   * applied on-chain for this intent, or `null` if none exists yet. Scans the
+   * market's `MarketResolved`/`MarketVoided` logs (mirrors the faucet worker's
+   * `findExistingMint`). Used so a crash-recovered or re-sourced market records
+   * the REAL existing tx instead of sending a second one (which would revert) —
+   * and so the settlement write-back never has to post a null hash.
    */
-  isAlreadyResolved(intent: PendingResolution): Promise<boolean>;
+  findExistingResolutionTx(intent: PendingResolution): Promise<Hex | null>;
 }
 
 export interface ViemResolverConfig {
@@ -46,6 +48,8 @@ export interface ViemResolverConfig {
   factoryAddress: Address;
   /** Coordinator / factory-owner key. NEVER log this. */
   coordinatorPrivateKey: Hex;
+  /** Earliest block to scan for findExistingResolutionTx logs (default 0). */
+  fromBlock?: bigint;
 }
 
 function chainFor(id: number, rpc: string) {
@@ -72,6 +76,7 @@ export class ViemMarketResolver implements MarketResolver {
   private readonly publicClient: PublicClient;
   private readonly walletClient: WalletClient;
   private readonly factory: Address;
+  private readonly fromBlock: bigint;
 
   /** Coordinator address derived from the key — safe to expose/log (NOT the key). */
   readonly coordinatorAddress: Address;
@@ -83,6 +88,7 @@ export class ViemMarketResolver implements MarketResolver {
     this.publicClient = createPublicClient({ chain, transport: http(cfg.rpcUrl) });
     this.walletClient = createWalletClient({ account, chain, transport: http(cfg.rpcUrl) });
     this.factory = cfg.factoryAddress;
+    this.fromBlock = cfg.fromBlock ?? 0n;
   }
 
   async resolveMarket(intent: PendingResolution): Promise<ResolveResult> {
@@ -116,36 +122,50 @@ export class ViemMarketResolver implements MarketResolver {
         txHash = await this.walletClient.writeContract(request);
         break;
       }
-      case "closeMarket": {
-        const { request } = await this.publicClient.simulateContract({
-          account,
-          address: this.factory,
-          abi: marketFactoryAbi,
-          functionName: "closeMarket",
-          args: [intent.marketId],
-        });
-        txHash = await this.walletClient.writeContract(request);
-        break;
-      }
     }
 
     await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     return { txHash };
   }
 
-  async isAlreadyResolved(intent: PendingResolution): Promise<boolean> {
-    // On-chain status is the source of truth for idempotency. (Equivalently we
-    // could scan for the market's MarketResolved/MarketVoided logs; the status
-    // read is cheaper and crash-safe.)
-    const status = await this.publicClient.readContract({
-      address: intent.marketAddress,
-      abi: binaryMarketAbi,
-      functionName: "status",
-    });
-    if (intent.intentType === "closeMarket") {
-      // close is a no-op once trading has already stopped.
-      return status >= MarketStatus.Closed;
+  async findExistingResolutionTx(intent: PendingResolution): Promise<Hex | null> {
+    // The market emits MarketResolved (for resolve) / MarketVoided (for void),
+    // keyed by the indexed marketId. Find the existing settlement tx so we record
+    // the REAL hash rather than sending a duplicate (which reverts BadStatus) or
+    // posting a null hash to complete-resolution.
+    if (intent.intentType === "voidMarket") {
+      // MarketVoided carries no outcome to mismatch — any void log IS the void.
+      const logs = await this.publicClient.getLogs({
+        address: intent.marketAddress,
+        event: marketVoidedEvent,
+        args: { marketId: intent.marketId },
+        fromBlock: this.fromBlock,
+        toBlock: "latest",
+      });
+      return logs[0]?.transactionHash ?? null;
     }
-    return status === MarketStatus.Resolved || status === MarketStatus.Voided;
+
+    // resolveMarket: a market resolves at most once, so expect 0 or 1 log. Only
+    // accept a MarketResolved whose on-chain outcome matches the prepared intent.
+    // A log that resolved to a DIFFERENT outcome than the DB prepared must NEVER
+    // be written back (it would settle the DB to the wrong outcome) — throw so the
+    // executor's catch leaves the market resolution_pending for a human.
+    const logs = await this.publicClient.getLogs({
+      address: intent.marketAddress,
+      event: marketResolvedEvent,
+      args: { marketId: intent.marketId },
+      fromBlock: this.fromBlock,
+      toBlock: "latest",
+    });
+    const log = logs[0];
+    if (!log) return null;
+    const expected = OUTCOME_CODE[intent.outcome as "Yes" | "No"];
+    const onChain = Number(log.args.outcome);
+    if (onChain !== expected) {
+      throw new Error(
+        `on-chain MarketResolved outcome ${onChain} conflicts with prepared intent outcome ${intent.outcome} for market ${intent.marketId}`,
+      );
+    }
+    return log.transactionHash;
   }
 }

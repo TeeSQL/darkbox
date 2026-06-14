@@ -24,7 +24,8 @@ export type ProcessOutcome = "resolved" | "already-resolved" | "skipped" | "fail
  *
  *  - resolveMarket MUST carry Yes or No.
  *  - voidMarket    MUST carry Invalid.
- *  - closeMarket   carries no outcome (it is not a settlement).
+ *
+ * (closeMarket is not a settlement and is never sourced — see decisionSource.ts.)
  */
 export function validateIntent(intent: PendingResolution): { ok: true } | { ok: false; reason: string } {
   switch (intent.intentType) {
@@ -40,12 +41,6 @@ export function validateIntent(intent: PendingResolution): { ok: true } | { ok: 
         ok: false,
         reason: `voidMarket requires the Invalid outcome, got ${JSON.stringify(intent.outcome)}`,
       };
-    case "closeMarket":
-      if (intent.outcome === null) return { ok: true };
-      return {
-        ok: false,
-        reason: `closeMarket must not carry an outcome, got ${JSON.stringify(intent.outcome)}`,
-      };
     default:
       return { ok: false, reason: `unknown intentType ${JSON.stringify(intent.intentType)}` };
   }
@@ -53,11 +48,12 @@ export function validateIntent(intent: PendingResolution): { ok: true } | { ok: 
 
 /**
  * Process a single pending resolution end-to-end:
- *   validate (safety) -> idempotency skip -> resolve on-chain -> markResolved.
+ *   validate (safety) -> idempotency (real tx) -> resolve on-chain -> markResolved.
  *
- * Never throws: a validation failure is SKIPPED + flagged via markFailed (never
- * resolved/defaulted); a per-item on-chain/source error is recorded via
- * markFailed so the loop keeps going. Returns the outcome category.
+ * Never throws. There is no failure write-back route in #22, so a skip or error
+ * does NOT advance the market: it is left in `resolution_pending` (the durable
+ * "needs attention" signal) and a structured error is logged. Returns the
+ * outcome category.
  */
 export async function processResolution(
   intent: PendingResolution,
@@ -67,34 +63,33 @@ export async function processResolution(
   const marketId = intent.marketId;
 
   // --- SAFETY: only execute an explicit, valid outcome. ---
+  // prepare-resolution validates the outcome upstream, so this is now rare. When
+  // it does trip we leave the market pending (no failure route) and log loudly.
   const valid = validateIntent(intent);
   if (!valid.ok) {
-    log("SKIP ambiguous/invalid outcome (flagging, NOT resolving)", {
+    log("SKIP ambiguous/invalid outcome — leaving resolution_pending for manual attention (NOT resolving)", {
       marketId,
       intentType: intent.intentType,
       reason: valid.reason,
     });
-    try {
-      await deps.source.markFailed(marketId, valid.reason);
-    } catch (markErr) {
-      const m = markErr instanceof Error ? markErr.message : String(markErr);
-      log("markFailed ALSO failed (will retry next poll)", { marketId, error: m });
-    }
     return "skipped";
   }
 
   try {
-    // --- Idempotency: never resolve a market that is already terminal. ---
-    if (await deps.resolver.isAlreadyResolved(intent)) {
-      log("already resolved on-chain — skipping tx, marking done", {
+    // --- Idempotency: if a settlement tx already exists on-chain, record THAT
+    // real hash; never send a second tx and never post a null hash. ---
+    const existingTx = await deps.resolver.findExistingResolutionTx(intent);
+    if (existingTx) {
+      log("already resolved on-chain — recording existing tx (no new tx)", {
         marketId,
         intentType: intent.intentType,
+        txHash: existingTx,
       });
-      await deps.source.markResolved(marketId, { txHash: null });
+      await deps.source.markResolved(marketId, { txHash: existingTx });
       return "already-resolved";
     }
 
-    // --- Execute the EXPLICIT decision on-chain. ---
+    // --- Execute the EXPLICIT decision on-chain, then write back the real tx. ---
     const { txHash } = await deps.resolver.resolveMarket(intent);
     log("resolved on-chain", {
       marketId,
@@ -105,14 +100,14 @@ export async function processResolution(
     await deps.source.markResolved(marketId, { txHash });
     return "resolved";
   } catch (err) {
+    // No failure route: do NOT advance the market. Leaving it in
+    // resolution_pending is the signal a human acts on. Log structured + move on.
     const message = err instanceof Error ? err.message : String(err);
-    log("resolution FAILED", { marketId, intentType: intent.intentType, error: message });
-    try {
-      await deps.source.markFailed(marketId, message);
-    } catch (markErr) {
-      const m = markErr instanceof Error ? markErr.message : String(markErr);
-      log("markFailed ALSO failed (will retry next poll)", { marketId, error: m });
-    }
+    log("resolution FAILED — leaving resolution_pending for manual attention", {
+      marketId,
+      intentType: intent.intentType,
+      error: message,
+    });
     return "failed";
   }
 }

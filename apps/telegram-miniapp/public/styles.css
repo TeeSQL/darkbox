@@ -1126,17 +1126,17 @@ body.feed-open { overflow: hidden; }
 
 /* ── Prominent floating mic (opens the whisper modal) ──────────────────────── */
 .sealed-terminal-button {
-  width: 46px; height: 46px;
+  width: 34px; height: 34px;
   color: var(--bone);
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.42);
   background: rgba(20, 20, 28, 0.82);
-  animation: micGlow 2.4s ease-in-out infinite;
+  animation: micGlow 2.6s ease-in-out infinite;
 }
 @keyframes micGlow {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,.05), 0 0 16px rgba(255,255,255,.26), 0 10px 30px rgba(0,0,0,.4); }
-  50%      { box-shadow: 0 0 0 3px rgba(255,255,255,.10), 0 0 30px rgba(255,255,255,.5), 0 10px 30px rgba(0,0,0,.4); }
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 0 10px rgba(255,255,255,.18), 0 8px 22px rgba(0,0,0,.38); }
+  50%      { box-shadow: 0 0 0 2px rgba(255,255,255,.07), 0 0 18px rgba(255,255,255,.32), 0 8px 22px rgba(0,0,0,.38); }
 }
-.sealed-terminal-button svg { width: 21px; height: 21px; }
+.sealed-terminal-button svg { width: 16px; height: 16px; }
 
 /* ── Whisper modal: full-page, dismissable via × ───────────────────────────── */
 .sealed-terminal-modal { place-items: stretch; padding: 0; background: rgba(0,0,0,.62); }

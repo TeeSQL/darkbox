@@ -40,11 +40,16 @@ services:
       HIDDEN_RPC_URL: http://darkbox-node:8545
 
   darkbox-bridge:
-    build: ./services/bridge
+    build:
+      context: .
+      dockerfile: services/bridge/Dockerfile
     networks: [hidden_net, egress_net]
     depends_on: [darkbox-indexer, darkbox-node]
+    expose:
+      - "8090"
     environment:
       INDEXER_INTERNAL_URL: http://darkbox-indexer:8080/internal
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-darkbox_internal_dev_only}
       HIDDEN_RPC_URL: http://darkbox-node:8545
 
   darkbox-ens:

@@ -78,6 +78,13 @@ export function createServer(deps: ServerDeps): http.Server {
         return send(res, 200, { observation: service.observation(agentId, turn) });
       }
 
+      // GET /internal/agents/:agentId/balance  (withdrawable = available)
+      if (method === 'GET' && seg[0] === 'internal' && seg[1] === 'agents' && seg[3] === 'balance') {
+        const agentId = decodeURIComponent(seg[2]!);
+        const balance = service.engine.getBalance(agentId);
+        return send(res, 200, { balance, withdrawable: balance.available, equity: service.engine.equity(agentId) });
+      }
+
       if (method === 'POST' && pathname === '/internal/identity') {
         const body = await readJson(req);
         const shadowAccount = str(body.shadowAccount);
@@ -120,8 +127,16 @@ export function createServer(deps: ServerDeps): http.Server {
         const agentId = str(body.agentId);
         const amount = num(body.amount);
         if (!agentId || amount === null) return send(res, 400, { error: 'agentId and numeric amount required' });
-        await service.deposit(agentId, amount);
-        return send(res, 200, { balance: service.engine.getBalance(agentId) });
+        const applied = await service.deposit(agentId, amount, str(body.opId));
+        return send(res, 200, { applied, balance: service.engine.getBalance(agentId) });
+      }
+      if (method === 'POST' && pathname === '/internal/withdrawals') {
+        const body = await readJson(req);
+        const agentId = str(body.agentId);
+        const amount = num(body.amount);
+        if (!agentId || amount === null) return send(res, 400, { error: 'agentId and numeric amount required' });
+        const applied = await service.withdraw(agentId, amount, str(body.commandId));
+        return send(res, 200, { applied, balance: service.engine.getBalance(agentId) });
       }
       if (method === 'POST' && (pathname === '/internal/split' || pathname === '/internal/merge')) {
         const body = await readJson(req);

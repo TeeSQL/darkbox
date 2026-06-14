@@ -9,7 +9,8 @@ import type { PlaceOrderInput } from './engine.js';
  */
 export type EngineEvent =
   | { type: 'createMarket'; marketId: string; question: string }
-  | { type: 'deposit'; agentId: string; amount: number }
+  | { type: 'deposit'; agentId: string; amount: number; opId?: string }
+  | { type: 'withdraw'; agentId: string; amount: number; commandId?: string }
   | { type: 'split'; agentId: string; marketId: string; amount: number }
   | { type: 'merge'; agentId: string; marketId: string; amount: number }
   | { type: 'placeOrder'; input: PlaceOrderInput }

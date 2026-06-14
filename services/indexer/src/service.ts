@@ -19,6 +19,8 @@ function fmt(value: number): string {
 export class IndexerService {
   readonly engine = new MarketEngine();
   private readonly identities: IdentityRepository;
+  /** Bridge operation ids already applied, for durable deposit/withdraw idempotency. */
+  private readonly processedOps = new Set<string>();
 
   constructor(private readonly store: Store) {
     this.identities = new IdentityRepository(store);
@@ -55,8 +57,18 @@ export class IndexerService {
     await this.commit({ type: 'createMarket', marketId, question });
   }
 
-  async deposit(agentId: string, amount: number): Promise<void> {
-    await this.commit({ type: 'deposit', agentId, amount });
+  /** Credit a deposit. With an opId, repeated calls are idempotent (no double-mint). */
+  async deposit(agentId: string, amount: number, opId?: string): Promise<boolean> {
+    if (opId && this.processedOps.has(opId)) return false;
+    await this.commit({ type: 'deposit', agentId, amount, opId });
+    return true;
+  }
+
+  /** Debit a withdrawal against withdrawable balance. Idempotent per commandId. */
+  async withdraw(agentId: string, amount: number, commandId?: string): Promise<boolean> {
+    if (commandId && this.processedOps.has(commandId)) return false;
+    await this.commit({ type: 'withdraw', agentId, amount, commandId });
+    return true;
   }
 
   async split(agentId: string, marketId: string, amount: number): Promise<void> {
@@ -103,7 +115,11 @@ export class IndexerService {
       case 'createMarket':
         return this.engine.createMarket(event.marketId, event.question), undefined;
       case 'deposit':
+        if (event.opId) this.processedOps.add(event.opId);
         return this.engine.deposit(event.agentId, event.amount);
+      case 'withdraw':
+        if (event.commandId) this.processedOps.add(event.commandId);
+        return this.engine.withdraw(event.agentId, event.amount);
       case 'split':
         return this.engine.split(event.agentId, event.marketId, event.amount);
       case 'merge':

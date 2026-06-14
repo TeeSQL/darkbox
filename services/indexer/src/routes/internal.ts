@@ -4,6 +4,15 @@ import { normalizeQuestion, sanitizeBillboardMessage } from "@darkbox/shared";
 import { query, withTransaction } from "../db.js";
 import { config } from "../config.js";
 import { parseMarketCloseTimeSeconds } from "../marketProposalDefaults.js";
+import {
+  closeExpiredMarkets,
+  closeMarket,
+  completeResolution,
+  defaultMarketExpirySeconds,
+  prepareResolution,
+  type ActorRole,
+  type MarketOutcome,
+} from "../marketLifecycle.js";
 
 
 
@@ -59,15 +68,24 @@ function proposalActor(body: Record<string, unknown>, prefix: "proposer" | "acto
   };
 }
 
+function actorRole(value: unknown): ActorRole | null {
+  return value === "admin" || value === "ocean_operator" ? value : null;
+}
+
+function outcome(value: unknown): MarketOutcome | null {
+  return value === "Yes" || value === "No" || value === "Invalid" ? value : null;
+}
+
 async function ensureV0Market(client: import("pg").PoolClient, marketId: string): Promise<void> {
   const normalized = marketId.toLowerCase();
   const ts = nowSeconds();
+  const expiresAt = defaultMarketExpirySeconds(new Date(ts * 1000));
   await client.query(
     `INSERT INTO markets (
        market_id, game_id, creator_address, market_address, question, metadata_uri,
-       close_time, resolve_by, resolver_type, status, yes_book, no_book,
+       close_time, resolve_by, resolver_type, status, expires_at, lifecycle_status, yes_book, no_book,
        created_at_block, created_at_ts
-     ) VALUES ($1, $2, $3, $4, $5, '', 0, 0, 'AdminManual', 'Active', $6, $7, 0, $8)
+     ) VALUES ($1, $2, $3, $4, $5, '', $6, $6, 'AdminManual', 'Active', $6, 'active', $7, $8, 0, $9)
      ON CONFLICT (market_id) DO NOTHING`,
     [
       normalized,
@@ -75,6 +93,7 @@ async function ensureV0Market(client: import("pg").PoolClient, marketId: string)
       "v0:system",
       `v0:market:${normalized}`,
       `V0 market ${normalized}`,
+      expiresAt,
       `v0:book:${normalized}:yes`,
       `v0:book:${normalized}:no`,
       ts,
@@ -229,7 +248,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
                 question,
                 asText(proposal["description"]),
                 JSON.stringify(proposal["outcomes"] ?? ["YES", "NO"]),
-                asText(proposal["resolveBy"]),
+                asText(proposal["resolveBy"], String(defaultMarketExpirySeconds())),
                 asText(proposal["resolutionSource"], "DarkBox admin manual"),
                 asText(proposal["rationale"]),
                 runId,
@@ -385,6 +404,16 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
+  app.get("/internal/markets/default-expiry", async (req) => {
+    const from = (req.query as Record<string, string>)["from"];
+    const date = from ? new Date(from) : new Date();
+    return {
+      timezone: "America/New_York",
+      expiresAt: defaultMarketExpirySeconds(date),
+      expiresAtIso: new Date(defaultMarketExpirySeconds(date) * 1000).toISOString(),
+    };
+  });
+
   app.get<{ Params: { marketId: string } }>(
     "/internal/markets/:marketId",
     async (req, reply) => {
@@ -428,6 +457,90 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         noBook: no_book,
         openOrders: ordersResult.rows,
       };
+    },
+  );
+
+  app.post<{ Body: Record<string, unknown> }>(
+    "/internal/markets/close-expired",
+    async (_req) => {
+      const result = await withTransaction((client) => closeExpiredMarkets(client));
+      return { status: "ok", closed: result };
+    },
+  );
+
+  app.post<{ Params: { marketId: string }; Body: Record<string, unknown> }>(
+    "/internal/markets/:marketId/close",
+    async (req, reply) => {
+      const role = actorRole(req.body?.["actorRole"]);
+      if (!role) return reply.status(400).send({ error: "actorRole must be admin or ocean_operator" });
+      const actorId = asText(req.body?.["actorId"]);
+      if (!actorId) return reply.status(400).send({ error: "actorId is required" });
+      const result = await withTransaction((client) =>
+        closeMarket(client, req.params.marketId, {
+          actorId,
+          actorRole: role,
+          actionId: asText(req.body?.["actionId"]) || undefined,
+          reason: asText(req.body?.["reason"]) || undefined,
+        }),
+      );
+      return result;
+    },
+  );
+
+  app.post<{ Params: { marketId: string }; Body: Record<string, unknown> }>(
+    "/internal/markets/:marketId/prepare-resolution",
+    async (req, reply) => {
+      const role = actorRole(req.body?.["actorRole"]);
+      if (!role) return reply.status(400).send({ error: "actorRole must be admin or ocean_operator" });
+      const selectedOutcome = outcome(req.body?.["outcome"]);
+      if (!selectedOutcome) return reply.status(400).send({ error: "outcome must be Yes, No, or Invalid" });
+      const actorId = asText(req.body?.["actorId"]);
+      if (!actorId) return reply.status(400).send({ error: "actorId is required" });
+      const result = await withTransaction((client) =>
+        prepareResolution(client, req.params.marketId, {
+          actorId,
+          actorRole: role,
+          actionId: asText(req.body?.["actionId"]) || undefined,
+          outcome: selectedOutcome,
+          evidence: asText(req.body?.["evidence"]),
+          source: asText(req.body?.["source"]),
+          confirmed: req.body?.["confirmed"] === true,
+          reason: asText(req.body?.["reason"]) || undefined,
+        }),
+      );
+      return result;
+    },
+  );
+
+  app.post<{ Params: { marketId: string }; Body: Record<string, unknown> }>(
+    "/internal/markets/:marketId/complete-resolution",
+    async (req, reply) => {
+      const role = actorRole(req.body?.["actorRole"]);
+      if (!role) return reply.status(400).send({ error: "actorRole must be admin or ocean_operator" });
+      const actorId = asText(req.body?.["actorId"]);
+      if (!actorId) return reply.status(400).send({ error: "actorId is required" });
+      const result = await withTransaction((client) =>
+        completeResolution(client, req.params.marketId, {
+          actorId,
+          actorRole: role,
+          actionId: asText(req.body?.["actionId"]) || undefined,
+          txHash: asText(req.body?.["txHash"]),
+          reason: asText(req.body?.["reason"]) || undefined,
+        }),
+      );
+      return result;
+    },
+  );
+
+  app.get<{ Params: { marketId: string } }>(
+    "/internal/markets/:marketId/lifecycle-actions",
+    async (req) => {
+      const result = await query(
+        `SELECT * FROM market_lifecycle_actions
+         WHERE market_id=$1 ORDER BY created_at_ts DESC, action_id DESC`,
+        [req.params.marketId.toLowerCase()],
+      );
+      return result.rows;
     },
   );
 
@@ -630,7 +743,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         question,
         asText(body["description"]),
         JSON.stringify(body["outcomes"] ?? ["YES", "NO"]),
-        asText(body["resolveBy"]),
+        asText(body["resolveBy"], String(defaultMarketExpirySeconds())),
         asText(body["resolutionSource"], "DarkBox admin manual"),
         asText(body["rationale"]),
         asText(body["metadataURI"]),

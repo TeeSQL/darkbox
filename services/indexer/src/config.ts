@@ -12,4 +12,6 @@ export const config = {
   pollIntervalMs: parseInt(process.env["POLL_INTERVAL_MS"] ?? "2000", 10),
   pollBatchSize: parseInt(process.env["POLL_BATCH_SIZE"] ?? "100", 10),
   snapshotIntervalMs: parseInt(process.env["SNAPSHOT_INTERVAL_MS"] ?? "60000", 10),
+  marketLifecycleEnabled: process.env["MARKET_LIFECYCLE_ENABLED"] !== "false",
+  marketLifecycleIntervalMs: parseInt(process.env["MARKET_LIFECYCLE_INTERVAL_MS"] ?? "60000", 10),
 };

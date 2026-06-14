@@ -565,7 +565,7 @@ let mainFinalText = '';
 let mainStream = null; // fallback open-mic stream when SpeechRecognition is absent
 let mainMode = 'idle'; // 'idle' | 'recording'
 let micPressTimer = null;
-let micPressStart = 0;
+let micHoldMode = false; // current press has crossed 1s → hold-to-talk (release stops)
 let micPressWillStop = false; // this gesture is a tap-to-stop on an active recording
 
 function setMainVoiceState(state) {
@@ -677,11 +677,16 @@ function onMicPointerDown(event) {
     return;
   }
   micPressWillStop = false;
-  micPressStart = Date.now();
-  setMainVoiceState('recording');
+  micHoldMode = false;
+  // Recording starts immediately on press — same for tap and hold.
   startMainRecording();
+  setMainVoiceState('recording');
+  // If the finger is still down after 1s, this press becomes hold-to-talk.
   micPressTimer = window.setTimeout(() => {
-    if (mainMode !== 'idle') setMainVoiceState('hold');
+    micPressTimer = null;
+    if (mainMode === 'idle') return; // stopped / denied meanwhile
+    micHoldMode = true;
+    setMainVoiceState('hold');
   }, HOLD_THRESHOLD_MS);
 }
 
@@ -692,11 +697,11 @@ function onMicPointerUp() {
     stopMainRecording();
     return;
   }
-  const held = Date.now() - micPressStart;
-  if (held >= HOLD_THRESHOLD_MS) {
-    stopMainRecording(); // hold-to-talk: release ends recording
+  if (micHoldMode) {
+    micHoldMode = false;
+    stopMainRecording(); // held past 1s → release ends recording
   } else {
-    setMainVoiceState('recording'); // fast tap: latch until next tap
+    setMainVoiceState('recording'); // released within 1s → latch until next tap
   }
 }
 

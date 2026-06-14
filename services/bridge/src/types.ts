@@ -2,6 +2,7 @@ import type { Address, Hex } from "viem";
 import type {
   DepositIntentState,
   DepositState,
+  FaucetMintState,
   WithdrawalState,
 } from "@darkbox/shared";
 
@@ -77,4 +78,28 @@ export interface WithdrawalRecord {
   authorizationSignature?: Hex;
   authorizationDeadline?: bigint;
   retries: number;
+}
+
+export type FaucetMintKind = "human_promo" | "daemon_funding";
+
+export interface FaucetMintRecord {
+  /** Deterministic idempotency key used as the shadow mint operation id. */
+  operationId: Hex;
+  operationString: string;
+  kind: FaucetMintKind;
+  gameId: Hex;
+  amount: bigint;
+  owner: Address;
+  shadowAccount: Hex;
+  state: FaucetMintState;
+  txHash?: Hex;
+  mintedAt?: string;
+  error?: string;
+  retryCount: number;
+  createdAt: string;
+  updatedAt: string;
+  telegramId?: string;
+  inviteId?: string;
+  daemonId?: string;
+  daemonAddress?: Address;
 }

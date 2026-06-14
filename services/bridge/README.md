@@ -36,6 +36,11 @@ an in-memory `FakeShadowChain`.
   identical-re-issue guard (spec 7.5).
 - `withdrawalCoordinator.ts` — validate → forced shadow burn of available
   balance → signing-service authorization (spec 7.1).
+- `faucet.ts` — durable ledger/queue coordinator for withdrawable $5 human
+  promo mints and $5 daemon funding mints. It records deterministic faucet
+  operation ids, enforces one human promo per Telegram id and one daemon funding
+  allocation per daemon id/address/shadow account, and submits through the same
+  idempotent shadow mint seam used by public deposits.
 - `reconciliation.ts` — the section 12.1 invariant checks (no auto-correct).
 - `store.ts` — persistence interface + in-memory implementation.
 
@@ -48,6 +53,39 @@ Shared EIP-712 types/schemas and the state machines live in `@darkbox/shared`
 pnpm --filter @darkbox/bridge test     # node --test via tsx, no live chain
 pnpm --filter @darkbox/shared test     # EIP-712 + idempotency unit tests
 ```
+
+## Faucet handoff
+
+The faucet is a bridge/signer-boundary concern. The public gateway may enqueue a
+human promo request, but it never holds mint authority or private keys.
+
+Expected internal bridge API shape for DarkDan's CVM integration:
+
+- `POST /internal/faucet/human-promo`
+  - `telegramId`, `inviteId`, `owner`, `shadowAccount`, `amount`, `currency`,
+    `requestedAt`
+- `POST /internal/faucet/daemon-funding`
+  - `daemonId`, `daemonAddress`, `shadowAccount`, `amount`, `currency`,
+    `requestedAt`
+
+Both paths should upsert through `FaucetCoordinator`, persist the record, and let
+the bridge worker call `processNext()` from inside the trusted shadow mint
+boundary. The coordinator uses the deterministic operation id as the
+`mintShadow` idempotency key, so retries and crash recovery do not double mint.
+
+Daemon funding CLI:
+
+```sh
+pnpm --filter @darkbox/bridge fund:daemons -- --game-id=$GAME_ID --dry-run
+BRIDGE_URL=http://darkbox-bridge:8081 pnpm --filter @darkbox/bridge fund:daemons -- --game-id=$GAME_ID
+```
+
+Relevant env:
+
+- `BRIDGE_URL` — internal bridge URL used by the gateway/CLI to enqueue faucet
+  records; unset means gateway records a pending handoff locally for tests/dev.
+- `GAME_ID` — included in deterministic human/daemon faucet operation ids.
+- `FAUCET_AMOUNT` — CLI override for daemon funding amount, default `5.00`.
 
 ## End-to-end smoke test (live chains)
 
@@ -67,4 +105,3 @@ reconciles.
 
 Deploy scripts: `packages/contracts/script/Deploy.s.sol` (`DeployPublic`,
 `DeployShadow`).
-

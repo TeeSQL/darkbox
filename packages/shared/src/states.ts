@@ -31,6 +31,14 @@ export enum DepositIntentState {
   Expired = "expired",
 }
 
+/** Faucet mint lifecycle for promo/daemon shadow-USDC allocations. */
+export enum FaucetMintState {
+  Pending = "pending",
+  Minting = "minting",
+  Minted = "minted",
+  Failed = "failed",
+}
+
 /** Allowed forward transitions for the deposit state machine. */
 export const DEPOSIT_TRANSITIONS: Record<DepositState, DepositState[]> = {
   [DepositState.ObservedPublicDeposit]: [

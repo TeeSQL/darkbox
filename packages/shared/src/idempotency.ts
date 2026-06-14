@@ -55,3 +55,47 @@ export function deriveShadowAccount(gameId: Hex, owner: Address): Hex {
     ),
   );
 }
+
+export interface HumanPromoOperationKey {
+  gameId: Hex;
+  telegramId: string;
+}
+
+export interface DaemonFundingOperationKey {
+  gameId: Hex;
+  daemonId: string;
+  daemonAddress: Address;
+  shadowAccount: Hex;
+}
+
+export function humanPromoOperationString(key: HumanPromoOperationKey): string {
+  return [
+    "darkbox",
+    "faucet",
+    "v1",
+    key.gameId.toLowerCase(),
+    "human_promo",
+    key.telegramId,
+  ].join(":");
+}
+
+export function daemonFundingOperationString(key: DaemonFundingOperationKey): string {
+  return [
+    "darkbox",
+    "faucet",
+    "v1",
+    key.gameId.toLowerCase(),
+    "daemon_funding",
+    key.daemonId,
+    key.daemonAddress.toLowerCase(),
+    key.shadowAccount.toLowerCase(),
+  ].join(":");
+}
+
+export function humanPromoOperationId(key: HumanPromoOperationKey): Hex {
+  return keccak256(stringToHex(humanPromoOperationString(key)));
+}
+
+export function daemonFundingOperationId(key: DaemonFundingOperationKey): Hex {
+  return keccak256(stringToHex(daemonFundingOperationString(key)));
+}

@@ -315,7 +315,7 @@ const murmurs = [
 const activityLines = [
   'your daemon will keep trading for you until reveal. Trying to answer questions... who will win the hackathon?',
   'it is whisper-quiet here; the hall is not.',
-  'the room outside keeps making markets without showing its hands.',
+  'inside the dark hall, your daemon is fighting for your PnL.',
   'your daemon can react while your screen is dark.',
 ];
 const marketQuestions = [
@@ -404,7 +404,7 @@ function rememberSealedReceipt(textOverride) {
   writeSealedReceipts(receipts);
 }
 
-function renderSealedTerminal() {
+function renderSealedTerminal(animateTop) {
   if (!terminalLogEl) return;
   const receipts = readSealedReceipts();
   if (!receipts.length) {
@@ -414,7 +414,7 @@ function renderSealedTerminal() {
   terminalLogEl.innerHTML = receipts.map((row, index) => {
     const when = row.sealedAt ? new Date(row.sealedAt).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'time sealed';
     return `
-      <div class="terminal-line">
+      <div class="terminal-line${animateTop && index === 0 ? ' is-new' : ''}">
         <span class="terminal-prompt">${String(index + 1).padStart(2, '0')}&gt;</span>
         <span class="terminal-main">
           ${escapeHtml(row.fingerprint || '0xsealed')} · ${escapeHtml(row.daemon || 'daemon')} · $${escapeHtml(row.stake || 5)}
@@ -824,7 +824,7 @@ function sealTerminalWhisper() {
   });
   if (terminalInput) terminalInput.value = '';
   handleTerminalInput();
-  renderSealedTerminal();
+  renderSealedTerminal(true); // slide the new receipt in at the top
   if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'sealed to your existing daemon. message redacted forever.';
 }
 
@@ -977,7 +977,7 @@ let tsttRecording = false;
 
 async function startTerminalServerStt() {
   try {
-    tsttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    tsttStream = await getSharedMicStream();
   } catch (_) {
     if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
     return;
@@ -1004,15 +1004,12 @@ function stopTerminalServerStt() {
 }
 
 async function transcribeTerminalStt() {
-  const stream = tsttStream;
-  tsttStream = null;
-  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  tsttStream = null; // shared stream stays alive for reuse (avoids a second prompt)
   const chunks = tsttChunks;
   tsttChunks = [];
-  if (!chunks.length) { releaseMic(); return; }
+  if (!chunks.length) return;
   const type = (tsttRecorder && tsttRecorder.mimeType) || 'audio/webm';
   const blob = new Blob(chunks, { type });
-  releaseMic();
   if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcribing…';
   terminalVoiceButton?.classList.add('transcribing');
   try {
@@ -1178,11 +1175,25 @@ async function startOpenMicFallback() {
   return true;
 }
 
+// One shared mic stream reused by every recorder. Telegram-Android re-prompts on
+// EACH getUserMedia, so acquiring once — and NOT stopping it between recordings —
+// means a single permission prompt for the whole session (main mic + modal mic).
+let sharedMicStream = null;
+async function getSharedMicStream() {
+  if (sharedMicStream && sharedMicStream.active) return sharedMicStream;
+  sharedMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  return sharedMicStream;
+}
+function stopSharedMicStream() {
+  try { sharedMicStream && sharedMicStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  sharedMicStream = null;
+}
+
 // Telegram-Android: record audio with MediaRecorder (one mic permission) and
 // transcribe it server-side on stop; the words land in the textarea.
 async function startServerStt() {
   try {
-    sttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    sttStream = await getSharedMicStream();
   } catch (_) {
     sttStream = null;
     mainMode = 'idle';
@@ -1210,15 +1221,12 @@ async function startServerStt() {
 }
 
 async function transcribeStt() {
-  const stream = sttStream;
-  sttStream = null;
-  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  sttStream = null; // shared stream stays alive for reuse (avoids a second prompt)
   const chunks = sttChunks;
   sttChunks = [];
-  if (!chunks.length) { releaseMic(); if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
+  if (!chunks.length) { if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
   const type = (sttRecorder && sttRecorder.mimeType) || 'audio/webm';
   const blob = new Blob(chunks, { type });
-  releaseMic();
   if (whisperStatus) whisperStatus.textContent = 'transcribing…';
   voiceButton?.classList.add('transcribing'); // spinner while STT runs
   try {
@@ -1413,7 +1421,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !terminalModal?.hasAttribute('hidden')) closeSealedTerminal();
 });
 window.visualViewport?.addEventListener('resize', syncKeyboardState);
-window.addEventListener('pagehide', () => recognition?.stop?.());
+window.addEventListener('pagehide', () => { recognition?.stop?.(); stopSharedMicStream(); });
 
 tickCountdown();
 window.setInterval(tickCountdown, 1000);

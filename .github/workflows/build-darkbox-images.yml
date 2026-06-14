@@ -1,0 +1,62 @@
+name: build-darkbox-images
+
+# Builds the DarkBox service OCI images and publishes them to ghcr.io so the
+# AttestMesh dstack CVMs can pull them. Runs in CI because the deploy environment
+# has no docker daemon. Mirrors teemesh's build-sidecar.yml. The DarkBox service
+# Dockerfiles build from the repo root (they COPY the pnpm workspace + shared),
+# so context is `.` with file = services/<svc>/Dockerfile.
+#
+# NOTE: the canonical version of this workflow on the deploy branches
+# (dan-attestmesh-images / dan-mesh-deploy-harden) also has a `build-sshd-debug`
+# job for deploy/attestmesh/sshd-debug.Dockerfile. That Dockerfile (and the whole
+# deploy/attestmesh/ tree) is NOT on main yet, so that job — and the
+# `deploy/attestmesh/sshd-debug*` path trigger — are intentionally omitted here:
+# they would fail on every push to main. Re-add them when the attestmesh deploy
+# tree lands on main.
+on:
+  push:
+    paths:
+      - "services/**"
+      - "packages/shared/**"
+      - ".github/workflows/build-darkbox-images.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry must have a services/<svc>/Dockerfile on main (the matrix
+        # builds ghcr.io/teesql/darkbox-<svc>). market-executor merged via PR #23.
+        # TODO: add `faucet-mint-worker` and `resolution-executor` when their
+        # services merge to main (no Dockerfile on main yet → adding them now
+        # would break the build).
+        service: [gateway, signer, indexer, agents, bridge, transcriber, reveal, market-executor]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/teesql/darkbox-${{ matrix.service }}:latest
+            ghcr.io/teesql/darkbox-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

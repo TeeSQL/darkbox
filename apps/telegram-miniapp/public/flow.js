@@ -48,6 +48,8 @@ const hallNewMarketEl = document.querySelector('#hall-new-market');
 const hallNewMarketMetaEl = document.querySelector('#hall-new-market-meta');
 const notifyToggle = document.querySelector('#notify-toggle');
 const stakeButtons = [...document.querySelectorAll('.chip[data-stake]')];
+const chipsEl = document.querySelector('.chips');
+const feedCtaEl = document.querySelector('#feed-cta');
 const terminalButton = document.querySelector('#sealed-terminal-button');
 const terminalModal = document.querySelector('#sealed-terminal-modal');
 const terminalLogEl = document.querySelector('#sealed-terminal-log');
@@ -149,10 +151,86 @@ async function refreshSelf() {
       self = await client.selfStatus();
     } catch (_) { /* promo closed/frozen, or already settled — keep self as-is */ }
     live.self = self;
+    applyReturningState(self);
     renderPrivateState();
+    // Returning player (has a registered daemon) → jump straight to the daemon
+    // screen if they're still sitting on the landing page.
+    if (false && self && self.registrationStatus === 'registered') { // auto-login disabled per demo request
+      markOnboarded();
+      const active = document.querySelector('.view.active');
+      if (active && active.id === 'v-landing') showView('v-wait');
+    }
   } catch (_) {
     // unauthenticated (no initData) or gateway down → keep the mock.
   }
+}
+
+// First round → "$5 on the house" (the stake chips). Once the promo's been
+// claimed, the house stake is spent: swap the chips for "Feed the daemon", which
+// opens the inline Blink deposit popup (window.DarkboxFeed).
+function isReturningPlayer(self) {
+  return Boolean(self && (self.enteredViaInvite || self.fundingStatus === 'promo_funded'));
+}
+
+function applyReturningState(self) {
+  const returning = isReturningPlayer(self);
+  if (chipsEl) chipsEl.hidden = true; // chips retired; funding is the $5 house + Feed the daemon
+  applyFeedGate(); // feed button only for allowlisted/opted-in users
+  const promoLine = document.querySelector('#seal-promo-line');
+  if (promoLine) {
+    promoLine.innerHTML = returning
+      ? 'your <strong>$5 is in play</strong> — feed more to go bigger'
+      : '<strong>your first $5 is on the house</strong> — free to play';
+  }
+}
+
+function openFeedDeposit() {
+  if (!window.DarkboxFeed) {
+    if (stakeSubEl) stakeSubEl.textContent = 'the deposit window failed to load. reload and try again.';
+    return;
+  }
+  window.DarkboxFeed.open({
+    onCredited: () => { refreshSelf(); },
+  });
+}
+
+// ── Returning players skip onboarding (whisper/seal/reveal) → straight to wait
+const ONBOARDED_KEY = 'daemonhall:onboarded:v1';
+function isOnboarded() {
+  try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch (_) { return false; }
+}
+function markOnboarded() {
+  try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch (_) {}
+}
+
+// ── "Feed the daemon" deposit is gated for the demo: only allowlisted Telegram
+// ids, or a device opted in with ?feed=1. Hidden for everyone else.
+const FEED_ALLOWLIST = [475212779]; // Telegram numeric user ids allowed to deposit (demo)
+function syncFeedFlagFromUrl() {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get('feed') === '1') localStorage.setItem('daemonhall:feed', '1');
+    if (p.get('feed') === '0') localStorage.removeItem('daemonhall:feed');
+  } catch (_) {}
+}
+function isFeedAllowed() {
+  try { if (localStorage.getItem('daemonhall:feed') === '1') return true; } catch (_) {}
+  const id = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+  return Boolean(id && FEED_ALLOWLIST.includes(id));
+}
+function applyFeedGate() {
+  if (isFeedAllowed()) {
+    if (feedCtaEl) feedCtaEl.hidden = false;
+    if (addHeatCard) addHeatCard.hidden = false;
+    return;
+  }
+  // Everyone else: pull the deposit buttons + every "add more funds" reference
+  // out of the DOM entirely (not just hidden).
+  feedCtaEl?.remove();
+  addHeatCard?.remove();
+  document.querySelector('#seal-feed-bullet')?.remove();
+  const sub = document.querySelector('#stake-sub');
+  if (sub) sub.textContent = 'you can change its orders any time.';
 }
 
 async function refreshPublic() {
@@ -233,11 +311,11 @@ function openFundingLab() {
 
 function syncFundingCta() {
   if (stakeSubEl) {
-    stakeSubEl.textContent = gw()
-      ? 'live — deposits route to the Base USDC bridge.'
-      : 'prototype — no wallet, no backend.';
+    stakeSubEl.textContent = isFeedAllowed()
+      ? 'you can change its orders and top up any time.'
+      : 'you can change its orders any time.';
   }
-  if (!addHeatCard) return;
+  if (!addHeatCard || !addHeatCard.isConnected) return;
   const fundable = selectedStake > 5 && Boolean(gw());
   addHeatCard.classList.toggle('fundable', fundable);
   if (fundable) {
@@ -251,13 +329,11 @@ function syncFundingCta() {
   }
 }
 
-addHeatCard?.addEventListener('click', () => {
-  if (selectedStake > 5 && gw()) openFundingLab();
-});
+addHeatCard?.addEventListener('click', () => { if (isFeedAllowed()) openFeedDeposit(); });
 addHeatCard?.addEventListener('keydown', (event) => {
-  if ((event.key === 'Enter' || event.key === ' ') && selectedStake > 5 && gw()) {
+  if ((event.key === 'Enter' || event.key === ' ') && isFeedAllowed()) {
     event.preventDefault();
-    openFundingLab();
+    openFeedDeposit();
   }
 });
 
@@ -291,9 +367,9 @@ const murmurs = [
   '▸ no one outside saw what changed',
 ];
 const activityLines = [
-  'your daemon keeps moving after you close the phone.',
+  'your daemon will keep trading for you until reveal. Trying to answer questions... who will win the hackathon?',
   'it is whisper-quiet here; the hall is not.',
-  'the room outside keeps making markets without showing its hands.',
+  'inside the dark hall, your daemon is fighting for your PnL.',
   'your daemon can react while your screen is dark.',
 ];
 const marketQuestions = [
@@ -382,7 +458,7 @@ function rememberSealedReceipt(textOverride) {
   writeSealedReceipts(receipts);
 }
 
-function renderSealedTerminal() {
+function renderSealedTerminal(animateTop) {
   if (!terminalLogEl) return;
   const receipts = readSealedReceipts();
   if (!receipts.length) {
@@ -392,7 +468,7 @@ function renderSealedTerminal() {
   terminalLogEl.innerHTML = receipts.map((row, index) => {
     const when = row.sealedAt ? new Date(row.sealedAt).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'time sealed';
     return `
-      <div class="terminal-line">
+      <div class="terminal-line${animateTop && index === 0 ? ' is-new' : ''}">
         <span class="terminal-prompt">${String(index + 1).padStart(2, '0')}&gt;</span>
         <span class="terminal-main">
           ${escapeHtml(row.fingerprint || '0xsealed')} · ${escapeHtml(row.daemon || 'daemon')} · $${escapeHtml(row.stake || 5)}
@@ -495,9 +571,11 @@ function renderPrivateState() {
   // Balance + PnL. When authed (real account) BOTH come from the backend — never
   // mix a real balance with a mock PnL. The hash-mock is only for the no-gateway
   // (non-Telegram / offline) preview.
-  let balance = selectedStake + (h % 900) / 100;
-  let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
-  let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
+  // Online (devnet reachable) → never show a mock number: default to the $5 promo
+  // balance and +$0.00 PnL; live.self refines below. Mock is only the offline preview.
+  let balance = live.online ? 5 : selectedStake + (h % 900) / 100;
+  let pnl = live.online ? 0 : ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
+  let pnlNote = live.online ? 'no trades yet' : (pnl >= 0 ? 'unrealized' : 'drawdown');
   if (live.self) {
     // ── Balance: the indexer's holdings when it has a row for this account (the
     // CVM-reported balance), else the $5 promo. Using "indexer when present, else
@@ -552,13 +630,13 @@ function renderPrivateState() {
   if (live.online) {
     if (metricVolumeEl) metricVolumeEl.textContent = formatUsdK(g ? g.total_volume_usdc : 0);
     if (metricTradesEl) metricTradesEl.textContent = String((g && g.total_trades) ?? 0);
-    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_agents) ?? 0);
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.positions_opened) ?? 0);
+    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_markets) ?? 0); // MARKETS
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.active_agents) ?? 0); // DAEMONS
   } else {
     if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
     if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
-    if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
-    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
+    if (metricSealedEl) metricSealedEl.textContent = String(6 + (h % 10)); // MARKETS (mock)
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(76 + (h % 35)); // DAEMONS (mock)
   }
   renderMarkets(PUBLIC_MARKET_SEED);
   renderLeaderboard(visualSeed, ownName);
@@ -773,6 +851,7 @@ function showView(id) {
   views.forEach((view) => view.classList.toggle('active', view.id === id));
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderPrivateState();
+  if (id === 'v-wait') markOnboarded(); // reached the daemon screen → onboarded
   if (id === 'v-whisper') {
     window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
     typeWhisperConvo();
@@ -827,10 +906,6 @@ function handleTerminalInput() {
   autosizeTerminal();
   const hasText = Boolean(terminalInput?.value.trim());
   if (terminalSealButton) terminalSealButton.disabled = !hasText;
-  if (!terminalWhisperStatus || wantedListening || listening) return;
-  terminalWhisperStatus.textContent = hasText
-    ? 'review it. sealing will redact the words forever.'
-    : 'click the mic to record. click again to stop.';
 }
 
 function sealTerminalWhisper() {
@@ -850,7 +925,7 @@ function sealTerminalWhisper() {
   });
   if (terminalInput) terminalInput.value = '';
   handleTerminalInput();
-  renderSealedTerminal();
+  renderSealedTerminal(true); // slide the new receipt in at the top
   if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'sealed to your existing daemon. message redacted forever.';
 }
 
@@ -994,14 +1069,88 @@ function stopVoice(statusText = 'recording stopped. review before sealing.') {
   handleTerminalInput();
 }
 
+// Terminal mic: same server-STT path as the main whisper mic, targeting the
+// terminal input (Telegram-Android can't run Web Speech → record + /api/stt).
+let tsttStream = null;
+let tsttRecorder = null;
+let tsttChunks = [];
+let tsttRecording = false;
+
+async function startTerminalServerStt() {
+  try {
+    tsttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
+    return;
+  }
+  tsttChunks = [];
+  tsttRecording = true;
+  setTerminalVoiceState('recording-toggle');
+  try {
+    tsttRecorder = new MediaRecorder(tsttStream);
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording — type to finish.';
+    return;
+  }
+  tsttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) tsttChunks.push(e.data); };
+  tsttRecorder.onstop = () => { void transcribeTerminalStt(); };
+  try { tsttRecorder.start(); } catch (_) {}
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording. tap the mic again when you’re done.';
+}
+
+function stopTerminalServerStt() {
+  tsttRecording = false;
+  setTerminalVoiceState('idle');
+  try { if (tsttRecorder && tsttRecorder.state !== 'inactive') tsttRecorder.stop(); } catch (_) {}
+}
+
+async function transcribeTerminalStt() {
+  const stream = tsttStream;
+  tsttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  const chunks = tsttChunks;
+  tsttChunks = [];
+  if (!chunks.length) { releaseMic(); return; }
+  const type = (tsttRecorder && tsttRecorder.mimeType) || 'audio/webm';
+  const blob = new Blob(chunks, { type });
+  releaseMic();
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcribing…';
+  terminalVoiceButton?.classList.add('transcribing');
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
+    const j = await res.json().catch(() => ({}));
+    const text = (j && typeof j.text === 'string') ? j.text.trim() : '';
+    if (text) {
+      const base = terminalInput?.value.trim() || '';
+      if (terminalInput) terminalInput.value = base ? `${base} ${text}` : text;
+      handleTerminalInput();
+      if (terminalWhisperStatus) terminalWhisperStatus.textContent = '';
+    } else if (terminalWhisperStatus) {
+      terminalWhisperStatus.textContent = 'couldn’t make out words — try again or type.';
+    }
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcription failed — type instead.';
+  } finally {
+    terminalVoiceButton?.classList.remove('transcribing');
+  }
+}
+
 async function startVoice(event) {
   event.preventDefault();
+  if (USE_SERVER_STT) {
+    if (tsttRecording) stopTerminalServerStt();
+    else await startTerminalServerStt();
+    return;
+  }
   if (wantedListening || listening) stopVoice();
   else await beginVoice();
 }
 
 async function grantMicForVisuals(event) {
   event?.preventDefault?.();
+  // On Telegram-Android we request the mic only when recording actually starts
+  // (avoids a redundant permission prompt on screen entry → the "double prompt").
+  if (USE_SERVER_STT) return;
   try {
     const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
     setMainMicGrantState(Boolean(allowed));
@@ -1023,10 +1172,18 @@ let mainWanted = false; // we want it running (drives auto-restart)
 let mainBaseText = '';
 let mainFinalText = '';
 let mainStream = null; // fallback open-mic stream when SpeechRecognition is absent
+let mainStarted = false; // SpeechRecognition actually began (vs an instant webview failure)
 let mainMode = 'idle'; // 'idle' | 'recording'
 let micPressTimer = null;
 let micHoldMode = false; // current press has crossed 1s → hold-to-talk (release stops)
 let micPressWillStop = false; // this gesture is a tap-to-stop on an active recording
+// Telegram's Android webview can't run the Web Speech API, so there we record
+// audio and transcribe server-side via /api/stt (Venice stt-xai-v1). iOS/desktop/
+// Android-Chrome keep the live SpeechRecognition path (which works there).
+const USE_SERVER_STT = Boolean(tg && tg.platform === 'android');
+let sttStream = null;
+let sttRecorder = null;
+let sttChunks = [];
 
 function setMainVoiceState(state) {
   // state: 'idle' | 'recording' | 'hold'
@@ -1052,21 +1209,37 @@ function ensureMainRecognition() {
   mainRecognition.lang = 'en-US';
   mainRecognition.interimResults = true;
   mainRecognition.continuous = true;
-  mainRecognition.onstart = () => { mainListening = true; };
+  mainRecognition.onstart = () => { mainListening = true; mainStarted = true; };
   mainRecognition.onerror = () => {
-    mainWanted = false;
     mainListening = false;
+    // Android system webviews often expose SpeechRecognition but can't run it
+    // (errors like 'service-not-allowed'/'network'/'audio-capture') and fail
+    // before ever starting. If it never got going, fall back to the open-mic +
+    // type-to-finish path (the same one iOS uses) instead of dying.
+    if (!mainStarted && mainWanted && mainMode === 'recording') {
+      mainWanted = false;
+      void startOpenMicFallback();
+      return;
+    }
+    mainWanted = false;
     mainMode = 'idle';
     setMainVoiceState('idle');
     if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
   };
   mainRecognition.onend = () => {
     mainListening = false;
-    if (mainWanted) {
+    // Only auto-restart a recognizer that actually ran. A webview that ends
+    // immediately without ever starting would otherwise loop forever — fall back.
+    if (mainWanted && mainStarted) {
       window.setTimeout(() => {
         if (!mainWanted || mainListening) return;
         try { mainRecognition.start(); } catch (_) { mainWanted = false; }
       }, 120);
+      return;
+    }
+    if (mainWanted && !mainStarted && mainMode === 'recording') {
+      mainWanted = false;
+      void startOpenMicFallback();
       return;
     }
     setMainVoiceState('idle');
@@ -1085,39 +1258,134 @@ function ensureMainRecognition() {
   return mainRecognition;
 }
 
-async function startMainRecording() {
-  if (mainMode === 'recording') return true;
-  let allowed = false;
-  try { allowed = await requestMicAccess('recording. speak your order.'); }
-  catch (_) { allowed = false; }
-  if (!allowed) {
+// Open an honest open-mic stream and let the user type to finish. This is the
+// path iOS Telegram (no SpeechRecognition) uses; Android falls back to it when
+// the webview's SpeechRecognition can't actually run.
+async function startOpenMicFallback() {
+  try {
+    mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    mainStream = null;
     mainMode = 'idle';
     setMainVoiceState('idle');
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
     return false;
   }
+  rememberMicGrantThisSession();
   setMainMicGrantState(true);
   mainMode = 'recording';
+  setMainVoiceState('recording');
+  if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+  return true;
+}
+
+// Telegram-Android: record audio with MediaRecorder and transcribe it
+// server-side on stop; the words land in the textarea. Each recording acquires
+// its own stream and stops it on finish (reusing a kept-alive stream broke
+// recording in the Telegram webview), so the webview re-prompts per recording.
+async function startServerStt() {
+  try {
+    sttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    sttStream = null;
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    return false;
+  }
+  // NB: do NOT call rememberMicGrantThisSession()/setMainMicGrantState() here —
+  // the former dispatches an event that wakes the landing + wait mic-reactive
+  // visuals (a SECOND getUserMedia → the double permission prompt), and the
+  // latter strips the 'listening' class, hiding the recording state.
+  sttChunks = [];
+  try {
+    sttRecorder = new MediaRecorder(sttStream);
+  } catch (_) {
+    // No MediaRecorder → keep the mic open and let the user type.
+    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+    return true;
+  }
+  sttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) sttChunks.push(e.data); };
+  sttRecorder.onstop = () => { void transcribeStt(); };
+  try { sttRecorder.start(); } catch (_) {}
+  if (whisperStatus) whisperStatus.textContent = 'recording. tap the mic again when you’re done.';
+  return true;
+}
+
+async function transcribeStt() {
+  const stream = sttStream;
+  sttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  const chunks = sttChunks;
+  sttChunks = [];
+  if (!chunks.length) { releaseMic(); if (whisperStatus) whisperStatus.textContent = 'nothing recorded. try again or type.'; return; }
+  const type = (sttRecorder && sttRecorder.mimeType) || 'audio/webm';
+  const blob = new Blob(chunks, { type });
+  releaseMic();
+  if (whisperStatus) whisperStatus.textContent = 'transcribing…';
+  voiceButton?.classList.add('transcribing'); // spinner while STT runs
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
+    const j = await res.json().catch(() => ({}));
+    const text = (j && typeof j.text === 'string') ? j.text.trim() : '';
+    if (text) {
+      const base = input?.value.trim() || '';
+      if (input) input.value = base ? `${base} ${text}` : text;
+      handleInput();
+      if (whisperStatus) whisperStatus.textContent = 'transcribed. edit it, or seal the whisper.';
+    } else {
+      if (whisperStatus) whisperStatus.textContent = 'couldn’t make out words — try again or type.';
+    }
+  } catch (_) {
+    if (whisperStatus) whisperStatus.textContent = 'transcription failed — type your whisper.';
+  } finally {
+    voiceButton?.classList.remove('transcribing');
+  }
+}
+
+async function startMainRecording() {
+  if (mainMode === 'recording') return true;
+  mainMode = 'recording';
+  mainStarted = false;
+  setMainVoiceState('recording');
+
+  if (USE_SERVER_STT) return startServerStt();
+
+  // Prefer SpeechRecognition for live transcription, but do NOT pre-acquire the
+  // mic with getUserMedia first: on Android that double-acquires the mic (two
+  // permission prompts) and SpeechRecognition then fails to start, so nothing
+  // records — while iOS (no SpeechRecognition) already worked via open-mic.
+  // SpeechRecognition.start() requests its own mic permission; if it can't run
+  // (common in Android system webviews) onerror/onend fall back to open-mic.
   const recognizer = ensureMainRecognition();
   if (recognizer) {
     mainBaseText = input?.value.trim() || '';
     mainFinalText = '';
     mainWanted = true;
-    try { recognizer.start(); } catch (_) {}
-  } else {
-    // Some webviews (notably iOS Telegram) lack SpeechRecognition. Keep an open
-    // mic stream so the recording state is honest; the user types to finish.
-    try { mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
-    catch (_) { mainStream = null; }
-    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+    try {
+      recognizer.start();
+      if (whisperStatus) whisperStatus.textContent = 'recording. speak your order.';
+      return true;
+    } catch (_) {
+      // start() threw synchronously (already started / unsupported) → fall back.
+      mainWanted = false;
+    }
   }
-  return true;
+  return startOpenMicFallback();
 }
 
 function stopMainRecording(statusText = 'recording stopped. review before sealing.') {
   if (mainMode === 'idle') return;
   mainMode = 'idle';
   mainWanted = false;
+  mainStarted = false;
+  if (USE_SERVER_STT) {
+    // Stopping triggers MediaRecorder.onstop → transcribeStt(), which updates the
+    // status and fills the textarea, so don't overwrite the status here.
+    try { if (sttRecorder && sttRecorder.state !== 'inactive') sttRecorder.stop(); } catch (_) {}
+    setMainVoiceState('idle');
+    return;
+  }
   try { mainRecognition?.stop?.(); } catch (_) {}
   if (mainStream) {
     mainStream.getTracks().forEach((track) => track.stop());
@@ -1222,6 +1490,7 @@ stakeButtons.forEach((button) => {
     }
   });
 });
+feedCtaEl?.addEventListener('click', openFeedDeposit);
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
@@ -1259,5 +1528,9 @@ handleTerminalInput();
 
 // Pull live account + public data once the gateway client is on window. If the
 // bundle that defines it hasn't executed yet, wait for its ready signal.
+syncFeedFlagFromUrl();
+applyFeedGate();
+// returning-player auto-skip disabled per demo request:
+// if (isOnboarded()) showView('v-wait');
 if (gw()) bootLive();
 else window.addEventListener('darkbox:gateway-ready', bootLive, { once: true });

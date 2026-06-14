@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import { publicRoutes } from "./routes/public.js";
+import { demoFaucetRoutes } from "./routes/demoFaucet.js";
 import { internalRoutes } from "./routes/internal.js";
 import { config } from "./config.js";
 
@@ -14,6 +15,7 @@ export async function buildServer() {
   await app.register(sensible);
 
   await app.register(publicRoutes);
+  await app.register(demoFaucetRoutes);
   await app.register(internalRoutes);
 
   app.setErrorHandler((err: unknown, _req, reply) => {

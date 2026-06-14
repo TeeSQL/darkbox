@@ -925,3 +925,12 @@ html.bestiary-html .daemon-stage {
   .admin-span-2 { grid-column: span 1; }
   .admin-actions .btn-primary, .admin-actions .btn-ghost { flex: 1 1 auto; justify-content: center; }
 }
+
+.market-mark-row strong small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

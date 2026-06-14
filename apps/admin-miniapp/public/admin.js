@@ -62,6 +62,36 @@ function compactNumber(value) {
   if (!Number.isFinite(number)) return String(value ?? '0');
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, notation: Math.abs(number) >= 100000 ? 'compact' : 'standard' }).format(number);
 }
+function formatMarketPrice(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return String(value);
+  return (raw / 1_000_000).toFixed(4);
+}
+function formatMarketTime(value) {
+  if (!value) return 'no fills yet';
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return String(value);
+  const ms = raw > 10_000_000_000 ? raw : raw * 1000;
+  const age = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (age < 90) return `${age}s ago`;
+  if (age < 5400) return `${Math.round(age / 60)}m ago`;
+  return new Date(ms).toLocaleTimeString();
+}
+function normalizeMarketRow(market) {
+  const id = market.market_id || market.marketId || market.id || market.market || '';
+  return {
+    id,
+    question: market.question || market.title || id || 'Untitled market',
+    status: market.lifecycle_status || market.status || 'unknown',
+    latestTradePrice: market.latest_trade_price ?? market.latestTradePrice ?? null,
+    latestYesPrice: market.latest_yes_price ?? market.latestYesPrice ?? null,
+    latestNoPrice: market.latest_no_price ?? market.latestNoPrice ?? null,
+    latestOutcome: market.latest_trade_outcome ?? market.latestTradeOutcome ?? '—',
+    latestTs: market.latest_trade_ts ?? market.latestTradeTs ?? null,
+    trades: market.trades ?? market.totalTrades ?? 0,
+  };
+}
 async function fetchJson(endpoint) {
   if (!endpoint.path) return { endpoint, ok: false, pending: endpoint.pending };
   const started = performance.now();
@@ -105,14 +135,17 @@ function renderJsonBlock(result) {
 }
 
 async function loadOverview() {
-  const [snapshot, health, agentFeed] = await Promise.all([
+  const [snapshot, health, agentFeed, marketsPublic] = await Promise.all([
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'snapshot')),
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'health')),
     fetchJson(endpoints.find((endpoint) => endpoint.id === 'agent-feed')),
+    fetchJson(endpoints.find((endpoint) => endpoint.id === 'markets')),
   ]);
   const snapshotData = snapshot.ok && snapshot.data && typeof snapshot.data === 'object' ? snapshot.data : {};
   const activity = snapshotData.activity || {};
   const markets = Array.isArray(snapshotData.markets) ? snapshotData.markets : [];
+  const publicMarkets = marketsPublic && marketsPublic.ok && Array.isArray(marketsPublic.data) ? marketsPublic.data : [];
+  const marketRows = (publicMarkets.length ? publicMarkets : markets).map(normalizeMarketRow);
   const game = snapshotData.game || {};
   const feedData = agentFeed.ok && agentFeed.data && typeof agentFeed.data === 'object' ? agentFeed.data : {};
 
@@ -129,8 +162,8 @@ async function loadOverview() {
   const set = (selector, value) => { const el = $(selector); if (el) el.textContent = value; };
   set('#admin-game-status', game.status || game.revealStatus || '—');
   set('#admin-game-note', game.title || 'indexer game payload');
-  set('#admin-market-count', compactNumber(activity.activeMarkets ?? markets.length));
-  set('#admin-market-note', `${markets.length} market payloads loaded`);
+  set('#admin-market-count', compactNumber(activity.activeMarkets ?? marketRows.length));
+  set('#admin-market-note', `${marketRows.filter((m) => m.latestTradePrice !== null).length}/${marketRows.length} markets have live trade marks`);
   set('#admin-agent-count', compactNumber(activity.activeAgents ?? feedData.agents ?? feedData.agentCount ?? 0));
   set('#admin-agent-note', feedData.runId ? `run ${feedData.runId}` : 'feed summary / operator-safe aggregate');
   set('#admin-trade-count', compactNumber(activity.totalTrades ?? 0));
@@ -138,12 +171,12 @@ async function loadOverview() {
 
   const marketsEl = $('#admin-markets');
   if (marketsEl) {
-    marketsEl.innerHTML = markets.length ? markets.map((market, index) => `
-      <div class="admin-row">
+    marketsEl.innerHTML = marketRows.length ? marketRows.map((market, index) => `
+      <div class="admin-row market-mark-row">
         <span class="rank">${index + 1}</span>
-        <strong>${escapeHtml(market.question || market.title || market.marketId || 'Untitled market')}</strong>
-        <span>${escapeHtml(market.status || 'unknown')}</span>
-        <span>${escapeHtml(String(market.trades ?? 0))} trades</span>
+        <strong>${escapeHtml(market.question)}<small>${escapeHtml(market.id ? market.id.slice(0, 10) : '')}</small></strong>
+        <span>${escapeHtml(market.status)} · ${escapeHtml(market.latestOutcome || '—')}</span>
+        <span>YES ${escapeHtml(formatMarketPrice(market.latestYesPrice ?? market.latestTradePrice))} · trade ${escapeHtml(formatMarketPrice(market.latestTradePrice))} · ${escapeHtml(formatMarketTime(market.latestTs))}</span>
       </div>
     `).join('') : '<div class="admin-empty">no markets loaded</div>';
   }

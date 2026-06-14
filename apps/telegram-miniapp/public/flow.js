@@ -805,10 +805,6 @@ function handleTerminalInput() {
   autosizeTerminal();
   const hasText = Boolean(terminalInput?.value.trim());
   if (terminalSealButton) terminalSealButton.disabled = !hasText;
-  if (!terminalWhisperStatus || wantedListening || listening) return;
-  terminalWhisperStatus.textContent = hasText
-    ? 'review it. sealing will redact the words forever.'
-    : 'click the mic to record. click again to stop.';
 }
 
 function sealTerminalWhisper() {
@@ -972,8 +968,79 @@ function stopVoice(statusText = 'recording stopped. review before sealing.') {
   handleTerminalInput();
 }
 
+// Terminal mic: same server-STT path as the main whisper mic, targeting the
+// terminal input (Telegram-Android can't run Web Speech → record + /api/stt).
+let tsttStream = null;
+let tsttRecorder = null;
+let tsttChunks = [];
+let tsttRecording = false;
+
+async function startTerminalServerStt() {
+  try {
+    tsttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'mic denied. type instead.';
+    return;
+  }
+  tsttChunks = [];
+  tsttRecording = true;
+  setTerminalVoiceState('recording-toggle');
+  try {
+    tsttRecorder = new MediaRecorder(tsttStream);
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording — type to finish.';
+    return;
+  }
+  tsttRecorder.ondataavailable = (e) => { if (e.data && e.data.size) tsttChunks.push(e.data); };
+  tsttRecorder.onstop = () => { void transcribeTerminalStt(); };
+  try { tsttRecorder.start(); } catch (_) {}
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'recording. tap the mic again when you’re done.';
+}
+
+function stopTerminalServerStt() {
+  tsttRecording = false;
+  setTerminalVoiceState('idle');
+  try { if (tsttRecorder && tsttRecorder.state !== 'inactive') tsttRecorder.stop(); } catch (_) {}
+}
+
+async function transcribeTerminalStt() {
+  const stream = tsttStream;
+  tsttStream = null;
+  const releaseMic = () => { try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+  const chunks = tsttChunks;
+  tsttChunks = [];
+  if (!chunks.length) { releaseMic(); return; }
+  const type = (tsttRecorder && tsttRecorder.mimeType) || 'audio/webm';
+  const blob = new Blob(chunks, { type });
+  releaseMic();
+  if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcribing…';
+  terminalVoiceButton?.classList.add('transcribing');
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'content-type': type }, body: blob });
+    const j = await res.json().catch(() => ({}));
+    const text = (j && typeof j.text === 'string') ? j.text.trim() : '';
+    if (text) {
+      const base = terminalInput?.value.trim() || '';
+      if (terminalInput) terminalInput.value = base ? `${base} ${text}` : text;
+      handleTerminalInput();
+      if (terminalWhisperStatus) terminalWhisperStatus.textContent = '';
+    } else if (terminalWhisperStatus) {
+      terminalWhisperStatus.textContent = 'couldn’t make out words — try again or type.';
+    }
+  } catch (_) {
+    if (terminalWhisperStatus) terminalWhisperStatus.textContent = 'transcription failed — type instead.';
+  } finally {
+    terminalVoiceButton?.classList.remove('transcribing');
+  }
+}
+
 async function startVoice(event) {
   event.preventDefault();
+  if (USE_SERVER_STT) {
+    if (tsttRecording) stopTerminalServerStt();
+    else await startTerminalServerStt();
+    return;
+  }
   if (wantedListening || listening) stopVoice();
   else await beginVoice();
 }

@@ -1123,3 +1123,26 @@ body.feed-open { overflow: hidden; }
 
 /* Wait page: single remaining action card spans full width (Telegram-pings card removed). */
 .after-card-grid-single { grid-template-columns: 1fr; }
+
+/* ── Prominent floating mic (opens the whisper modal) ──────────────────────── */
+.sealed-terminal-button {
+  width: 46px; height: 46px;
+  color: var(--bone);
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 20, 28, 0.82);
+  animation: micGlow 2.4s ease-in-out infinite;
+}
+@keyframes micGlow {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,.05), 0 0 16px rgba(255,255,255,.26), 0 10px 30px rgba(0,0,0,.4); }
+  50%      { box-shadow: 0 0 0 3px rgba(255,255,255,.10), 0 0 30px rgba(255,255,255,.5), 0 10px 30px rgba(0,0,0,.4); }
+}
+.sealed-terminal-button svg { width: 21px; height: 21px; }
+
+/* ── Whisper modal: full-page, dismissable via × ───────────────────────────── */
+.sealed-terminal-modal { place-items: stretch; padding: 0; background: rgba(0,0,0,.62); }
+.sealed-terminal-panel {
+  width: 100%; max-width: none; height: 100dvh; max-height: none;
+  border: 0; border-radius: 0;
+  padding: calc(16px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom));
+}
+.sealed-terminal-panel .terminal-close { width: 38px; height: 38px; font-size: 22px; }

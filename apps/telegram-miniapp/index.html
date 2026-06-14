@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=pact2" />
+    <link rel="stylesheet" href="/styles.css?v=wm1" />
   </head>
   <body>
     <svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
@@ -133,9 +133,8 @@
           </div>
         </div></div>
         <div class="cmdbar">
-          <span class="hint">status, hall, whisper: one tap away.</span>
+          <span class="hint">tap the mic up top to change its orders.</span>
           <div class="actions">
-            <button class="btn-ghost" data-go="v-whisper">change its orders</button>
             <button class="btn-primary" data-go="v-hall">listen at the wall <span class="ret">&#8629;</span></button>
           </div>
         </div>
@@ -171,7 +170,7 @@
         </div></div>
         <div class="cmdbar">
           <span class="hint">you can feel the crowd you cannot read.</span>
-          <div class="actions"><button class="btn-ghost" data-go="v-wait">&#8592; status</button><button class="btn-primary" data-go="v-whisper">new whisper <span class="ret">&#8629;</span></button></div>
+          <div class="actions"><button class="btn-primary" data-go="v-wait">&#8592; back to your daemon</button></div>
         </div>
       </section>
     </main>
@@ -194,7 +193,7 @@
             </button>
           </div>
           <div class="terminal-compose-actions">
-            <span id="terminal-whisper-status" class="terminal-compose-status">click the mic to record. click again to stop.</span>
+            <span id="terminal-whisper-status" class="terminal-compose-status"></span>
             <button id="terminal-seal-whisper" class="btn-ghost terminal-send" type="button" disabled>seal to daemon <span class="ret">&#8629;</span></button>
           </div>
         </div>
@@ -209,6 +208,6 @@
     <script src="/src/daemon-reveal.ts" type="module"></script>
     <script src="/src/gateway-boot.ts" type="module"></script>
     <script src="/src/blink-checkout.ts" type="module"></script>
-    <script src="/flow.js?v=pact2" type="module"></script>
+    <script src="/flow.js?v=wm1" type="module"></script>
   </body>
 </html>

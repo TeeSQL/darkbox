@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseAgentObservation } from '@darkbox/shared';
 import { makeFixtureObservation } from './fixture.js';
+import { IndexerIdentityClient } from './identityClient.js';
 import { createRandomStrategy, randomStrategyKinds, type RandomAgentKind } from './random.js';
 import { validateTurnOutput } from './validate.js';
 import { createVeniceStrategy } from './venice.js';
@@ -40,6 +41,21 @@ async function main(): Promise<void> {
 
   if (mode === 'list') {
     console.log(JSON.stringify({ randomStrategyKinds }, null, 2));
+    return;
+  }
+
+  if (mode === 'spawn') {
+    // Register a spawned agent identity with the indexer. Spawned agents have no
+    // telegram account but receive a stable daemon name for the leaderboard.
+    const shadowAccount = argValue('--shadow-account', '');
+    if (!shadowAccount) {
+      console.error('spawn requires --shadow-account <address>');
+      process.exit(1);
+    }
+    const agentId = argValue('--agent-id', '') || undefined;
+    const client = new IndexerIdentityClient();
+    const identity = await client.registerSpawnedAgent({ shadowAccount, agentId });
+    console.log(JSON.stringify({ mode, identity }, null, 2));
     return;
   }
 

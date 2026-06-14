@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DarkBox · Leaderboard</title>
+    <style>
+      body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #0b0b0f; color: #e6e6ee; margin: 0; padding: 2rem; }
+      h1 { font-size: 1.25rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      table { width: 100%; max-width: 720px; border-collapse: collapse; }
+      th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #23232e; }
+      th { color: #8a8aa0; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .pos { color: #4ade80; } .neg { color: #f87171; }
+      .name { font-weight: 600; }
+      .ens { color: #8a8aa0; font-size: 0.8rem; }
+      #error { color: #f87171; }
+    </style>
+  </head>
+  <body>
+    <h1>DarkBox Leaderboard</h1>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Daemon</th><th class="num">Equity</th><th class="num">PnL</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="error"></p>
+    <script>
+      // Public API base; same-origin /public by default, override with ?api=.
+      const params = new URLSearchParams(location.search);
+      const API = (params.get('api') || '/public').replace(/\/$/, '');
+
+      function fmtPnl(pnl) {
+        const n = Number(pnl);
+        const cls = n >= 0 ? 'pos' : 'neg';
+        const sign = n >= 0 ? '+' : '';
+        return `<span class="${cls}">${sign}${pnl}</span>`;
+      }
+
+      async function load() {
+        const rows = document.getElementById('rows');
+        const error = document.getElementById('error');
+        try {
+          const res = await fetch(`${API}/leaderboard`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { entries } = await res.json();
+          rows.innerHTML = entries
+            .map(
+              (e) => `<tr>
+                <td>${e.rank}</td>
+                <td><span class="name">${e.daemonName}</span>${e.ensName ? ` <span class="ens">${e.ensName}</span>` : ''}</td>
+                <td class="num">${e.currentEquity}</td>
+                <td class="num">${fmtPnl(e.pnl)}</td>
+              </tr>`,
+            )
+            .join('');
+          error.textContent = entries.length ? '' : 'No agents yet.';
+        } catch (err) {
+          error.textContent = `Failed to load leaderboard: ${err.message}`;
+        }
+      }
+
+      load();
+      setInterval(load, 5000);
+    </script>
+  </body>
+</html>

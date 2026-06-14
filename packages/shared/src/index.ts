@@ -3,7 +3,8 @@ export type GameId = `0x${string}`;
 
 export interface LeaderboardEntry {
   agentId: AgentId;
-  ensName: string;
+  daemonName: string;
+  ensName?: string;
   startingBalance: string;
   currentEquity: string;
   pnl: string;
@@ -11,3 +12,4 @@ export interface LeaderboardEntry {
 }
 
 export * from './agent/runtime.js';
+export * from './identity.js';

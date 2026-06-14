@@ -1,0 +1,17 @@
+{
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "name": "Frontier Arc Testnet - WETH/USDC",
+  "frontier": {
+    "factory": "0xE391ab3eA709f66896eE774FBD16096b0e2972a6",
+    "router": "0x965648Aecdd23b91970E497f497D51AAFFFBEaDD",
+    "lens": "0x25C53b1E4f36B17187C6e0Bc27F59Ba9feb44a37"
+  },
+  "spot": {
+    "weth": "0x0A797239869af85442bb667f67949C59BE9006d1",
+    "usdc": "0xD8836a33604a95717E1f159194C1563d4bccC460",
+    "book": "0x89f3d7C34f86c4A24E72DDa2c4BDAD33aF7f3cB2",
+    "tickSpacing": 1,
+    "startTick": 82947
+  }
+}

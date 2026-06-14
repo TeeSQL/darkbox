@@ -457,26 +457,36 @@ function renderPrivateState() {
   let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
   let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (live.self) {
-    // ── Balance: $5 promo credit + any bridge/indexer-available ──────────────
+    // ── Balance: the indexer's holdings when it has a row for this account (the
+    // CVM-reported balance), else the $5 promo. Using "indexer when present, else
+    // promo" avoids double-counting once the bridge mints the promo on-chain. ──
     let real = 0;
     let known = false;
-    // self/status doesn't carry the promo amount, so use the (idempotent) claim.
-    if (live.promoCredit && live.self.fundingStatus === 'promo_funded') {
+    const idx = Number(live.self.shadowBalance);
+    if (live.self.shadowBalance != null && Number.isFinite(idx) && idx > 0) {
+      real = idx; known = true; // indexer is authoritative when it holds a balance
+    } else if (live.promoCredit && live.self.fundingStatus === 'promo_funded') {
       const p = Number(live.promoCredit.amount);
-      if (Number.isFinite(p)) { real += p; known = true; }
+      if (Number.isFinite(p)) { real = p; known = true; } // promo (not yet minted to the indexer)
+    } else {
+      const wb = live.self.withdrawableAvailableBalance;
+      if (wb != null && Number.isFinite(Number(wb))) { real = Number(wb); known = true; }
     }
-    const wb = live.self.withdrawableAvailableBalance;
-    if (wb != null && Number.isFinite(Number(wb))) { real += Number(wb); known = true; }
     if (known) balance = real;
 
-    // ── PnL: real. $0 until the daemon actually trades (leaderboard row). A real
+    // ── PnL: the indexer's realized PnL → leaderboard row → $0 (untraded). A real
     // account with an untouched $5 must read +$0.00, never a mock number. ──────
     pnl = 0;
     pnlNote = 'no trades yet';
-    const liveRow = myLeaderboardRow();
-    if (liveRow && liveRow.pnl != null) {
-      const rp = Number(liveRow.pnl);
-      if (Number.isFinite(rp)) { pnl = rp; pnlNote = rp >= 0 ? 'realized' : 'drawdown'; }
+    const rpIdx = Number(live.self.realizedPnl);
+    if (live.self.realizedPnl != null && Number.isFinite(rpIdx) && rpIdx !== 0) {
+      pnl = rpIdx; pnlNote = rpIdx >= 0 ? 'realized' : 'drawdown';
+    } else {
+      const liveRow = myLeaderboardRow();
+      if (liveRow && liveRow.pnl != null) {
+        const rp = Number(liveRow.pnl);
+        if (Number.isFinite(rp)) { pnl = rp; pnlNote = rp >= 0 ? 'realized' : 'drawdown'; }
+      }
     }
   }
   // Real instruction fingerprint once a whisper is committed to the mesh.

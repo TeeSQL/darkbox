@@ -35,6 +35,10 @@ export interface SelfStatus {
   enteredViaInvite: boolean;
   inviteId: string | null;
   withdrawableAvailableBalance: string | null;
+  /** Indexer-sourced holdings (current shadow-USDC balance); null if none yet. */
+  shadowBalance?: string | null;
+  /** Indexer-sourced realized PnL; null if none yet. */
+  realizedPnl?: string | null;
   instructionCommitmentHash: string | null;
   withdrawalLock: WithdrawalLock;
   registrationFreezeAt: string;

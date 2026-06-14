@@ -11,5 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
   }
 }

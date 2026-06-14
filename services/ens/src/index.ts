@@ -1,8 +1,18 @@
 import http from 'node:http';
+import type { Address, Hex } from 'viem';
+import { CcipGateway } from './ccip.js';
 import { EnsRegistry } from './records.js';
 
 const PORT = Number(process.env.PORT ?? 8099);
 const registry = new EnsRegistry();
+
+const gatewayKey = process.env.ENS_GATEWAY_PRIVATE_KEY as Hex | undefined;
+const gateway = gatewayKey
+  ? new CcipGateway(registry, {
+      privateKey: gatewayKey,
+      ttlSeconds: Number(process.env.ENS_GATEWAY_TTL ?? 300),
+    })
+  : undefined;
 
 interface Json {
   [key: string]: unknown;
@@ -29,6 +39,27 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
     if (method === 'GET' && url.pathname === '/ens/names') return send(res, 200, { records: registry.list() });
+
+    if (method === 'GET' && url.pathname === '/ens/gateway') {
+      return send(res, 200, { enabled: !!gateway, signer: gateway?.signerAddress ?? null });
+    }
+
+    // ERC-3668 CCIP-Read endpoint. The OffchainResolver's gateway URL is
+    // configured as `<base>/r/{sender}/{data}.json`; the client substitutes the
+    // resolver address and the resolve() calldata.
+    if (method === 'GET' && seg[0] === 'r' && seg[1] && seg[2]) {
+      if (!gateway) return send(res, 501, { error: 'gateway signer not configured' });
+      const sender = seg[1] as Address;
+      const data = seg[2].replace(/\.json$/, '') as Hex;
+      const result = await gateway.resolve(sender, data);
+      return send(res, 200, { data: result });
+    }
+    if (method === 'POST' && seg[0] === 'r') {
+      if (!gateway) return send(res, 501, { error: 'gateway signer not configured' });
+      const body = await readJson(req);
+      const result = await gateway.resolve(body.sender as Address, body.data as Hex);
+      return send(res, 200, { data: result });
+    }
 
     if (method === 'POST' && url.pathname === '/ens/register') {
       const body = await readJson(req);

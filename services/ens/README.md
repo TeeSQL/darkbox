@@ -12,12 +12,47 @@ mapping.
 - `GET /ens/names` / `GET /ens/names/:name`
 - `POST /ens/names/:name/records {texts}` — merge post-reveal records
 
-## Not yet wired (needs a chain)
+## Offchain resolver (ERC-3668 / CCIP-Read)
 
-On-chain ENS subname registration and resolver writes are stubbed: the service
-stores the canonical record set and marks status `pending` → `registered`, but
-the actual `<agent>.darkbox.eth` registration against a real ENS deployment
-requires a chain + controller key. The record set served here is exactly what
-that controller would write.
+`<agent>.darkbox.eth` resolves **offchain** — records stay in this service and
+cost zero gas per agent. An `OffchainResolver` contract
+(`packages/contracts/src/ens/OffchainResolver.sol`) is set as the resolver for
+`darkbox.eth`; it reverts lookups with `OffchainLookup`, pointing clients at
+this service's gateway:
 
-See ../../docs/TECH_SPEC.md for the ENS integration contract.
+- `GET /r/{sender}/{data}.json` — CCIP-Read entrypoint (the resolver's gateway
+  URL template). Decodes the wrapped `text(node,key)` / `addr(node)` call,
+  answers it from the registry, and returns an EIP-191 `0x1900`-signed payload
+  that `OffchainResolver.resolveWithProof` verifies.
+- `POST /r {sender, data}` — same, POST form.
+- `GET /ens/gateway` — reports whether signing is enabled and the signer address
+  to configure on-chain.
+
+### Config
+
+- `ENS_GATEWAY_PRIVATE_KEY` — 0x-prefixed signer key. Must match a signer
+  trusted by the `OffchainResolver`. If unset, `/r/*` returns `501` (record
+  CRUD still works). Keep this key in the CVM/secret store.
+- `ENS_GATEWAY_TTL` — seconds a signed answer stays valid (default `300`).
+
+### On-chain runbook (one-time, with the `darkbox.eth` owner key)
+
+1. Generate the gateway signer key; set `ENS_GATEWAY_PRIVATE_KEY` on this
+   service. Read the address from `GET /ens/gateway`.
+2. Deploy the resolver:
+   ```
+   ENS_GATEWAY_URL=https://<ens-host>/r/{sender}/{data}.json \
+   ENS_GATEWAY_SIGNER=<address from /ens/gateway> \
+   DEPLOYER_KEY=<darkbox.eth owner key> \
+   forge script script/DeployOffchainResolver.s.sol --rpc-url <mainnet> --broadcast
+   ```
+3. In the ENS app (or `ENSRegistry.setResolver`), set **`darkbox.eth`'s
+   resolver** to the deployed `OffchainResolver` address. ← the single L1 tx
+   that wires the name to this service.
+4. Verify: `dig`/`viem getEnsText` for `alice.darkbox.eth` `darkbox:gameId`
+   should return the registry value.
+
+No per-agent on-chain transactions are needed after this — registering a name
+via `POST /ens/register` makes it immediately resolvable.
+
+See ../../docs/TECH_SPEC.md §11 for the ENS integration contract.

@@ -76,6 +76,7 @@ const live = {
   game: null,        // GameStats from /public/game
   activity: null,    // ActivityStats from /public/activity
   markets: null,     // PublicMarket[] from /public/markets
+  promoCredit: null, // { currency, amount, type } from claimInvite()
   claimed: false,    // ran claimInvite() this session
   committed: false,  // sealed a whisper to the mesh this session
 };
@@ -108,11 +109,17 @@ async function refreshSelf() {
   if (!client) return;
   try {
     let self = await client.selfStatus();
-    if (self && !self.enteredViaInvite) {
-      try { await client.claimInvite(); live.claimed = true; }
-      catch (_) { /* promo may be closed / already claimed elsewhere */ }
-      try { self = await client.selfStatus(); } catch (_) {}
-    }
+    // Always claim (idempotent): grants the $5 promo on first entry and, crucially,
+    // returns the credit AMOUNT even on repeat visits — self/status only exposes
+    // fundingStatus + the (locked, $0) withdrawable, never the promo amount itself.
+    try {
+      const claim = await client.claimInvite();
+      if (claim && claim.agentFundingCredit) {
+        live.promoCredit = claim.agentFundingCredit; // { currency, amount, type }
+        live.claimed = true;
+      }
+      self = await client.selfStatus();
+    } catch (_) { /* promo closed/frozen, or already settled — keep self as-is */ }
     live.self = self;
     renderPrivateState();
   } catch (_) {
@@ -416,13 +423,24 @@ function renderPrivateState() {
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
   if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(instructionSeed)}`;
   setSelectedDaemon({ image: daemonImage, name: ownName, seed: visualSeed });
-  // Balance: real withdrawable from the indexer when authed, else the mock.
+  // Balance: the player's real playable balance — the $5 promo credit plus any
+  // bridge/indexer-available — when authed, else the mock.
   let balance = selectedStake + (h % 900) / 100;
   let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
   let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
-  if (live.self && live.self.withdrawableAvailableBalance != null) {
-    const real = Number(live.self.withdrawableAvailableBalance);
-    if (Number.isFinite(real)) balance = real;
+  if (live.self) {
+    let real = 0;
+    let known = false;
+    // The $5 promo counts toward the playable balance even while it's withdrawal-
+    // locked. self/status doesn't carry the amount, so use the (idempotent) claim.
+    if (live.promoCredit && live.self.fundingStatus === 'promo_funded') {
+      const p = Number(live.promoCredit.amount);
+      if (Number.isFinite(p)) { real += p; known = true; }
+    }
+    // Real deposits / withdrawable from the bridge+indexer once present.
+    const wb = live.self.withdrawableAvailableBalance;
+    if (wb != null && Number.isFinite(Number(wb))) { real += Number(wb); known = true; }
+    if (known) balance = real;
     const lock = live.self.withdrawalLock;
     if (lock && lock.locked) {
       pnlNote = lock.unlockAt

@@ -78,6 +78,12 @@ importers:
         specifier: ^4.2.1
         version: 4.4.3
 
+  services/ens:
+    dependencies:
+      viem:
+        specifier: ^2.21.0
+        version: 2.52.2(typescript@6.0.3)(zod@4.4.3)
+
   services/faucet-mint-worker:
     dependencies:
       '@darkbox/bridge':
@@ -102,6 +108,7 @@ importers:
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
+
 
   services/gateway:
     dependencies:

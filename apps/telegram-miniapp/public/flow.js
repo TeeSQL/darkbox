@@ -25,6 +25,8 @@ const countdownEls = [
 const fingerprintEl = document.querySelector('#fingerprint');
 const daemonNameEl = document.querySelector('#daemon-name');
 const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
+const daemonEnsEl = document.querySelector('#daemon-ens');
+const revealDaemonEnsEl = document.querySelector('#reveal-daemon-ens');
 const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
 const waitDaemonImageEl = document.querySelector('#daemon-wait-image');
 const waitDaemonVideoEl = document.querySelector('#daemon-wait-video');
@@ -118,6 +120,13 @@ function serverDaemonName() {
   if (persisted) return persisted;
   if (s.agentId) return pick(names, s.agentId); // deterministic, stable per account
   return null;
+}
+
+function daemonEnsName(name) {
+  const raw = String((live.self && live.self.ensName) || name || 'daemon').trim().toLowerCase();
+  if (raw.includes('.')) return raw;
+  const label = raw.replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '') || 'daemon';
+  return `${label}.darkbox.eth`;
 }
 
 // Pull the player's account from the gateway and, on first entry, claim the $5
@@ -476,9 +485,12 @@ function renderPrivateState() {
   const status = pick(statuses, visualSeed, 2);
   if (fingerprintEl) fingerprintEl.textContent = fingerprint(instructionSeed);
   const daemonImage = pick(daemonImages, visualSeed, 5);
+  const ensName = daemonEnsName(ownName);
   if (daemonNameEl) daemonNameEl.textContent = ownName;
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
-  if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(instructionSeed)}`;
+  if (daemonEnsEl) daemonEnsEl.textContent = ensName;
+  if (revealDaemonEnsEl) revealDaemonEnsEl.textContent = ensName;
+  if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `ENS identity · ${status} · ${fingerprint(instructionSeed)}`;
   setSelectedDaemon({ image: daemonImage, name: ownName, seed: visualSeed });
   // Balance + PnL. When authed (real account) BOTH come from the backend — never
   // mix a real balance with a mock PnL. The hash-mock is only for the no-gateway

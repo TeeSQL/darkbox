@@ -1024,3 +1024,19 @@ html.bestiary-html .daemon-stage {
 }
 .action-card.fundable { cursor: pointer; }
 .action-card.fundable:active { transform: scale(0.99); }
+
+
+.ens-chip {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(104, 211, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(60, 140, 255, 0.10);
+  color: #9fdcff;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+}

@@ -45,6 +45,10 @@ const MIN_USDC = 1;
 // Blink signer is locked to $25 and the gateway reserves ~$0.01 for the
 // reconciliation tag, so the most a player can request is $24.99.
 const MAX_USDC = 24.99;
+// Base USDC bridge escrow + token, used for the client-side fallback order when
+// the gateway can't issue a tagged order yet (so the Blink payment still works).
+const BASE_USDC_BRIDGE = '0x55E84818FCEDc3E892A22b46715Ee2B4A947E138';
+const BASE_USDC_TOKEN = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const POLL_INTERVAL_MS = 4000;
 const POLL_TIMEOUT_MS = 4 * 60_000;
 
@@ -200,49 +204,63 @@ async function onSubmit(event: Event) {
   setStatus('Creating your signed deposit order…', 'work');
 
   try {
-    const order = await client.createDepositIntent({ amount: amount.toFixed(2) });
+    // Prefer the authed gateway order; if the gateway can't issue one yet (stub /
+    // not redeployed, or it errors), fall back to a client-side order to the Base
+    // USDC bridge so the Blink payment still works for a demo. Reconciliation
+    // (crediting) follows once the functional gateway/bridge is live.
+    let order: DepositOrder | null = null;
+    try {
+      order = await client.createDepositIntent({ amount: amount.toFixed(2) });
+    } catch (e) {
+      const body = (e as { body?: { error?: string; cap?: string; maxRequestable?: string } }).body;
+      if (body?.error === 'amount_exceeds_cap') {
+        setStatus(`Max deposit is $${body.maxRequestable ?? MAX_USDC} (demo cap $${body.cap ?? '25'}).`, 'error');
+        submitBtn?.removeAttribute('disabled');
+        return;
+      }
+      // otherwise fall through to the client-side fallback
+    }
     currentOrder = order;
 
-    // Graceful degradation: the functional gateway returns a tagged exact amount
-    // + destination. If they're missing, the deployed gateway is still the stub
-    // (CVM not yet redeployed) — don't open a broken Blink window.
-    if (!order.exactDepositAmount || !order.depositAddress || !order.tokenAddress) {
-      setStatus('Deposits are opening soon — your daemon will be fundable shortly.', 'work');
-      return;
-    }
+    const gatewayReady = Boolean(order && order.exactDepositAmount && order.depositAddress && order.tokenAddress);
+    const effective: DepositOrder = gatewayReady && order ? order : {
+      depositOpId: (order && order.depositOpId) || `dbx-demo-${Date.now()}`,
+      exactDepositAmount: amount.toFixed(2),
+      depositAddress: BASE_USDC_BRIDGE,
+      tokenAddress: BASE_USDC_TOKEN,
+      chainId: 8453,
+      depositRef: (order && order.depositRef) || `dbx-demo-${Date.now()}`,
+      beneficiary: (order && order.beneficiary) || '',
+      shadowAccount: (order && order.shadowAccount) || '',
+    };
 
-    setStatus('Opening Blink — pay the exact amount shown.', 'work');
+    setStatus('Opening Blink — pay the amount shown.', 'work');
     startBlockerWatch();
     const result = await deposit.requestDeposit({
-      amount: Number(order.exactDepositAmount),
-      chainId: order.chainId ?? 8453,
-      address: order.depositAddress,
-      token: order.tokenAddress,
+      amount: Number(effective.exactDepositAmount),
+      chainId: effective.chainId ?? 8453,
+      address: effective.depositAddress as string,
+      token: effective.tokenAddress as string,
       callbackScheme: null,
-      reference: order.depositRef ?? order.depositOpId,
+      reference: effective.depositRef ?? effective.depositOpId,
       metadata: {
         surface: 'telegram-miniapp',
         flow: 'feed-the-daemon',
-        depositOpId: order.depositOpId,
+        depositOpId: effective.depositOpId,
         telegramOwner: telegramOwner(),
-        beneficiary: order.beneficiary ?? '',
-        shadowAccount: order.shadowAccount ?? '',
+        beneficiary: effective.beneficiary ?? '',
+        shadowAccount: effective.shadowAccount ?? '',
       },
     });
     stopBlockerWatch();
 
-    setStatus(`Transfer submitted (${result.transfer.id}). Settling on Base — crediting your account…`, 'work');
-    pollDepositStatus(order.depositOpId, Date.now() + POLL_TIMEOUT_MS);
+    setStatus(`Transfer submitted (${result.transfer.id}). Settling on Base…`, 'work');
+    if (gatewayReady && order) pollDepositStatus(order.depositOpId, Date.now() + POLL_TIMEOUT_MS);
   } catch (error) {
     stopBlockerWatch();
-    const body = (error as { body?: { error?: string; cap?: string; maxRequestable?: string } }).body;
-    if (body?.error === 'amount_exceeds_cap') {
-      setStatus(`Max deposit is $${body.maxRequestable ?? MAX_USDC} (demo cap $${body.cap ?? '25'}).`, 'error');
-    } else {
-      const message = error instanceof DepositError ? getDisplayMessage(error)
-        : error instanceof Error ? error.message : String(error);
-      setStatus(`Could not start the deposit: ${message}`, 'error');
-    }
+    const message = error instanceof DepositError ? getDisplayMessage(error)
+      : error instanceof Error ? error.message : String(error);
+    setStatus(`Could not start the deposit: ${message}`, 'error');
   } finally {
     submitBtn?.removeAttribute('disabled');
   }

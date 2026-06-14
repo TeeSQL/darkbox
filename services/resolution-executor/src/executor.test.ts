@@ -13,8 +13,8 @@ import {
   validateIntent,
   type ExecutorDeps,
 } from "./executor.js";
-import type { MarketResolver, ResolveResult } from "./resolver.js";
-import type { PendingResolution } from "./types.js";
+import { ViemMarketResolver, type MarketResolver, type ResolveResult } from "./resolver.js";
+import { OUTCOME_CODE, type PendingResolution } from "./types.js";
 
 const MARKET_ID: Hex = `0x${"22".repeat(32)}`;
 const MARKET_ADDR: Address = "0x00000000000000000000000000000000000000a1";
@@ -187,6 +187,63 @@ test("(d2) resolveMarket carrying Invalid is rejected (no resolve, no default)",
   assert.equal(result, "skipped");
   assert.equal(resolver.resolveCalls.length, 0);
   assert.equal(source.resolved.length, 0);
+});
+
+// --- idempotent recovery must match the prepared outcome (Ocean's blocker) --
+
+/**
+ * Build a real ViemMarketResolver with a stubbed publicClient.getLogs so we can
+ * exercise findExistingResolutionTx's outcome-matching without a chain. The key
+ * is a throwaway non-zero test key; no network call is made (getLogs is stubbed).
+ */
+function resolverWithLogs(logs: Array<{ transactionHash: Hex; args: { outcome?: bigint } }>): ViemMarketResolver {
+  const r = new ViemMarketResolver({
+    rpcUrl: "http://localhost:8545",
+    chainId: 88813,
+    factoryAddress: "0x0000000000000000000000000000000000000fac",
+    coordinatorPrivateKey: `0x${"11".repeat(32)}`,
+  });
+  (r as unknown as { publicClient: { getLogs: () => Promise<unknown> } }).publicClient = {
+    getLogs: async () => logs,
+  };
+  return r;
+}
+
+test("findExistingResolutionTx returns the tx when the on-chain outcome MATCHES the intent", async () => {
+  const r = resolverWithLogs([{ transactionHash: EXISTING_TX, args: { outcome: BigInt(OUTCOME_CODE.Yes) } }]);
+  const tx = await r.findExistingResolutionTx(intent({ intentType: "resolveMarket", outcome: "Yes" }));
+  assert.equal(tx, EXISTING_TX);
+});
+
+test("findExistingResolutionTx returns null when no MarketResolved log exists", async () => {
+  const r = resolverWithLogs([]);
+  const tx = await r.findExistingResolutionTx(intent({ intentType: "resolveMarket", outcome: "Yes" }));
+  assert.equal(tx, null);
+});
+
+test("findExistingResolutionTx THROWS on opposite-outcome recovery (chain=No vs prepared=Yes)", async () => {
+  const r = resolverWithLogs([{ transactionHash: EXISTING_TX, args: { outcome: BigInt(OUTCOME_CODE.No) } }]);
+  await assert.rejects(
+    () => r.findExistingResolutionTx(intent({ intentType: "resolveMarket", outcome: "Yes" })),
+    /conflicts with prepared intent outcome/,
+  );
+});
+
+test("opposite-outcome conflict → executor leaves market resolution_pending, never writes back", async () => {
+  // Mirror the resolver throwing a conflict: the executor must NOT settle the DB.
+  const resolver = new FakeResolver();
+  resolver.findExistingResolutionTx = async (): Promise<Hex | null> => {
+    throw new Error(
+      `on-chain MarketResolved outcome ${OUTCOME_CODE.No} conflicts with prepared intent outcome Yes for market ${MARKET_ID}`,
+    );
+  };
+  const source = new FakeSource();
+
+  const result = await processResolution(intent({ outcome: "Yes" }), baseDeps(resolver, source));
+
+  assert.equal(result, "failed");
+  assert.equal(resolver.resolveCalls.length, 0, "must NOT send a new tx on a conflict");
+  assert.equal(source.resolved.length, 0, "must NOT write back → stays resolution_pending");
 });
 
 // --- safety gate (pure) ---------------------------------------------------

@@ -133,14 +133,39 @@ export class ViemMarketResolver implements MarketResolver {
     // keyed by the indexed marketId. Find the existing settlement tx so we record
     // the REAL hash rather than sending a duplicate (which reverts BadStatus) or
     // posting a null hash to complete-resolution.
-    const event = intent.intentType === "voidMarket" ? marketVoidedEvent : marketResolvedEvent;
+    if (intent.intentType === "voidMarket") {
+      // MarketVoided carries no outcome to mismatch — any void log IS the void.
+      const logs = await this.publicClient.getLogs({
+        address: intent.marketAddress,
+        event: marketVoidedEvent,
+        args: { marketId: intent.marketId },
+        fromBlock: this.fromBlock,
+        toBlock: "latest",
+      });
+      return logs[0]?.transactionHash ?? null;
+    }
+
+    // resolveMarket: a market resolves at most once, so expect 0 or 1 log. Only
+    // accept a MarketResolved whose on-chain outcome matches the prepared intent.
+    // A log that resolved to a DIFFERENT outcome than the DB prepared must NEVER
+    // be written back (it would settle the DB to the wrong outcome) — throw so the
+    // executor's catch leaves the market resolution_pending for a human.
     const logs = await this.publicClient.getLogs({
       address: intent.marketAddress,
-      event,
+      event: marketResolvedEvent,
       args: { marketId: intent.marketId },
       fromBlock: this.fromBlock,
       toBlock: "latest",
     });
-    return logs[0]?.transactionHash ?? null;
+    const log = logs[0];
+    if (!log) return null;
+    const expected = OUTCOME_CODE[intent.outcome as "Yes" | "No"];
+    const onChain = Number(log.args.outcome);
+    if (onChain !== expected) {
+      throw new Error(
+        `on-chain MarketResolved outcome ${onChain} conflicts with prepared intent outcome ${intent.outcome} for market ${intent.marketId}`,
+      );
+    }
+    return log.transactionHash;
   }
 }

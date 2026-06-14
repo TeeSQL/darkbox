@@ -13,9 +13,9 @@
 #      member onto its own right-sized member — it is no longer in this compose.
 #   2. per-service mem_limit/mem_reservation below contain any single-container
 #      OOM to that container (restart-loop) instead of the whole pod.
-#   3. this member MUST run on a generously-sized flavor — target ~16 GB / the
-#      largest practical tdx tier, OVER-provisioned for good measure (headroom is
-#      cheap insurance against a recurrence, and it also unstarves the sidecar).
+#   3. this member MUST run on tdx.xlarge (8 vCPU / 16 GB — the largest practical
+#      tier, over-provisioned for good measure). The 8 vCPU (vs 1) also fixes the
+#      CPU-starved sidecar convergence (live_peers 6->3->0); headroom is insurance.
 #      The limits below assume it; on 2 GB they do not fit — see the doc for the
 #      fresh-CVM bump procedure.
 #

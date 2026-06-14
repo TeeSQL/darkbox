@@ -7,9 +7,9 @@
 #
 # Resource limits: light member (sidecar + geth-2 + sshd), but it carries a chain
 # SIGNER — if it OOMs the 2-signer clique stalls, so give it headroom too. Bump
-# this member off tdx.small to a roomier flavor (~8 GB) for good measure; the
+# this member off tdx.small to tdx.large (4 vCPU / 8 GB) for good measure; the
 # limits below assume it. See docs/deploy/MESH_RESOURCE_LIMITS.md (the fat CORE
-# member gets the largest flavor).
+# member gets tdx.xlarge).
 services:
   sidecar:
     image: ghcr.io/attestmesh/cluster-mesh-agent:latest

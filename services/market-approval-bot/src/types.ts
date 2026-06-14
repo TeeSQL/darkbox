@@ -10,6 +10,13 @@ export type ProposalPayload = {
   metadataURI?: string;
   runId?: string;
   turn?: number;
+  closeTime?: number | string;
+  expiry?: number | string;
+  proposerKind?: string;
+  proposerId?: string;
+  proposerTelegramId?: string;
+  proposerTelegramUsername?: string;
+  proposerRole?: string;
 };
 
 export type TelegramMessage = {
@@ -21,6 +28,10 @@ export type TelegramMessage = {
 
 export type TelegramUpdate = {
   update_id: number;
+  message?: TelegramMessage & {
+    from?: { id: number; username?: string; first_name?: string; last_name?: string };
+    text?: string;
+  };
   callback_query?: {
     id: string;
     from: { id: number; username?: string; first_name?: string; last_name?: string };

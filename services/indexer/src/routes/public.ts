@@ -32,6 +32,16 @@ const FORBIDDEN_PUBLIC_KEYS = new Set([
   "txHash",
   "log_index",
   "logIndex",
+  "proposer_telegram_id",
+  "proposerTelegramId",
+  "proposer_telegram_username",
+  "proposerTelegramUsername",
+  "confirmer_telegram_id",
+  "confirmerTelegramId",
+  "confirmer_telegram_username",
+  "confirmerTelegramUsername",
+  "operator_telegram_id",
+  "operatorTelegramId",
 ]);
 
 export function stripForbidden(obj: unknown): unknown {

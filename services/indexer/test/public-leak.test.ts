@@ -58,6 +58,16 @@ describe("public leak guard (stripForbidden)", () => {
       "txHash",
       "log_index",
       "logIndex",
+      "proposer_telegram_id",
+      "proposerTelegramId",
+      "proposer_telegram_username",
+      "proposerTelegramUsername",
+      "confirmer_telegram_id",
+      "confirmerTelegramId",
+      "confirmer_telegram_username",
+      "confirmerTelegramUsername",
+      "operator_telegram_id",
+      "operatorTelegramId",
     ];
     const input: Record<string, unknown> = {};
     for (const k of forbidden) input[k] = "secret";

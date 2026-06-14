@@ -830,6 +830,10 @@ html.bestiary-html .daemon-stage {
 }
 .admin-refresh:hover,
 .admin-mini-link:hover { color: var(--bone); border-color: rgba(139,123,255,.5); }
+.source-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; color: var(--mut); font-size: 11px; }
+.source-picker label { display: inline-flex; gap: 8px; align-items: center; text-transform: uppercase; letter-spacing: .08em; }
+.source-picker select, .raw-toolbar select { border: 1px solid rgba(231,227,217,.16); border-radius: 12px; background: rgba(0,0,0,.32); color: var(--bone); padding: 8px; font: 11px/1.2 'JetBrains Mono', monospace; }
+.source-picker span, .source-note { color: #f2d27a; }
 .admin-health { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: var(--mut); font-size: 11px; }
 .admin-health span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid rgba(231,227,217,.12); border-radius: 999px; background: rgba(255,255,255,.025); }
 .admin-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hot); box-shadow: 0 0 18px rgba(255,74,126,.45); }

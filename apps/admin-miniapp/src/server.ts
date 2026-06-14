@@ -10,7 +10,14 @@ const appUrl = process.env.ADMIN_MINIAPP_URL ?? `http://localhost:${port}`;
 const token = process.env.ADMIN_TELEGRAM_BOT_TOKEN ?? '';
 const webhookSecret = process.env.ADMIN_TELEGRAM_WEBHOOK_SECRET ?? '';
 const accessToken = process.env.ADMIN_ACCESS_TOKEN ?? '';
-const indexerPublicUrl = (process.env.ADMIN_INDEXER_PUBLIC_URL ?? process.env.INDEXER_PUBLIC_URL ?? 'https://d52dd8da602484730a36c648ae09672b6e2b1334-8080.dstack-base-prod5.phala.network').replace(/\/$/, '');
+const defaultIndexerPublicUrl = (process.env.ADMIN_INDEXER_PUBLIC_URL ?? process.env.INDEXER_PUBLIC_URL ?? 'https://d52dd8da602484730a36c648ae09672b6e2b1334-8080.dstack-base-prod5.phala.network').replace(/\/$/, '');
+const devIndexerPublicUrl = (process.env.ADMIN_DEV_INDEXER_PUBLIC_URL ?? 'http://127.0.0.1:18080').replace(/\/$/, '');
+const indexerSources = {
+  mesh: { id: 'mesh', label: 'AttestMesh live gateway', url: defaultIndexerPublicUrl },
+  dev: { id: 'dev', label: 'Teebox devnet / local agent tunnel — not canonical', url: devIndexerPublicUrl },
+} as const;
+type IndexerSourceId = keyof typeof indexerSources;
+type IndexerSource = (typeof indexerSources)[IndexerSourceId];
 const agentFeedPath = process.env.ADMIN_AGENT_FEED_PATH ?? process.env.AGENT_FEED_PATH ?? '';
 const sourceLabel = process.env.ADMIN_SOURCE_LABEL ?? 'unlabeled admin source';
 
@@ -113,11 +120,16 @@ async function callTelegram(method: string, payload: unknown) {
   }
 }
 
-async function fetchIndexerJson(path: string): Promise<unknown> {
+function getIndexerSource(url: URL): IndexerSource {
+  const requested = url.searchParams.get('source');
+  return requested === 'dev' ? indexerSources.dev : indexerSources.mesh;
+}
+
+async function fetchIndexerJson(path: string, source: IndexerSource = indexerSources.mesh): Promise<unknown> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
   try {
-    const response = await fetch(`${indexerPublicUrl}${path}`, { signal: controller.signal });
+    const response = await fetch(`${source.url}${path}`, { signal: controller.signal });
     if (!response.ok) throw new Error(`${path} returned ${response.status}`);
     return response.json();
   } finally {
@@ -125,14 +137,17 @@ async function fetchIndexerJson(path: string): Promise<unknown> {
   }
 }
 
-async function handlePublicIndexerProxy(req: IncomingMessage, res: ServerResponse, pathname: string, search: string) {
+async function handlePublicIndexerProxy(req: IncomingMessage, res: ServerResponse, url: URL) {
+  const { pathname, search } = url;
   if (req.method !== 'GET') return send(res, 405, 'method not allowed');
   if (!pathname.startsWith('/public/')) return send(res, 404, 'not found');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3500);
   try {
-    const upstreamPath = `${pathname}${search}`;
-    const response = await fetch(`${indexerPublicUrl}${upstreamPath}`, { signal: controller.signal });
+    const source = getIndexerSource(url);
+    const upstreamUrl = new URL(pathname, `${source.url}/`);
+    for (const [key, value] of url.searchParams) if (key !== 'source' && key !== 'token') upstreamUrl.searchParams.append(key, value);
+    const response = await fetch(upstreamUrl, { signal: controller.signal });
     const body = await response.text();
     res.writeHead(response.status, {
       'Content-Type': response.headers.get('content-type') ?? 'application/json; charset=utf-8',
@@ -208,13 +223,14 @@ function normalizeLeaderboard(raw: unknown) {
   });
 }
 
-async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) {
+async function handleMarketSnapshot(req: IncomingMessage, res: ServerResponse, url: URL) {
+  const source = getIndexerSource(url);
   try {
     const [gameResult, marketsResult, activityResult, leaderboardResult] = await Promise.allSettled([
-      fetchIndexerJson('/public/game'),
-      fetchIndexerJson('/public/markets'),
-      fetchIndexerJson('/public/activity'),
-      fetchIndexerJson('/public/leaderboard'),
+      fetchIndexerJson('/public/game', source),
+      fetchIndexerJson('/public/markets', source),
+      fetchIndexerJson('/public/activity', source),
+      fetchIndexerJson('/public/leaderboard', source),
     ]);
 
     const gameRaw = gameResult.status === 'fulfilled' && gameResult.value && typeof gameResult.value === 'object'
@@ -227,7 +243,7 @@ async function handleMarketSnapshot(_req: IncomingMessage, res: ServerResponse) 
 
     sendJson(res, 200, {
       generatedAt: new Date().toISOString(),
-      source: { label: sourceLabel, indexerPublicUrlHash: createHash('sha256').update(indexerPublicUrl).digest('hex').slice(0, 12) },
+      source: { id: source.id, label: source.label, configuredLabel: sourceLabel, indexerPublicUrlHash: createHash('sha256').update(source.url).digest('hex').slice(0, 12) },
       sourceUpdatedAt: normalizeIso(activityRaw?.updatedAt ?? activityRaw?.updated_at ?? gameRaw?.updatedAt ?? gameRaw?.updated_at),
       game: gameRaw ? {
         title: getString(gameRaw.title, 'DarkBox'),
@@ -286,11 +302,14 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', appUrl);
   if (url.pathname === '/healthz') return send(res, 200, 'ok');
   if (!handleAuth(req, res, url)) return;
-  if (url.pathname === '/api/source-info' && req.method === 'GET') return sendJson(res, 200, { app: 'daemonhall-admin', sourceLabel, authEnabled: Boolean(accessToken), indexerConfigured: Boolean(indexerPublicUrl), indexerPublicUrl, publicPaths: ['/public/health', '/public/game', '/public/markets', '/public/leaderboard', '/public/activity'], agentFeedConfigured: Boolean(agentFeedPath), generatedAt: new Date().toISOString() });
+  if (url.pathname === '/api/source-info' && req.method === 'GET') {
+    const source = getIndexerSource(url);
+    return sendJson(res, 200, { app: 'daemonhall-admin', sourceLabel, selectedSource: source.id, selectedSourceLabel: source.label, authEnabled: Boolean(accessToken), indexerConfigured: Boolean(source.url), indexerPublicUrl: source.url, sources: Object.values(indexerSources).map((item) => ({ id: item.id, label: item.label })), publicPaths: ['/public/health', '/public/game', '/public/markets', '/public/leaderboard', '/public/activity'], agentFeedConfigured: Boolean(agentFeedPath), generatedAt: new Date().toISOString() });
+  }
   if (url.pathname === '/telegram/webhook' && req.method === 'POST') return handleWebhook(req, res);
-  if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res);
+  if (url.pathname === '/api/market-snapshot' && req.method === 'GET') return handleMarketSnapshot(req, res, url);
   if (url.pathname === '/agent-feed.json' && req.method === 'GET') return handleAgentFeed(req, res);
-  if (url.pathname.startsWith('/public/')) return handlePublicIndexerProxy(req, res, url.pathname, url.search);
+  if (url.pathname.startsWith('/public/')) return handlePublicIndexerProxy(req, res, url);
 
   const requested = url.pathname === '/' ? '/index.html' : url.pathname;
   const safePath = normalize(requested).replace(/^([/\\])+/, '');

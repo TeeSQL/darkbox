@@ -51,6 +51,14 @@ const endpointGroups = [
   },
 ];
 const endpoints = endpointGroups.flatMap((group) => group.endpoints.map((endpoint) => ({ ...endpoint, group: group.id, groupTitle: group.title })));
+const sourceLabels = { mesh: 'AttestMesh live gateway', dev: 'Teebox devnet / local agents — not canonical' };
+function currentSource() { return localStorage.getItem('daemonhall-admin-source') || 'mesh'; }
+function withSource(path) {
+  if (!path || path.startsWith('http')) return path;
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set('source', currentSource());
+  return `${url.pathname}${url.search}`;
+}
 
 function $(selector) { return document.querySelector(selector); }
 function escapeHtml(value) {
@@ -66,7 +74,7 @@ async function fetchJson(endpoint) {
   if (!endpoint.path) return { endpoint, ok: false, pending: endpoint.pending };
   const started = performance.now();
   try {
-    const response = await fetch(endpoint.path, { cache: 'no-store' });
+    const response = await fetch(withSource(endpoint.path), { cache: 'no-store' });
     const text = await response.text();
     let json;
     try { json = JSON.parse(text); } catch (_) { json = text; }
@@ -128,7 +136,7 @@ async function loadOverview() {
     const bits = [
       `<span class="admin-dot ${health.ok ? 'ok' : 'bad'}"></span>${health.ok ? 'indexer online' : 'indexer unavailable'}`,
       `<span>${escapeHtml(snapshot.ok ? 'snapshot online' : 'snapshot unavailable')}</span>`,
-      `<span>${escapeHtml(sourceData.sourceLabel || 'source unlabeled')}</span>`,
+      `<span>${escapeHtml(sourceData.selectedSourceLabel || sourceLabels[currentSource()] || 'source unlabeled')}</span>`,
       `<span>${escapeHtml(agentFeed.ok ? 'agent feed online' : 'agent feed unavailable')}</span>`,
       `<span>${new Date().toLocaleTimeString()}</span>`,
     ];
@@ -143,6 +151,8 @@ async function loadOverview() {
   set('#admin-agent-note', feedData.runId ? `run ${feedData.runId}` : 'feed summary / operator-safe aggregate');
   set('#admin-trade-count', compactNumber(activity.totalTrades ?? 0));
   set('#admin-trade-note', `volume ${activity.totalVolume ?? activity.totalVolumeUsdc ?? '0'}`);
+
+  setupSourcePicker(sourceData);
 
   const publicEl = $('#admin-public-surface');
   if (publicEl) {
@@ -197,10 +207,25 @@ async function loadOverview() {
   }
 }
 
+function setupSourcePicker(sourceData = {}) {
+  const select = $('#admin-source-select');
+  const label = $('#admin-source-label');
+  if (!select) return;
+  const sourceList = Array.isArray(sourceData.sources) && sourceData.sources.length ? sourceData.sources : Object.entries(sourceLabels).map(([id, text]) => ({ id, label: text }));
+  select.innerHTML = sourceList.map((source) => `<option value="${escapeHtml(source.id)}">${escapeHtml(source.label)}</option>`).join('');
+  select.value = currentSource();
+  if (label) label.textContent = sourceLabels[currentSource()] || currentSource();
+  select.onchange = () => {
+    localStorage.setItem('daemonhall-admin-source', select.value);
+    loadOverview();
+  };
+}
+
 function setupRawPage() {
   const select = $('#raw-endpoint-select');
   const output = $('#raw-data-sections');
   if (!select || !output) return false;
+  setupSourcePicker();
   select.innerHTML = endpoints.map((endpoint) => `<option value="${escapeHtml(endpoint.id)}">${escapeHtml(endpoint.groupTitle)} / ${escapeHtml(endpoint.label)}</option>`).join('');
   const load = async (selectedOnly = false) => {
     const wanted = selectedOnly ? endpoints.filter((endpoint) => endpoint.id === select.value) : endpoints;

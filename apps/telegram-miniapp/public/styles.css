@@ -222,6 +222,14 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   filter: drop-shadow(0 0 26px rgba(176, 166, 206, 0.3));
 }
+/* Stacked emblem logo (miniapp landing) — the only loud object in the room. */
+.hero-logo { background: none; }
+.hero-logo img {
+  display: block;
+  width: clamp(150px, 50vw, 270px);
+  height: auto;
+  margin: 0 auto;
+}
 .sealed {
   display: flex;
   align-items: center;

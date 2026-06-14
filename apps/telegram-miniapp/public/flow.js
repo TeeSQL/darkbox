@@ -969,6 +969,7 @@ let mainWanted = false; // we want it running (drives auto-restart)
 let mainBaseText = '';
 let mainFinalText = '';
 let mainStream = null; // fallback open-mic stream when SpeechRecognition is absent
+let mainStarted = false; // SpeechRecognition actually began (vs an instant webview failure)
 let mainMode = 'idle'; // 'idle' | 'recording'
 let micPressTimer = null;
 let micHoldMode = false; // current press has crossed 1s → hold-to-talk (release stops)
@@ -998,21 +999,37 @@ function ensureMainRecognition() {
   mainRecognition.lang = 'en-US';
   mainRecognition.interimResults = true;
   mainRecognition.continuous = true;
-  mainRecognition.onstart = () => { mainListening = true; };
+  mainRecognition.onstart = () => { mainListening = true; mainStarted = true; };
   mainRecognition.onerror = () => {
-    mainWanted = false;
     mainListening = false;
+    // Android system webviews often expose SpeechRecognition but can't run it
+    // (errors like 'service-not-allowed'/'network'/'audio-capture') and fail
+    // before ever starting. If it never got going, fall back to the open-mic +
+    // type-to-finish path (the same one iOS uses) instead of dying.
+    if (!mainStarted && mainWanted && mainMode === 'recording') {
+      mainWanted = false;
+      void startOpenMicFallback();
+      return;
+    }
+    mainWanted = false;
     mainMode = 'idle';
     setMainVoiceState('idle');
     if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
   };
   mainRecognition.onend = () => {
     mainListening = false;
-    if (mainWanted) {
+    // Only auto-restart a recognizer that actually ran. A webview that ends
+    // immediately without ever starting would otherwise loop forever — fall back.
+    if (mainWanted && mainStarted) {
       window.setTimeout(() => {
         if (!mainWanted || mainListening) return;
         try { mainRecognition.start(); } catch (_) { mainWanted = false; }
       }, 120);
+      return;
+    }
+    if (mainWanted && !mainStarted && mainMode === 'recording') {
+      mainWanted = false;
+      void startOpenMicFallback();
       return;
     }
     setMainVoiceState('idle');
@@ -1031,39 +1048,61 @@ function ensureMainRecognition() {
   return mainRecognition;
 }
 
-async function startMainRecording() {
-  if (mainMode === 'recording') return true;
-  let allowed = false;
-  try { allowed = await requestMicAccess('recording. speak your order.'); }
-  catch (_) { allowed = false; }
-  if (!allowed) {
+// Open an honest open-mic stream and let the user type to finish. This is the
+// path iOS Telegram (no SpeechRecognition) uses; Android falls back to it when
+// the webview's SpeechRecognition can't actually run.
+async function startOpenMicFallback() {
+  try {
+    mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    mainStream = null;
     mainMode = 'idle';
     setMainVoiceState('idle');
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
     return false;
   }
+  rememberMicGrantThisSession();
   setMainMicGrantState(true);
   mainMode = 'recording';
+  setMainVoiceState('recording');
+  if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+  return true;
+}
+
+async function startMainRecording() {
+  if (mainMode === 'recording') return true;
+  mainMode = 'recording';
+  mainStarted = false;
+  setMainVoiceState('recording');
+
+  // Prefer SpeechRecognition for live transcription, but do NOT pre-acquire the
+  // mic with getUserMedia first: on Android that double-acquires the mic (two
+  // permission prompts) and SpeechRecognition then fails to start, so nothing
+  // records — while iOS (no SpeechRecognition) already worked via open-mic.
+  // SpeechRecognition.start() requests its own mic permission; if it can't run
+  // (common in Android system webviews) onerror/onend fall back to open-mic.
   const recognizer = ensureMainRecognition();
   if (recognizer) {
     mainBaseText = input?.value.trim() || '';
     mainFinalText = '';
     mainWanted = true;
-    try { recognizer.start(); } catch (_) {}
-  } else {
-    // Some webviews (notably iOS Telegram) lack SpeechRecognition. Keep an open
-    // mic stream so the recording state is honest; the user types to finish.
-    try { mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
-    catch (_) { mainStream = null; }
-    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+    try {
+      recognizer.start();
+      if (whisperStatus) whisperStatus.textContent = 'recording. speak your order.';
+      return true;
+    } catch (_) {
+      // start() threw synchronously (already started / unsupported) → fall back.
+      mainWanted = false;
+    }
   }
-  return true;
+  return startOpenMicFallback();
 }
 
 function stopMainRecording(statusText = 'recording stopped. review before sealing.') {
   if (mainMode === 'idle') return;
   mainMode = 'idle';
   mainWanted = false;
+  mainStarted = false;
   try { mainRecognition?.stop?.(); } catch (_) {}
   if (mainStream) {
     mainStream.getTracks().forEach((track) => track.stop());

@@ -147,6 +147,16 @@ importers:
         specifier: ^25.9.3
         version: 25.9.3
 
+  services/resolution-executor:
+    dependencies:
+      viem:
+        specifier: ^2.21.0
+        version: 2.52.2(typescript@6.0.3)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.3
+        version: 25.9.3
+
   services/reveal:
     dependencies:
       '@darkbox/shared':

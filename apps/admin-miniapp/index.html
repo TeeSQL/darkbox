@@ -32,7 +32,11 @@
       <section class="admin-grid" aria-label="Admin overview">
         <article class="admin-card admin-span-2">
           <div class="admin-card-head"><span class="k">SYSTEM</span><button class="admin-refresh" type="button" data-admin-refresh>refresh</button></div>
-          <div class="source-picker"><label>source <select id="admin-source-select"></select></label><span id="admin-source-label">AttestMesh live gateway</span></div>
+          <div class="source-tabs" role="tablist" aria-label="Admin data source">
+            <button type="button" class="source-tab active" data-source-tab="mesh" role="tab" aria-selected="true">AttestMesh live</button>
+            <button type="button" class="source-tab" data-source-tab="dev" role="tab" aria-selected="false">Teebox devnet</button>
+          </div>
+          <p id="admin-source-label" class="source-note">AttestMesh live gateway</p>
           <div id="admin-health" class="admin-health">loading…</div>
         </article>
         <article class="admin-card">

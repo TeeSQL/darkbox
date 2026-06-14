@@ -152,7 +152,7 @@ async function loadOverview() {
   set('#admin-trade-count', compactNumber(activity.totalTrades ?? 0));
   set('#admin-trade-note', `volume ${activity.totalVolume ?? activity.totalVolumeUsdc ?? '0'}`);
 
-  setupSourcePicker(sourceData);
+  setupSourceTabs(sourceData);
 
   const publicEl = $('#admin-public-surface');
   if (publicEl) {
@@ -207,25 +207,33 @@ async function loadOverview() {
   }
 }
 
-function setupSourcePicker(sourceData = {}) {
-  const select = $('#admin-source-select');
+function setSource(source) {
+  localStorage.setItem('daemonhall-admin-source', source);
+}
+function setupSourceTabs(sourceData = {}, onChange = loadOverview) {
+  const tabs = Array.from(document.querySelectorAll('[data-source-tab]'));
   const label = $('#admin-source-label');
-  if (!select) return;
+  if (!tabs.length) return;
   const sourceList = Array.isArray(sourceData.sources) && sourceData.sources.length ? sourceData.sources : Object.entries(sourceLabels).map(([id, text]) => ({ id, label: text }));
-  select.innerHTML = sourceList.map((source) => `<option value="${escapeHtml(source.id)}">${escapeHtml(source.label)}</option>`).join('');
-  select.value = currentSource();
-  if (label) label.textContent = sourceLabels[currentSource()] || currentSource();
-  select.onchange = () => {
-    localStorage.setItem('daemonhall-admin-source', select.value);
-    loadOverview();
-  };
+  const sourceMap = Object.fromEntries(sourceList.map((source) => [source.id, source.label]));
+  const active = currentSource();
+  tabs.forEach((tab) => {
+    const isActive = tab.dataset.sourceTab === active;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.onclick = () => {
+      setSource(tab.dataset.sourceTab || 'mesh');
+      onChange();
+    };
+  });
+  if (label) label.textContent = sourceMap[active] || sourceLabels[active] || active;
 }
 
 function setupRawPage() {
   const select = $('#raw-endpoint-select');
   const output = $('#raw-data-sections');
   if (!select || !output) return false;
-  setupSourcePicker();
+  setupSourceTabs({}, () => load(true));
   select.innerHTML = endpoints.map((endpoint) => `<option value="${escapeHtml(endpoint.id)}">${escapeHtml(endpoint.groupTitle)} / ${escapeHtml(endpoint.label)}</option>`).join('');
   const load = async (selectedOnly = false) => {
     const wanted = selectedOnly ? endpoints.filter((endpoint) => endpoint.id === select.value) : endpoints;

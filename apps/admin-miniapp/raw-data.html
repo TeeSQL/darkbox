@@ -30,7 +30,10 @@
       </header>
 
       <section class="raw-toolbar" aria-label="Raw data controls">
-        <label>source <select id="admin-source-select"></select></label>
+        <div class="source-tabs" role="tablist" aria-label="Raw data source">
+          <button type="button" class="source-tab active" data-source-tab="mesh" role="tab" aria-selected="true">AttestMesh live</button>
+          <button type="button" class="source-tab" data-source-tab="dev" role="tab" aria-selected="false">Teebox devnet</button>
+        </div>
         <span id="admin-source-label" class="source-note">AttestMesh live gateway</span>
         <label>endpoint <select id="raw-endpoint-select"></select></label>
         <button class="admin-refresh" type="button" data-load-selected>load selected</button>

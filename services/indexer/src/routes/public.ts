@@ -117,10 +117,15 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       question: string;
       metadata_uri: string;
       close_time: string;
+      expires_at: string;
       resolve_by: string;
       resolver_type: string;
       status: string;
+      lifecycle_status: string;
       resolved_outcome: string | null;
+      outcome: string | null;
+      closed_at: string | null;
+      resolved_at: string | null;
       created_at_ts: string;
       latest_yes_price: string | null;
       latest_no_price: string | null;
@@ -128,8 +133,9 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       latest_trade_outcome: string | null;
       latest_trade_ts: string | null;
     }>(
-      `SELECT market_id, game_id, question, metadata_uri, close_time, resolve_by,
-              resolver_type, status, resolved_outcome, created_at_ts,
+      `SELECT market_id, game_id, question, metadata_uri, close_time, expires_at, resolve_by,
+              resolver_type, status, lifecycle_status, resolved_outcome, outcome,
+              closed_at, resolved_at, created_at_ts,
               latest_yes_price, latest_no_price, latest_trade_price,
               latest_trade_outcome, latest_trade_ts
        FROM markets ORDER BY created_at_ts DESC`,
@@ -146,11 +152,16 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
         question: string;
         metadata_uri: string;
         close_time: string;
+        expires_at: string;
         resolve_by: string;
         resolver_type: string;
         status: string;
+        lifecycle_status: string;
         resolved_outcome: string | null;
+        outcome: string | null;
         resolution_hash: string | null;
+        closed_at: string | null;
+        resolved_at: string | null;
         created_at_ts: string;
         latest_yes_price: string | null;
         latest_no_price: string | null;
@@ -158,8 +169,9 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
         latest_trade_outcome: string | null;
         latest_trade_ts: string | null;
       }>(
-        `SELECT market_id, game_id, question, metadata_uri, close_time, resolve_by,
-                resolver_type, status, resolved_outcome, resolution_hash, created_at_ts,
+        `SELECT market_id, game_id, question, metadata_uri, close_time, expires_at, resolve_by,
+                resolver_type, status, lifecycle_status, resolved_outcome, outcome,
+                resolution_hash, closed_at, resolved_at, created_at_ts,
                 latest_yes_price, latest_no_price, latest_trade_price,
                 latest_trade_outcome, latest_trade_ts
          FROM markets WHERE market_id = $1`,

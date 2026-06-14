@@ -7,6 +7,7 @@ import {
 import { takeSnapshot } from "./reducers/snapshots.js";
 import { config } from "./config.js";
 import { closePool } from "./db.js";
+import { runMarketLifecycleCycle } from "./marketLifecycleWorker.js";
 
 async function main(): Promise<void> {
   console.log("[indexer] starting up");
@@ -38,6 +39,12 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error("[indexer] snapshot error:", err);
       }
+    }
+
+    try {
+      await runMarketLifecycleCycle();
+    } catch (err) {
+      console.error("[indexer] market lifecycle error:", err);
     }
 
     setTimeout(poll, config.pollIntervalMs);

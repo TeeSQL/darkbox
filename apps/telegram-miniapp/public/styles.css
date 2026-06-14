@@ -1077,3 +1077,39 @@ body.feed-open { overflow: hidden; }
   cursor: not-allowed; backdrop-filter: blur(2px);
 }
 @media (max-width: 520px) { .feed-blink:not(:empty) { min-height: 520px; } .feed-cta { max-width: none; } }
+
+/* ── Whisper mic: unmistakable idle / recording / transcribing states ──────── */
+/* Tidier resting button (the big 8px ring read as misaligned/bulky). */
+.voice-button { box-shadow: 0 0 0 3px rgba(255,255,255,.02), 0 10px 26px rgba(0,0,0,.3); }
+.whisper-field .voice-button { align-self: center; }
+
+/* Recording: solid red, white stop-square, expanding ring. */
+.voice-button.listening {
+  color: #fff;
+  border-color: #ff4a7e;
+  background: radial-gradient(circle at 50% 40%, rgba(255,74,126,.96), rgba(214,40,90,.94));
+  animation: recRing 1.25s ease-out infinite;
+}
+.voice-button.listening svg { display: none; }
+.voice-button.listening::before {
+  content: ""; width: 20px; height: 20px; border-radius: 5px; background: #fff;
+  box-shadow: 0 0 14px rgba(255,255,255,.55);
+}
+@keyframes recRing {
+  0%   { box-shadow: 0 0 0 0 rgba(255,74,126,.55), 0 10px 26px rgba(0,0,0,.32); }
+  70%  { box-shadow: 0 0 0 16px rgba(255,74,126,0), 0 10px 26px rgba(0,0,0,.32); }
+  100% { box-shadow: 0 0 0 0 rgba(255,74,126,0), 0 10px 26px rgba(0,0,0,.32); }
+}
+
+/* Transcribing: violet spinner while STT runs (replaces the mic glyph). */
+.voice-button.transcribing {
+  color: var(--violet); border-color: rgba(139,123,255,.6);
+  background: rgba(139,123,255,.12); animation: none;
+}
+.voice-button.transcribing svg { display: none; }
+.voice-button.transcribing::before {
+  content: ""; width: 26px; height: 26px; border-radius: 999px;
+  border: 3px solid rgba(139,123,255,.22); border-top-color: var(--violet);
+  animation: micSpin .8s linear infinite;
+}
+@keyframes micSpin { to { transform: rotate(360deg); } }

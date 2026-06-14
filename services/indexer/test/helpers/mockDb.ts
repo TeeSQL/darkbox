@@ -222,6 +222,67 @@ export class MockDb {
       return { rows: [], rowCount: 1 };
     }
 
+    if (normalized.startsWith("insert into ethglobal_events")) {
+      const rows = this.getTable("ethglobal_events");
+      const eventSlug = values[0] as string;
+      const existing = rows.find((r) => r["event_slug"] === eventSlug);
+      const row = {
+        event_slug: eventSlug,
+        name: values[1],
+        source_url: values[2],
+        fetched_at: values[3],
+      };
+      if (existing) {
+        Object.assign(existing, row);
+      } else {
+        rows.push(row);
+      }
+      return { rows: [], rowCount: 1 };
+    }
+
+    if (normalized.startsWith("insert into ethglobal_projects")) {
+      const rows = this.getTable("ethglobal_projects");
+      const eventSlug = values[0] as string;
+      const externalProjectSlug = values[2] as string;
+      const existing = rows.find(
+        (r) => r["event_slug"] === eventSlug && r["external_project_slug"] === externalProjectSlug,
+      );
+      const row = {
+        event_slug: eventSlug,
+        external_project_id: values[1],
+        external_project_slug: externalProjectSlug,
+        name: values[3],
+        shortest_description: values[4],
+        sponsors: JSON.parse(String(values[5] ?? "[]")) as unknown,
+        prizes: JSON.parse(String(values[6] ?? "[]")) as unknown,
+        source_url: values[7],
+        raw_summary: JSON.parse(String(values[8] ?? "{}")) as unknown,
+        fetched_at: values[9],
+      };
+      if (existing) {
+        Object.assign(existing, row);
+      } else {
+        rows.push(row);
+      }
+      return { rows: [], rowCount: 1 };
+    }
+
+    if (normalized.startsWith("insert into ethglobal_ingest_runs")) {
+      const rows = this.getTable("ethglobal_ingest_runs");
+      const id = String(rows.length + 1);
+      const isFailure = normalized.includes("'error'");
+      rows.push({
+        id,
+        event_slug: values[0],
+        source_url: values[1],
+        status: isFailure ? "error" : "ok",
+        project_count: isFailure ? 0 : values[2],
+        error: isFailure ? values[2] : null,
+        fetched_at: isFailure ? values[3] : values[3],
+      });
+      return { rows: [{ id }], rowCount: 1 };
+    }
+
     if (normalized.startsWith("update markets set yes_book")) {
       const rows = this.getTable("markets");
       const marketId = values[4] as string;

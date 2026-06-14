@@ -4,10 +4,18 @@
 # Mesh-internal: no public ports. The boot-helper waits for mesh convergence,
 # resolves geth-1's mesh IP via the agent UDS (ListPeers, matched by
 # ${PEER_MEMBER_APPID}), and static-peers it using geth-1's pinned enode pubkey.
+#
+# Resource limits: light member (sidecar + geth-2 + sshd), but it carries a chain
+# SIGNER — if it OOMs the 2-signer clique stalls, so give it headroom too. Bump
+# this member off tdx.small to tdx.large (4 vCPU / 8 GB) for good measure; the
+# limits below assume it. See docs/deploy/MESH_RESOURCE_LIMITS.md (the fat CORE
+# member gets tdx.xlarge).
 services:
   sidecar:
     image: ghcr.io/attestmesh/cluster-mesh-agent:latest
     restart: unless-stopped
+    mem_limit: 1g
+    mem_reservation: 512m
     environment:
       - CHAIN_ID=${CHAIN_ID}
       - RPC_URL=${RPC_URL}
@@ -32,6 +40,8 @@ services:
   geth-2:
     image: ghcr.io/teesql/darkbox-geth:latest
     restart: unless-stopped
+    mem_limit: 4g
+    mem_reservation: 1536m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     volumes:
@@ -50,6 +60,8 @@ services:
   sshd:
     image: ghcr.io/teesql/darkbox-sshd-debug:latest
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 64m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     # No public port (reached via `ssh root@<geth-2 mesh IP>` from the bastion) and

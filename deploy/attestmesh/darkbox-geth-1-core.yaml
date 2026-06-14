@@ -1,9 +1,23 @@
 # AttestMesh node compose — DarkBox member 1: geth-1 + confidential core.
 #
-# The "fat" CVM. sidecar + geth-1 + indexer + agents + bridge + transcriber +
-# reveal + postgres, ALL sharing the sidecar netns (network_mode: service:sidecar)
-# so they talk to each other and to geth-1 over localhost. Only the bridge→signer
-# call crosses the mesh (SIGNER_URL, whole-value from the sealed -e file).
+# The core CVM. sidecar + geth-1 + indexer + bridge + transcriber + reveal +
+# postgres, ALL sharing the sidecar netns (network_mode: service:sidecar) so they
+# talk to each other and to geth-1 over localhost. Only the bridge→signer call
+# crosses the mesh (SIGNER_URL, whole-value from the sealed -e file).
+#
+# RESOURCE SAFETY (see docs/deploy/MESH_RESOURCE_LIMITS.md): the original
+# tdx.small flavor (1 vCPU / 2 GB / NO swap) could not hold this pod — the agents
+# container's ETHGlobal pull ballooned, the kernel OOM-killer fired, and because
+# every container shares the sidecar netns it cascaded the WHOLE pod down. Fixes:
+#   1. the `agents` (ETHGlobal showcase + resolver) service is RELOCATED off this
+#      member onto its own right-sized member — it is no longer in this compose.
+#   2. per-service mem_limit/mem_reservation below contain any single-container
+#      OOM to that container (restart-loop) instead of the whole pod.
+#   3. this member MUST run on tdx.xlarge (8 vCPU / 16 GB — the largest practical
+#      tier, over-provisioned for good measure). The 8 vCPU (vs 1) also fixes the
+#      CPU-starved sidecar convergence (live_peers 6->3->0); headroom is insurance.
+#      The limits below assume it; on 2 GB they do not fit — see the doc for the
+#      fresh-CVM bump procedure.
 #
 # No public ports: this member is entirely mesh-internal (the gateway member is
 # the only public edge). Cross-member URLs are ${ENV_VAR} placeholders fed by the
@@ -16,6 +30,8 @@ services:
   sidecar:
     image: ghcr.io/attestmesh/cluster-mesh-agent:latest
     restart: unless-stopped
+    mem_limit: 1g
+    mem_reservation: 512m
     environment:
       - CHAIN_ID=${CHAIN_ID}
       - RPC_URL=${RPC_URL}
@@ -41,6 +57,8 @@ services:
   geth-1:
     image: ghcr.io/teesql/darkbox-geth:latest
     restart: unless-stopped
+    mem_limit: 4g
+    mem_reservation: 1536m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     volumes:
@@ -64,6 +82,8 @@ services:
   indexer:
     image: ghcr.io/teesql/darkbox-indexer:latest
     restart: unless-stopped
+    mem_limit: 2g
+    mem_reservation: 1g
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     environment:
@@ -79,39 +99,12 @@ services:
       - MARKET_FACTORY_ADDRESS=${MARKET_FACTORY_ADDRESS}
       - USDC_ADDRESS=${SYNTHETIC_USDC_ADDRESS}
 
-  # ── Agent runtime ───────────────────────────────────────────────────────────
-  agents:
-    image: ghcr.io/teesql/darkbox-agents:latest
-    restart: unless-stopped
-    network_mode: "service:sidecar"
-    depends_on: [ sidecar ]
-    environment:
-      - INDEXER_INTERNAL_URL=http://localhost:8080/internal
-      - HIDDEN_RPC_URL=http://localhost:8545
-      - VENICE_API_KEY=${VENICE_API_KEY}
-      # ETHGlobal showcase refresh loop (pulls project snapshots every 15 min to
-      # the showcase_data volume; needs CVM egress to api2.ethglobal.com).
-      - SHOWCASE_EVENT_SLUG=newyork2025
-      - SHOWCASE_INTERVAL_SECONDS=900
-      - SHOWCASE_OUT=/data/ethglobal
-      # Resolver agent (propose-then-confirm): reads markets + snapshots, asks the
-      # Phala confidential-LLM brain, writes resolution dossiers to
-      # /data/resolutions for human approval. Submits NO on-chain tx.
-      - RESOLVER_ENABLED=true
-      - RESOLVER_DATA=/data
-      - RESOLVER_MIN_CONFIDENCE=0.7
-      # Phala confidential-LLM endpoint (sealed -e values; empty = resolver skips
-      # the brain pass but the showcase pull still runs).
-      - PHALA_LLM_URL=${PHALA_LLM_URL}
-      - PHALA_LLM_MODEL=${PHALA_LLM_MODEL}
-      - PHALA_LLM_API_KEY=${PHALA_LLM_API_KEY}
-    volumes:
-      - showcase_data:/data
-
   # ── Bridge coordinator (deposits/withdrawals; calls signer cross-mesh) ───────
   bridge:
     image: ghcr.io/teesql/darkbox-bridge:latest
     restart: unless-stopped
+    mem_limit: 1g
+    mem_reservation: 256m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     environment:
@@ -127,6 +120,8 @@ services:
   transcriber:
     image: ghcr.io/teesql/darkbox-transcriber:latest
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     environment:
@@ -137,6 +132,8 @@ services:
   reveal:
     image: ghcr.io/teesql/darkbox-reveal:latest
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     environment:
@@ -148,6 +145,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 3g
+    mem_reservation: 1g
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     environment:
@@ -161,11 +160,18 @@ services:
   # in deployed-addresses-88813.json) and was REMOVED here — it has no persistent
   # volume, so leaving it in would re-deploy a second orphaning contract set on
   # every core redeploy. Re-add it only to (re)deploy contracts on a fresh chain.
+  #
+  # NOTE: the `agents` service (ETHGlobal showcase loop + resolver) was REMOVED
+  # from this member — on the 2 GB core it OOM-cascaded the pod. It relocates to
+  # its own right-sized member when revived (Python event_agents + a hard
+  # mem_limit; see docs/deploy/MESH_RESOURCE_LIMITS.md). showcase_data went with it.
 
   # ── Debug sshd sidecar (mesh-only; ssh from the bastion over the wg mesh) ─────
   sshd:
     image: ghcr.io/teesql/darkbox-sshd-debug:latest
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 64m
     network_mode: "service:sidecar"
     depends_on: [ sidecar ]
     # No public port (reached via `ssh root@<core mesh IP>` from the bastion) and
@@ -178,4 +184,3 @@ volumes:
   agentsock:
   gethdata:
   db_data:
-  showcase_data:

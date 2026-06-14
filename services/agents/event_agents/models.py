@@ -151,6 +151,11 @@ class AgentPolicy:
     preferredMarkets: tuple[str, ...] = ()
     bannedMarkets: tuple[str, ...] = ()
     billboardStyle: str = 'concise market-making signal'
+    # Candidate market questions this agent may propose (objective YES/NO, with
+    # resolution source + future date). Each entry: {question, description,
+    # resolveBy, resolutionSource, rationale}. The policy gate still validates
+    # resolvability/duplicate/cooldown/budget before any of these is emitted.
+    proposalCandidates: tuple[dict[str, Any], ...] = ()
 
     @staticmethod
     def from_json(agent_id: str, raw: dict[str, Any] | None) -> 'AgentPolicy':
@@ -172,7 +177,62 @@ class AgentPolicy:
             preferredMarkets=tuple(str(v) for v in raw.get('preferredMarkets', [])),
             bannedMarkets=tuple(str(v) for v in raw.get('bannedMarkets', [])),
             billboardStyle=str(raw.get('billboardStyle', 'concise market-making signal')),
+            proposalCandidates=tuple(dict(c) for c in raw.get('proposalCandidates', [])),
         )
+
+
+@dataclass(frozen=True)
+class RivalBillboard:
+    agentId: str
+    message: str
+
+    @staticmethod
+    def from_json(raw: dict[str, Any]) -> 'RivalBillboard':
+        return RivalBillboard(str(raw.get('agentId', 'unknown')), str(raw.get('message', '')))
+
+
+@dataclass(frozen=True)
+class QueuedProposal:
+    agentId: str
+    question: str
+    status: str = 'proposed'
+
+    @staticmethod
+    def from_json(raw: dict[str, Any]) -> 'QueuedProposal':
+        return QueuedProposal(str(raw.get('agentId', 'unknown')), str(raw.get('question', '')), str(raw.get('status', 'proposed')))
+
+
+@dataclass(frozen=True)
+class MarketProposal:
+    question: str
+    description: str
+    resolveBy: str
+    resolutionSource: str
+    rationale: str
+    outcomes: tuple[str, str] = ('YES', 'NO')
+
+    @staticmethod
+    def from_json(raw: dict[str, Any]) -> 'MarketProposal':
+        outcomes = tuple(str(o) for o in raw.get('outcomes', ['YES', 'NO']))
+        pair = (outcomes[0], outcomes[1]) if len(outcomes) >= 2 else ('YES', 'NO')
+        return MarketProposal(
+            question=str(raw['question']),
+            description=str(raw.get('description', '')),
+            resolveBy=str(raw.get('resolveBy', '')),
+            resolutionSource=str(raw.get('resolutionSource', '')),
+            rationale=str(raw.get('rationale', '')),
+            outcomes=pair,
+        )
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            'question': self.question,
+            'description': self.description,
+            'outcomes': list(self.outcomes),
+            'resolveBy': self.resolveBy,
+            'resolutionSource': self.resolutionSource,
+            'rationale': self.rationale,
+        }
 
 
 @dataclass(frozen=True)
@@ -199,6 +259,9 @@ class Observation:
     markets: tuple[Market, ...]
     orders: tuple[Order, ...]
     portfolio: Portfolio
+    billboards: tuple[RivalBillboard, ...] = ()
+    marketProposals: tuple[QueuedProposal, ...] = ()
+    now: str = ''
 
     @staticmethod
     def from_json(raw: dict[str, Any]) -> 'Observation':
@@ -206,4 +269,11 @@ class Observation:
             markets=tuple(Market.from_json(item) for item in raw.get('markets', [])),
             orders=tuple(Order.from_json(item) for item in raw.get('orders', [])),
             portfolio=Portfolio.from_json(raw.get('portfolio')),
+            billboards=tuple(RivalBillboard.from_json(item) for item in raw.get('billboards', raw.get('billboardSinceLastTurn', []))),
+            marketProposals=tuple(QueuedProposal.from_json(item) for item in raw.get('marketProposals', [])),
+            now=str(raw.get('now', '')),
         )
+
+    def existing_questions(self) -> list[str]:
+        """Questions already live (markets) or queued (proposals) — for dedup."""
+        return [m.question for m in self.markets] + [p.question for p in self.marketProposals]

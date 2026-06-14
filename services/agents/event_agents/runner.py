@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .indexer_adapter import submit_decision
 from .models import AgentIdentity, AgentPolicy, MarketEvent, Observation, OwnerBinding
+from .policy import DEFAULT_CONFIG, PolicyState
 from .strategy import decide
 
 
@@ -41,6 +43,9 @@ def main() -> None:
     parser.add_argument('--policy-dir', default='services/agents/policies')
     parser.add_argument('--agent', action='append', default=[], help='Agent id to run; repeatable. Defaults to all identities with binding rows, or all identities if no binding file exists.')
     parser.add_argument('--out', default='-', help='JSONL output path or - for stdout')
+    parser.add_argument('--state-file', default='', help='JSON file persisting per-agent policy state (cooldowns/budget/dedup) across events.')
+    parser.add_argument('--submit-url', default='', help='If set, POST each decision to the indexer at <url>/internal/v0/agent-turns for reconciliation.')
+    parser.add_argument('--run-id', default='event-agents', help='runId used for indexer reconciliation.')
     args = parser.parse_args()
 
     identities = load_identities(Path(args.identities))
@@ -54,14 +59,28 @@ def main() -> None:
     else:
         agent_ids = list(identities.keys())
 
+    state_path = Path(args.state_file) if args.state_file else None
+    state_map: dict[str, Any] = {}
+    if state_path and state_path.exists():
+        state_map = read_json(state_path).get('agents', {})
+
     lines: list[str] = []
     for agent_id in agent_ids:
         identity = identities.get(agent_id)
         if identity is None:
             continue
         policy = load_policy(Path(args.policy_dir), agent_id)
-        result = decide(event, identity, bindings.get(agent_id), policy, observation)
+        state = PolicyState.from_json(state_map.get(agent_id))
+        result = decide(event, identity, bindings.get(agent_id), policy, observation, state=state, config=DEFAULT_CONFIG)
+        state_map[agent_id] = result.get('policyState', state.to_json())
+        if args.submit_url:
+            turn = int(state_map[agent_id].get('seq', 0))
+            result['submitResult'] = submit_decision(args.submit_url, args.run_id, turn, identity, result)
         lines.append(json.dumps(result, separators=(',', ':')))
+
+    if state_path:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps({'agents': state_map}, separators=(',', ':')) + '\n')
 
     if args.out == '-':
         print('\n'.join(lines))

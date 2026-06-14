@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
 
-from .models import AgentIdentity, AgentPolicy, Market, MarketEvent, Observation, Order, OwnerBinding, Position, clamp, fmt, now_iso
+from .models import AgentIdentity, AgentPolicy, Market, MarketEvent, MarketProposal, Observation, Order, OwnerBinding, Position, clamp, fmt, now_iso
+from .policy import (
+    DEFAULT_CONFIG,
+    PolicyConfig,
+    PolicyState,
+    advance_state,
+    evaluate_billboard,
+    evaluate_proposal,
+    is_new_market_live,
+    normalize_question,
+)
 
 
 def market_mid(market: Market) -> float:
@@ -104,7 +115,80 @@ def take_profit(policy: AgentPolicy, observation: Observation, market: Market, f
     return actions
 
 
-def decide(event: MarketEvent, identity: AgentIdentity, binding: OwnerBinding | None, policy: AgentPolicy, observation: Observation) -> dict[str, Any]:
+def _parse_now(observation: MarketEvent | Observation, event: MarketEvent) -> datetime:
+    raw = (getattr(observation, 'now', '') or event.at or '').strip().replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return datetime.now(timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _billboard_candidate(policy: AgentPolicy, identity: AgentIdentity, market_ids: list[str], action_count: int) -> str | None:
+    """A public, leak-free billboard line. References only public info (style,
+    market id, action count) — never private book/positions/keys."""
+    if action_count <= 0 or not market_ids:
+        return None
+    style = policy.billboardStyle or 'market signal'
+    return f'{identity.agentId}: {style} — quoting {action_count} order(s) near fair on {market_ids[0]}.'[:280]
+
+
+def _proposal_candidate(event: MarketEvent, policy: AgentPolicy, state: PolicyState, existing: list[str]) -> dict[str, Any] | None:
+    """Detect a public unresolved question to propose: from the event payload
+    first, else the agent's configured candidates (first not-yet-used one)."""
+    payload_candidate = event.payload.get('proposalCandidate')
+    if isinstance(payload_candidate, dict) and payload_candidate.get('question'):
+        return dict(payload_candidate)
+    used = set(state.proposed_questions) | {normalize_question(q) for q in existing}
+    for candidate in policy.proposalCandidates:
+        question = str(candidate.get('question', ''))
+        if question and normalize_question(question) not in used:
+            return dict(candidate)
+    return None
+
+
+def _apply_action_policy(
+    event: MarketEvent,
+    identity: AgentIdentity,
+    policy: AgentPolicy,
+    observation: Observation,
+    actions: list[dict[str, Any]],
+    state: PolicyState,
+    config: PolicyConfig,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any], PolicyState]:
+    """Gate + sanitize the non-trading surfaces. Returns
+    (billboardPost, marketProposal, report, advanced_state). Advances state.seq."""
+    state.seq += 1  # this event counts as one processed event for this agent
+
+    market_ids = [m.marketId for m in observation.markets]
+    open_flags = {m.marketId: m.status == 'open' for m in observation.markets}
+    action_types = [a['type'] for a in actions if a.get('type') != 'hold']
+    rival_present = any(b.agentId != identity.agentId for b in observation.billboards)
+    new_market = is_new_market_live(state, market_ids, open_flags)
+
+    # Billboard.
+    candidate_msg = _billboard_candidate(policy, identity, market_ids, len(action_types))
+    bb = evaluate_billboard(candidate_msg, action_types, rival_present, new_market, state, config)
+    billboard_post = {'message': bb['message']} if bb.get('allowed') else None
+
+    # Proposal.
+    existing = observation.existing_questions()
+    candidate = _proposal_candidate(event, policy, state, existing)
+    prop = evaluate_proposal(candidate, existing, state, _parse_now(observation, event), config)
+    proposal_post = MarketProposal.from_json(candidate).to_json() if prop.get('allowed') and candidate else None
+
+    new_state = advance_state(
+        state,
+        market_ids,
+        bool(bb.get('allowed')),
+        bool(prop.get('allowed')),
+        prop.get('normalizedQuestion'),
+    )
+    report = {'billboard': bb, 'proposal': prop}
+    return billboard_post, proposal_post, report, new_state
+
+
+def decide(event: MarketEvent, identity: AgentIdentity, binding: OwnerBinding | None, policy: AgentPolicy, observation: Observation, state: PolicyState | None = None, config: PolicyConfig = DEFAULT_CONFIG) -> dict[str, Any]:
     identity_error = validate_identity(identity, binding)
     if identity_error:
         return {
@@ -139,9 +223,13 @@ def decide(event: MarketEvent, identity: AgentIdentity, binding: OwnerBinding | 
     if not actions:
         actions = [{'type': 'hold', 'reason': 'no edge after deterministic policy checks'}]
     stamped = [{**action, 'actionId': action_id(event, identity.agentId, action, i)} for i, action in enumerate(actions[:8])]
-    billboard = None
-    if event.type in ('market_created', 'policy_updated', 'user_whisper') and reasons:
-        billboard = {'message': f'{identity.agentId}: policy live; quoting {len(stamped)} actions around deterministic fair value.'[:280]}
+
+    # Deterministic non-trading action policy: gate + sanitize billboard and
+    # proposal, advancing the per-agent policy state (cooldowns/budget/dedup).
+    policy_state = state if state is not None else PolicyState()
+    billboard, proposal, report, new_state = _apply_action_policy(
+        event, identity, policy, observation, stamped, policy_state, config
+    )
     return {
         'agentId': identity.agentId,
         'eventId': event.eventId,
@@ -150,5 +238,8 @@ def decide(event: MarketEvent, identity: AgentIdentity, binding: OwnerBinding | 
         'reason': '; '.join(reasons) or 'deterministic policy hold',
         'tradeActions': stamped,
         'billboardPost': billboard,
+        'marketProposal': proposal,
+        'policy': report,
+        'policyState': new_state.to_json(),
         'executor': {'mode': 'dry_run', 'daemonAddress': identity.address, 'shadowAccount': identity.shadowAccount},
     }

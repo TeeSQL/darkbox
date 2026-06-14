@@ -11,12 +11,18 @@
  * tg id as `x-telegram-id` plus the resolved trading address in the JSON body.
  * The body `{ address }` is re-validated here (defence in depth); the tg id keys
  * the per-Telegram-user guardrail.
+ *
+ * Internal-only: this privileged mint route is gated by a shared sealed token
+ * (`x-internal-token` / INTERNAL_FAUCET_TOKEN, mirroring the faucet-mint-worker
+ * mesh-token pattern). Only the gateway hop carries it; anything missing/wrong is
+ * refused, so the route is un-hittable directly even if `/public` were exposed.
  */
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { createDbStore } from "../demoFaucet/store.js";
 import { createViemChain } from "../demoFaucet/chain.js";
 import { grantDemoFaucet, type DemoFaucetChain } from "../demoFaucet/faucet.js";
+import { checkInternalToken } from "../demoFaucet/internalAuth.js";
 import type { Address } from "viem";
 
 // Lazily built so a missing key/address doesn't crash indexer boot — the
@@ -41,6 +47,18 @@ function resolveChain(): DemoFaucetChain | null {
 
 export async function demoFaucetRoutes(app: FastifyInstance): Promise<void> {
   app.post("/public/demo-faucet", async (req, reply) => {
+    // Internal-only gate (defense-in-depth): only the gateway hop, carrying the
+    // shared sealed token, may reach this mint route — never a direct caller.
+    const presented = req.headers["x-internal-token"];
+    const auth = checkInternalToken(
+      typeof presented === "string" ? presented : undefined,
+      config.internalFaucetToken,
+    );
+    if (!auth.ok) {
+      req.log.warn("demo faucet: internal token rejected");
+      return reply.status(auth.statusCode!).send(auth.body);
+    }
+
     const chain = resolveChain();
     if (!chain) {
       req.log.error("demo faucet: not configured (missing minter key or sUSDC address)");

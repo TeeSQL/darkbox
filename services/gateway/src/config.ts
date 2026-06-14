@@ -19,6 +19,9 @@ export const config = {
 
   // Internal upstreams (reachable only from gateway; never proxied raw to client).
   indexerInternalUrl: process.env["INDEXER_INTERNAL_URL"] ?? "http://localhost:8080",
+  // Shared sealed secret presented on the internal hop to the indexer's
+  // demo-faucet mint route (x-internal-token). Must match the indexer's value.
+  internalFaucetToken: process.env["INTERNAL_FAUCET_TOKEN"] ?? "",
   bridgeUrl: process.env["BRIDGE_URL"] ?? "",
   transcriberUrl: process.env["TRANSCRIBER_URL"] ?? "",
 

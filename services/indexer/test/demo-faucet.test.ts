@@ -7,6 +7,7 @@ import {
   type DemoFaucetGrant,
   type DemoFaucetStore,
 } from "../src/demoFaucet/faucet.js";
+import { checkInternalToken } from "../src/demoFaucet/internalAuth.js";
 
 const TOKEN = "0x6493548385F94860Ff686F9D863A9C6693BF0Bbb".toLowerCase() as Address;
 const SIGNER = "0x7bc70000000000000000000000000000000000aa" as Address;
@@ -198,5 +199,38 @@ describe("grantDemoFaucet", () => {
     const second = await grantDemoFaucet(deps(store, chain), { address: WALLET_A, tgId: null });
     assert.equal(second.body["status"], "already_granted");
     assert.equal(chain.mintCalls.length, 1);
+  });
+});
+
+describe("checkInternalToken (internal-only gate)", () => {
+  const TOKEN = "s3cr3t-mesh-token";
+
+  it("accepts the correct token", () => {
+    const res = checkInternalToken(TOKEN, TOKEN);
+    assert.equal(res.ok, true);
+    assert.equal(res.statusCode, undefined);
+  });
+
+  it("rejects a missing token with 401", () => {
+    const res = checkInternalToken(undefined, TOKEN);
+    assert.equal(res.ok, false);
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body?.["error"], "unauthorized");
+  });
+
+  it("rejects a wrong token with 401", () => {
+    const res = checkInternalToken("nope", TOKEN);
+    assert.equal(res.ok, false);
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body?.["error"], "unauthorized");
+  });
+
+  it("fails closed with 503 when no token is configured", () => {
+    for (const presented of [undefined, "", "anything"]) {
+      const res = checkInternalToken(presented, "");
+      assert.equal(res.ok, false);
+      assert.equal(res.statusCode, 503);
+      assert.equal(res.body?.["error"], "demo_faucet_internal_auth_not_configured");
+    }
   });
 });

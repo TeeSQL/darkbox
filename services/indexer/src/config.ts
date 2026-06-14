@@ -26,4 +26,7 @@ export const config = {
   demoFaucetAmount: process.env["DEMO_FAUCET_AMOUNT"] ?? "5000000",
   // Small global cap on total grants (anti-drain).
   demoFaucetGlobalCap: parseInt(process.env["DEMO_FAUCET_GLOBAL_CAP"] ?? "100", 10),
+  // Shared sealed secret gating the demo-faucet mint route (x-internal-token).
+  // Must match the gateway's value. Unset ⇒ the route fails closed (503).
+  internalFaucetToken: process.env["INTERNAL_FAUCET_TOKEN"] ?? "",
 };

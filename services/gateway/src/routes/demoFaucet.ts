@@ -42,14 +42,20 @@ export async function demoFaucetProxyRoutes(app: FastifyInstance): Promise<void>
 
     const base = config.indexerInternalUrl.replace(/\/$/, "");
     const target = `${base}/public/demo-faucet`;
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      // Trusted internal hop: the indexer keys its per-tg guardrail on this.
+      "x-telegram-id": tgId,
+    };
+    // Shared sealed token gating the indexer's mint route. Only sent when
+    // configured; if unset the indexer fails closed (503).
+    if (config.internalFaucetToken) {
+      headers["x-internal-token"] = config.internalFaucetToken;
+    }
     try {
       const upstream = await fetch(target, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          // Trusted internal hop: the indexer keys its per-tg guardrail on this.
-          "x-telegram-id": tgId,
-        },
+        headers,
         body: JSON.stringify({ address }),
         signal: AbortSignal.timeout(30000),
       });

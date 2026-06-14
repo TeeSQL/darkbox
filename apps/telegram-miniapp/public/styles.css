@@ -261,14 +261,17 @@ button { -webkit-tap-highlight-color: transparent; }
    mic click can't shrink it and re-center the column — keeps the composer fixed. */
 #whisper-status { min-height: 5.2em; }
 
-/* Terminal-typed intro: the hall writes the beats out line by line, with a
-   blinking caret on the active line. JS (typeWhisperConvo) drives the typing;
-   CSS provides the caret, the accent colors, and the reveal of the field +
-   promise once the typing finishes. */
-.convo { display: flex; flex-direction: column; gap: 10px; }
-.convo .eyebrow { margin-bottom: 2px; }
-.beat { color: var(--mut); font-size: 14px; line-height: 1.55; }
-.cline { min-height: 1.2em; } /* hold each line's height while empty (pre-type) */
+/* Whisper intro as a living thread: one line types a sentence, erases it, and
+   types the next, settling on the ask. JS (typeWhisperConvo) drives it; CSS
+   provides the caret and the accent colours. The .convo reserves a fixed
+   height so swapping lines never shifts the field below it. */
+.convo {
+  min-height: 4.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#whisper-thread { margin: 0; }
 .c-blind { color: var(--violet); }   /* "provably blind" — the cold of the seal */
 .c-confess { color: var(--ember); }  /* "confesses" — the heat */
 .cline.typing::after {
@@ -278,10 +281,6 @@ button { -webkit-tap-highlight-color: transparent; }
   animation: caret 1.05s steps(1) infinite;
 }
 @keyframes caret { 50% { opacity: 0; } }
-/* While typing, hold the field + promise hidden; reveal them when done. */
-.wrap.term .whisper-line, .wrap.term #whisper-status { opacity: 0; }
-.wrap.term.term-done .whisper-line,
-.wrap.term.term-done #whisper-status { opacity: 1; transition: opacity 0.55s ease; }
 @media (prefers-reduced-motion: reduce) {
   .cline.typing::after { display: none; }
 }

@@ -35,12 +35,9 @@
         <div class="topbar"><span class="wm-sm wm-home" data-go="v-landing" role="button" tabindex="0" aria-label="Back to start">Daemon Hall</span><span class="st"><span class="dot"></span><span id="whisper-countdown">SEALED</span></span></div>
         <div class="content"><div class="wrap">
           <div class="convo" aria-label="why you're here">
-            <p class="cline eyebrow">everybody here plays <span class="c-blind">provably blind</span>.</p>
-            <h2 class="cline headline">whisper your daemon's orders.</h2>
-            <p class="cline beat">it walks into the hall alone.</p>
-            <p class="cline beat">and on Sunday, 5:00&nbsp;PM, it <span class="c-confess">confesses</span>.</p>
+            <p class="cline headline" id="whisper-thread">whisper your daemon's orders.</p>
           </div>
-          <div class="whisper whisper-line">
+          <div class="whisper">
             <div class="whisper-field">
               <span class="prompt">&gt;</span>
               <textarea id="whisper-input" rows="1" maxlength="700" spellcheck="true" autocomplete="off" placeholder="say it in a sentence..." aria-label="whisper"></textarea>

@@ -319,65 +319,77 @@ function syncNotifyToggle() {
   notifyToggle.textContent = enabled ? 'on' : 'off';
 }
 
-// ── Terminal-typed whisper intro ──────────────────────────────────────────
-// The hall "writes" each beat into the view, char by char, with a blinking
-// caret on the active line — then reveals the field and the secrecy promise.
+// ── Whisper intro: a living thread ────────────────────────────────────────
+// One line types a sentence, holds, erases it, types the next — like the hall
+// thinking out loud — then settles on the ask. The field stays usable the
+// whole time. Accent words keep their colour (provably blind = violet,
+// confesses = ember).
 let convoTyped = false;
 
-function revealWhisperField() {
-  document.querySelector('#v-whisper .wrap')?.classList.add('term-done');
+const WHISPER_THREAD = [
+  [{ t: 'everybody here plays ' }, { t: 'provably blind', c: 'c-blind' }, { t: '.' }],
+  [{ t: 'it walks into the hall alone.' }],
+  [{ t: 'and on Sunday, 5:00 PM, it ' }, { t: 'confesses', c: 'c-confess' }, { t: '.' }],
+];
+const WHISPER_FINAL = [{ t: "whisper your daemon's orders." }];
+
+function typeSegments(el, segs, done) {
+  el.textContent = '';
+  el.classList.add('typing');
+  let si = 0;
+  let ci = 0;
+  let span = null;
+  (function step() {
+    if (si >= segs.length) { done(); return; }
+    const seg = segs[si];
+    if (ci === 0) {
+      span = document.createElement('span');
+      if (seg.c) span.className = seg.c;
+      el.appendChild(span);
+    }
+    const ch = seg.t[ci];
+    span.textContent += ch;
+    ci += 1;
+    if (ci >= seg.t.length) { si += 1; ci = 0; }
+    window.setTimeout(step, ch === ' ' ? 55 : 30);
+  })();
+}
+
+function eraseEl(el, done) {
+  el.classList.add('typing');
+  (function step() {
+    const span = el.lastElementChild;
+    if (!span) { el.textContent = ''; done(); return; }
+    if (span.textContent.length > 1) span.textContent = span.textContent.slice(0, -1);
+    else span.remove();
+    window.setTimeout(step, 14);
+  })();
 }
 
 function typeWhisperConvo() {
   if (convoTyped) return;
-  const wrap = document.querySelector('#v-whisper .wrap');
-  const convo = wrap?.querySelector('.convo');
-  if (!wrap || !convo) return;
+  const el = document.querySelector('#whisper-thread');
+  if (!el) return;
   convoTyped = true;
-  const lines = [...convo.querySelectorAll('.cline')];
-  // Snapshot each line's segments (text + accent class) before clearing.
-  const plan = lines.map((el) => [...el.childNodes].map((node) => ({
-    text: node.textContent || '',
-    cls: node.nodeType === 1 ? (node.getAttribute('class') || '') : '',
-  })));
 
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) { revealWhisperField(); return; } // leave text as-is, just reveal field
+  if (reduce) return; // leave the resting ask in place
 
-  wrap.classList.add('term');
-  lines.forEach((el) => { el.textContent = ''; });
-
-  let li = 0;
-  function typeLine() {
-    if (li >= lines.length) { revealWhisperField(); return; }
-    const el = lines[li];
-    el.classList.add('typing');
-    const segs = plan[li];
-    let si = 0;
-    let ci = 0;
-    let span = null;
-    function step() {
-      if (si >= segs.length) {
-        el.classList.remove('typing');
-        li += 1;
-        window.setTimeout(typeLine, 340);
-        return;
-      }
-      const seg = segs[si];
-      if (ci === 0) {
-        span = document.createElement('span');
-        if (seg.cls) span.className = seg.cls;
-        el.appendChild(span);
-      }
-      const ch = seg.text[ci];
-      span.textContent += ch;
-      ci += 1;
-      if (ci >= seg.text.length) { si += 1; ci = 0; }
-      window.setTimeout(step, ch === ' ' ? 55 : 26);
+  let i = 0;
+  function nextTransient() {
+    if (i >= WHISPER_THREAD.length) {
+      el.className = 'cline headline';
+      typeSegments(el, WHISPER_FINAL, () => el.classList.remove('typing'));
+      return;
     }
-    step();
+    el.className = 'cline';
+    typeSegments(el, WHISPER_THREAD[i], () => {
+      window.setTimeout(() => eraseEl(el, () => { i += 1; nextTransient(); }), 950);
+    });
   }
-  window.setTimeout(typeLine, 280);
+  el.className = 'cline';
+  el.textContent = '';
+  window.setTimeout(nextTransient, 260);
 }
 
 function showView(id) {

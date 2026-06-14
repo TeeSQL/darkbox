@@ -177,6 +177,9 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   white-space: nowrap;
 }
+.wm-home { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.15s ease; }
+.wm-home:hover { opacity: 0.78; }
+.wm-home:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 3px; }
 .st { display: inline-flex; align-items: center; min-width: 0; text-align: right; }
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--silver); box-shadow: 0 0 8px var(--silver); margin-right: 7px; flex: 0 0 auto; }
 .content {

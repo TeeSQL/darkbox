@@ -778,6 +778,15 @@ function syncKeyboardState() {
 }
 
 navButtons.forEach((button) => {
+  // Non-<button> nav controls (e.g. the wordmark home link) need keyboard support.
+  if (button.tagName !== 'BUTTON') {
+    button.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        button.click();
+      }
+    });
+  }
   button.addEventListener('click', async () => {
     const next = button.getAttribute('data-go');
     if (next === 'v-seal' && !input?.value.trim()) {

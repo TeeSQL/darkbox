@@ -67,6 +67,8 @@ const uiConfig = {
     quote: "sUSDC",
     baseAddress: outcomeToken,
     quoteAddress: darkbox.syntheticUSDC,
+    baseDecimals: 6,
+    quoteDecimals: 6,
   },
   darkbox: {
     network: "arc-testnet",

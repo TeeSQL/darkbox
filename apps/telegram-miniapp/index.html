@@ -71,6 +71,10 @@
             <button class="chip" type="button" data-stake="25">$25</button>
             <button class="chip" type="button" data-stake="100">$100</button>
           </div>
+          <button class="feed-cta" id="feed-cta" type="button" hidden>
+            <span class="feed-cta-main">Feed the daemon $$</span>
+            <span class="feed-cta-sub">deposit USDC · pay from any chain</span>
+          </button>
           <div class="sub" id="stake-sub">prototype — no wallet, no backend.</div>
         </div></div>
         <div class="cmdbar">
@@ -223,6 +227,7 @@
     <script src="/src/landing-bg.ts" type="module"></script>
     <script src="/src/daemon-reveal.ts" type="module"></script>
     <script src="/src/gateway-boot.ts" type="module"></script>
-    <script src="/flow.js?v=20260614-android-mic" type="module"></script>
+    <script src="/src/blink-checkout.ts" type="module"></script>
+    <script src="/flow.js?v=20260614-feed-daemon-android-mic" type="module"></script>
   </body>
 </html>

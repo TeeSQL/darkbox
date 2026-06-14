@@ -1014,3 +1014,66 @@ html.bestiary-html .daemon-stage {
 }
 .action-card.fundable { cursor: pointer; }
 .action-card.fundable:active { transform: scale(0.99); }
+
+/* ─── Feed the daemon: returning-player deposit CTA + inline Blink modal ─────── */
+.feed-cta[hidden] { display: none; }
+.feed-cta {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 100%; max-width: 320px; min-height: 56px; margin: 24px auto 0; cursor: pointer;
+  border: 0; background: var(--bone); color: var(--void); padding: 13px 22px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 13px), calc(100% - 13px) 100%, 0 100%);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.feed-cta:hover, .feed-cta:focus-visible { transform: translateY(-1px); box-shadow: 0 0 30px rgba(139,123,255,.28); }
+.feed-cta:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+.feed-cta-main { font-size: 14px; font-weight: 700; letter-spacing: .06em; }
+.feed-cta-sub { font-size: 10px; font-weight: 500; letter-spacing: .04em; opacity: .62; }
+
+body.feed-open { overflow: hidden; }
+.feed-modal[hidden] { display: none; }
+.feed-modal {
+  position: fixed; inset: 0; z-index: 72; display: grid; place-items: end center;
+  padding: 18px; background: rgba(0, 0, 0, 0.5);
+}
+.feed-scrim { position: absolute; inset: 0; border: 0; background: transparent; cursor: default; }
+.feed-panel {
+  position: relative; z-index: 1; width: min(640px, 100%); max-height: min(88vh, 860px);
+  overflow: auto; border: 1px solid var(--hair2);
+  background: linear-gradient(180deg, rgba(16,16,22,.99), rgba(7,7,11,.99));
+  box-shadow: 0 24px 90px rgba(0,0,0,.66), 0 0 42px rgba(139,123,255,.14); padding: 18px; text-align: left;
+}
+.feed-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--hair); }
+.feed-kicker { color: var(--violet); font-size: 10px; letter-spacing: .18em; }
+.feed-close { width: 32px; height: 32px; border: 1px solid var(--hair); background: var(--srf2); color: var(--mut); font-size: 20px; line-height: 1; cursor: pointer; }
+.feed-panel h2 { margin-top: 15px; color: var(--bone); font-family: var(--display); font-style: italic; font-size: 26px; line-height: 1.02; text-transform: uppercase; }
+.feed-copy { margin-top: 8px; color: var(--mut); font-size: 12px; line-height: 1.6; }
+.feed-copy em { color: var(--silver); font-style: normal; }
+.feed-form { margin-top: 16px; display: grid; gap: 8px; }
+.feed-label { color: var(--mut); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+.feed-amount {
+  width: 100%; border: 1px solid var(--hair2); background: #07070b; color: var(--bone);
+  padding: 14px; font: inherit; font-size: 16px; outline: none;
+}
+.feed-amount:focus { border-color: rgba(139,123,255,.7); box-shadow: 0 0 0 3px rgba(139,123,255,.12); }
+.feed-submit {
+  margin-top: 4px; min-height: 50px; cursor: pointer; border: 0; background: var(--bone); color: var(--void);
+  padding: 14px 22px; font-size: 13px; font-weight: 700; letter-spacing: .08em;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+}
+.feed-submit:disabled { opacity: .5; cursor: wait; }
+.feed-status {
+  margin-top: 14px; border: 1px solid var(--hair); background: #07070b; color: var(--silver);
+  padding: 13px; font-size: 12px; line-height: 1.5;
+}
+.feed-status[data-tone="work"] { border-color: rgba(139,123,255,.45); color: #c7bfff; }
+.feed-status[data-tone="error"] { border-color: rgba(255,139,168,.5); color: #ff8ba8; }
+.feed-blink { margin-top: 14px; position: relative; }
+.feed-blink:not(:empty) { min-height: 560px; overflow: hidden; border: 1px solid var(--hair2); background: #05030a; }
+.feed-blink-blocker {
+  position: absolute; left: 6%; right: 6%; top: 58.75%; height: 10.5%; z-index: 3;
+  display: grid; place-items: center; padding: 8px 12px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(8,6,12,.62); color: rgba(255,255,255,.8);
+  font: 800 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; text-align: center;
+  cursor: not-allowed; backdrop-filter: blur(2px);
+}
+@media (max-width: 520px) { .feed-blink:not(:empty) { min-height: 520px; } .feed-cta { max-width: none; } }

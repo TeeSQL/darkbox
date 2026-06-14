@@ -260,11 +260,20 @@ function describeError(err: unknown): { name?: string; message: string } {
   return { message: String(err) };
 }
 
+/** Only real 20-byte hex addresses are pollable; anything else (e.g. seeded
+ * placeholder ids like "v0:book:..." or "0xseed") would make getLogs reject the
+ * whole scan cycle with InvalidParams, so we drop them defensively. */
+function isHexAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address);
+}
+
 export function registerDynamicFrontierBook(address: string): void {
+  if (!isHexAddress(address)) return;
   frontierBookAddresses.add(address.toLowerCase());
 }
 
 export function registerDynamicPmMarket(address: string): void {
+  if (!isHexAddress(address)) return;
   pmMarketAddresses.add(address.toLowerCase());
 }
 
@@ -331,14 +340,14 @@ export async function loadDynamicContractsFromDb(): Promise<void> {
     "SELECT yes_book, no_book FROM markets WHERE yes_book IS NOT NULL AND no_book IS NOT NULL",
   );
   for (const row of books.rows) {
-    if (row.yes_book) frontierBookAddresses.add(row.yes_book.toLowerCase());
-    if (row.no_book) frontierBookAddresses.add(row.no_book.toLowerCase());
+    if (row.yes_book) registerDynamicFrontierBook(row.yes_book);
+    if (row.no_book) registerDynamicFrontierBook(row.no_book);
   }
 
   const markets = await dbQuery<{ market_address: string }>(
     "SELECT market_address FROM markets",
   );
   for (const row of markets.rows) {
-    if (row.market_address) pmMarketAddresses.add(row.market_address.toLowerCase());
+    if (row.market_address) registerDynamicPmMarket(row.market_address);
   }
 }

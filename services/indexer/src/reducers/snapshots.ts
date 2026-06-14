@@ -78,17 +78,23 @@ export async function takeSnapshotWithClient(
       });
     }
 
-    // 3. Rank by marked equity
+    // 3. Rank by marked equity.
+    // Marked values (market_value / unrealized_pnl) are computed as
+    // quantity*price/1e6, so they can be fractional micro-USDC strings (e.g.
+    // "108.45"). BigInt() throws on those, so coerce through a rounding helper —
+    // micro-USDC magnitudes stay well within Number's safe-integer range, so
+    // rounding to whole micro-units is lossless for display.
+    const micro = (x: unknown): bigint => BigInt(Math.round(Number(x ?? 0) || 0));
     const entries = agentsResult.rows
       .map((row) => {
         const netDeposits = (
-          BigInt(row.total_deposited || "0") - BigInt(row.total_withdrawn || "0")
+          micro(row.total_deposited) - micro(row.total_withdrawn)
         ).toString();
         const pnl = pnlMap.get(row.shadow_account) ?? { realized: "0", unrealized: "0", marketValue: "0" };
-        const realizedPnl = pnl.realized;
-        const unrealizedPnl = pnl.unrealized;
-        const totalPnl = (BigInt(realizedPnl || "0") + BigInt(unrealizedPnl || "0")).toString();
-        const equity = (BigInt(row.current_balance || "0") + BigInt(pnl.marketValue || "0")).toString();
+        const realizedPnl = micro(pnl.realized).toString();
+        const unrealizedPnl = micro(pnl.unrealized).toString();
+        const totalPnl = (micro(realizedPnl) + micro(unrealizedPnl)).toString();
+        const equity = (micro(row.current_balance) + micro(pnl.marketValue)).toString();
         const pnlPct =
           netDeposits !== "0"
             ? ((Number(totalPnl) / Number(netDeposits)) * 100).toFixed(4)

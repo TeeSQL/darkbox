@@ -246,7 +246,7 @@ export async function applyFrontierEvent(
            WHERE key = 'total_trades'`,
         );
         await client.query(
-          `UPDATE aggregate_stats SET value = (value::numeric + $1)::text, updated_at = NOW()
+          `UPDATE aggregate_stats SET value = (value::numeric + ($1::numeric / 1000000))::text, updated_at = NOW()
            WHERE key = 'total_volume_usdc'`,
           [proceeds1],
         );
@@ -366,7 +366,7 @@ export async function applyFrontierEvent(
          WHERE key = 'total_trades'`,
       );
       await client.query(
-        `UPDATE aggregate_stats SET value = (value::numeric + $1)::text, updated_at = NOW()
+        `UPDATE aggregate_stats SET value = (value::numeric + ($1::numeric / 1000000))::text, updated_at = NOW()
          WHERE key = 'total_volume_usdc'`,
         [approxNotional],
       );
@@ -432,7 +432,7 @@ export async function applyFrontierEvent(
          WHERE key = 'total_trades'`,
       );
       await client.query(
-        `UPDATE aggregate_stats SET value = (value::numeric + $1)::text, updated_at = NOW()
+        `UPDATE aggregate_stats SET value = (value::numeric + ($1::numeric / 1000000))::text, updated_at = NOW()
          WHERE key = 'total_volume_usdc'`,
         [proceeds1],
       );
@@ -485,7 +485,7 @@ export async function applyFrontierEvent(
          WHERE key = 'total_trades'`,
       );
       await client.query(
-        `UPDATE aggregate_stats SET value = (value::numeric + $1)::text, updated_at = NOW()
+        `UPDATE aggregate_stats SET value = (value::numeric + ($1::numeric / 1000000))::text, updated_at = NOW()
          WHERE key = 'total_volume_usdc'`,
         [grossInput],
       );

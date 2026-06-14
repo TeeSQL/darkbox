@@ -95,26 +95,37 @@ empty `gethdata` and must re-sync from the OTHER geth. So `/public/markets` 200 
 regressed). Gate on the CHAIN, in this exact order:
 
 1. **Review + merge this PR.** (Overseer has infra-signed-off.)
-2. **(recommended) Snapshot geth-1's `gethdata` first** if the bastion can reach the
+2. **Redeploy the BASTION with the debug keys FIRST** (env-only, quick, no flavor
+   change). The bump only recreates core + geth-2; the bastion + gateway are NOT
+   flavor-bumped, so they keep their current `authorized_keys` until redeployed — and
+   the bastion is the operator's SSH entry point for the live checks below, so it MUST
+   get the keys BEFORE the bump. (Dan's, Ocean's, and DarkDan's `darkdan@darkbox-debug`
+   keys are already appended to the sealed bastion env.)
+3. **(recommended) Snapshot geth-1's `gethdata` first** if the bastion can reach the
    volume — there is NO other backup of the contracts.
-3. **Bump geth-2 FIRST → `tdx.large`** (fresh CVM, empty gethdata → re-syncs from
+4. **Bump geth-2 FIRST → `tdx.large`** (fresh CVM, empty gethdata → re-syncs from
    geth-1). **Expect a clique stall:** with one geth being recreated the other is the
    sole active signer, so block height FREEZES until the new geth catches up +
    co-signs. Normal, not a failure.
-4. **CHAIN-INTEGRITY GATE (the real gate):** from a geth RPC (bastion), verify on
-   geth-2 that `eth_getCode(0xC37d6ce4…)` is **non-empty** AND its block height ≈
+5. **CHAIN-INTEGRITY GATE (the real gate):** from a geth RPC (via the bastion), verify
+   on geth-2 that `eth_getCode(0xC37d6ce4…)` is **non-empty** AND its block height ≈
    geth-1's. **Do NOT proceed to geth-1 until geth-2 holds the FULL chain.**
-5. **Only THEN bump core/geth-1 → `tdx.xlarge`** (fresh: empty gethdata re-syncs from
+6. **Only THEN bump core/geth-1 → `tdx.xlarge`** (fresh: empty gethdata re-syncs from
    the now-good geth-2; empty db_data → indexer re-scans from block 1). Expect another
    clique stall during the recreation.
-6. **Gates before declaring success:**
+7. **Gates before declaring success:**
    - **chain-integrity:** `eth_getCode(0xC37d6ce4…)` non-empty on geth-1 + height
      parity with geth-2;
    - **markets:** `/public/markets` returns the ACTUAL market (**non-empty array**) —
      `[]` is also a 200 and would pass prematurely during the re-scan;
    - **sidecar healthz** green.
    Auto-rollback to the prior (still-running) core on any failure.
-7. Only after all gates green → resume feature deploys, one branch / PR / review at a
+8. **Endpoint handover:** fresh CVMs get new app_ids → new deterministic mesh IPs. As
+   each fresh member registers, the overseer hands the operator the NEW bastion app_id
+   (→ `<app_id>-2222s` SSH endpoint for the ProxyCommand) + the NEW core/geth-2 mesh
+   IPs (gateway + signer keep their current app_ids/IPs — not bumped). The operator
+   connects via the bastion to run the step-5 / step-7 checks.
+9. Only after all gates green → resume feature deploys, one branch / PR / review at a
    time.
 
 ## Incident-response standard (codify what worked)

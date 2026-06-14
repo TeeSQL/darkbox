@@ -1154,3 +1154,13 @@ body.feed-open { overflow: hidden; }
 }
 .terminal-line.is-new { animation: sealedSlideIn 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) { .terminal-line.is-new { animation: none; } }
+
+/* Animated daemon loop overlays the static portrait when it can play. */
+.daemon-wait-portrait video {
+  position: absolute; inset: 0; z-index: 2;
+  width: 100%; height: 100%; object-fit: contain;
+  background: #101016;
+  filter: contrast(1.08) brightness(1.08) saturate(1.12);
+}
+.daemon-wait-portrait video[hidden] { display: none; }
+.daemon-wait-portrait.daemon-wait-alive video { animation: daemonWaitPhotoPulse 3.8s ease-in-out infinite; }

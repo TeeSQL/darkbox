@@ -13,12 +13,22 @@ until n="$(cast block-number --rpc-url "$RPC" 2>/dev/null)" && [ -n "${n:-}" ] &
   if [ "$i" -gt 120 ]; then echo "[deployer] geth not sealing after ~6min — aborting"; exit 1; fi
   sleep 3
 done
-echo "[deployer] geth sealing (block $n). Deploying DarkBox + Frontier onto chain 88813 ..."
-
-# DeployDarkBox reads DEPLOYER_KEY + TAKER_FEE_BPS(=100 default)/MAKER_FEE_BPS(=0) from env.
-forge script script/DeployDarkBox.s.sol:DeployDarkBox \
-  --rpc-url "$RPC" --broadcast --skip-simulation -vvv
-
-echo "[deployer] ===== DEPLOYMENT COMPLETE ====="
-cat deployments/darkbox-latest.json 2>/dev/null || echo "[deployer] (no artifact file; addresses are in the log above)"
+MODE="${MODE:-deploy}"
+if [ "$MODE" = "seed" ]; then
+  echo "[deployer] geth sealing (block $n). MODE=seed -> seeding live agent trading on chain 88813 ..."
+  # SeedAgentTrading reads DEPLOYER_KEY (minter/coordinator) + DAEMON_SEED + SEED_* from env.
+  # Coordinator-funded demo liquidity: funds per-daemon accounts, splits collateral,
+  # places real maker/taker orders so the indexer ingests actual fills/pricing — not
+  # just logged intents. Simulated (so the router quote reflects the placed asks).
+  forge script script/SeedAgentTrading.s.sol:SeedAgentTrading \
+    --rpc-url "$RPC" --broadcast -vvv
+  echo "[deployer] ===== SEED TRADING COMPLETE ====="
+else
+  echo "[deployer] geth sealing (block $n). Deploying DarkBox + Frontier onto chain 88813 ..."
+  # DeployDarkBox reads DEPLOYER_KEY + TAKER_FEE_BPS(=100 default)/MAKER_FEE_BPS(=0) from env.
+  forge script script/DeployDarkBox.s.sol:DeployDarkBox \
+    --rpc-url "$RPC" --broadcast --skip-simulation -vvv
+  echo "[deployer] ===== DEPLOYMENT COMPLETE ====="
+  cat deployments/darkbox-latest.json 2>/dev/null || echo "[deployer] (no artifact file; addresses are in the log above)"
+fi
 echo "[deployer] done — container will exit."

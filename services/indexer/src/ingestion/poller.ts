@@ -41,11 +41,50 @@ let pmMarketAddresses: Set<string> = new Set();
 function getClient(): PublicClient {
   if (!client) {
     client = createPublicClient({
-      transport: http(config.hiddenRpcUrl),
+      transport: http(config.hiddenRpcUrl, {
+        // Bound each request so a dropped/half-open geth socket REJECTS (and we
+        // retry from the cursor) instead of hanging the await forever.
+        timeout: config.rpcTimeoutMs,
+        // The scan loop owns retry/backoff/reconnect, so disable viem's own
+        // per-call retry to keep failure handling in one place.
+        retryCount: 0,
+      }),
     });
   }
   return client;
 }
+
+/**
+ * Drop the cached viem client so the next getClient() rebuilds the transport.
+ * Called after a network/socket error so a dead keep-alive socket is replaced by
+ * a fresh connection rather than reused.
+ */
+function resetClient(): void {
+  client = null;
+}
+
+/**
+ * Collaborators the scan loop depends on. Defaults wire to the real viem client
+ * and DB-backed cursor/log processing; tests inject fakes to exercise the
+ * RPC-error resilience path without a live geth or Postgres.
+ */
+export interface ScanIo {
+  getClient: () => PublicClient;
+  resetClient: () => void;
+  getCursor: (
+    adapter: AdapterName,
+    chainId: number,
+    address: `0x${string}`,
+  ) => Promise<bigint>;
+  processLogs: (watched: WatchedContract, logs: Log[]) => Promise<void>;
+}
+
+const realIo: ScanIo = {
+  getClient,
+  resetClient,
+  getCursor,
+  processLogs,
+};
 
 async function fetchBlockTimestamp(blockNumber: bigint): Promise<bigint> {
   try {
@@ -154,34 +193,71 @@ async function processLogs(
   });
 }
 
-async function pollContract(watched: WatchedContract): Promise<void> {
-  const rpcClient = getClient();
-  const fromBlock = (await getCursor(watched.adapter, watched.chainId, watched.address)) + 1n;
+/**
+ * Polls a single watched contract for new logs and advances its cursor.
+ *
+ * RESILIENCE: every RPC call (getBlockNumber / getLogs) is wrapped. On a
+ * network/socket/RPC error we log a structured warning, refresh the viem client
+ * (so a dropped keep-alive socket reconnects), and STOP this contract's scan
+ * WITHOUT advancing past the failed range — the cursor only moves when a batch is
+ * persisted, so the next cycle resumes from exactly the same block. We never let
+ * an RPC error escape this function (it must not kill the scan loop) and never
+ * skip unscanned blocks.
+ *
+ * Returns true if the scan completed cleanly, false if an RPC error was caught
+ * (so the caller can back off before the next cycle).
+ */
+export async function pollContract(
+  watched: WatchedContract,
+  io: ScanIo = realIo,
+): Promise<boolean> {
+  const fromBlock =
+    (await io.getCursor(watched.adapter, watched.chainId, watched.address)) + 1n;
   let toBlock: bigint;
   try {
-    toBlock = await rpcClient.getBlockNumber();
-  } catch {
-    return; // node not yet available
+    toBlock = await io.getClient().getBlockNumber();
+  } catch (err) {
+    console.warn(
+      `[indexer] scan rpc error (getBlockNumber) adapter=${watched.adapter} address=${watched.address} cursor=${fromBlock - 1n} — backing off, will resume`,
+      describeError(err),
+    );
+    io.resetClient();
+    return false;
   }
 
-  if (fromBlock > toBlock) return;
+  if (fromBlock > toBlock) return true;
 
   const batchSize = BigInt(config.pollBatchSize);
   let current = fromBlock;
   while (current <= toBlock) {
     const end = current + batchSize - 1n < toBlock ? current + batchSize - 1n : toBlock;
     try {
-      const logs = await rpcClient.getLogs({
+      const logs = await io.getClient().getLogs({
         address: watched.address,
         fromBlock: current,
         toBlock: end,
       });
-      await processLogs(watched, logs);
+      await io.processLogs(watched, logs);
     } catch (err) {
-      console.error(`[indexer] poll failed adapter=${watched.adapter} address=${watched.address} from=${current} to=${end}`, err);
+      // Network/socket/RPC drop (e.g. geth restarting): log, refresh the client,
+      // and STOP advancing. The cursor stays put, so the next cycle retries this
+      // exact range — we must never jump past blocks we failed to scan.
+      console.warn(
+        `[indexer] scan rpc error (getLogs) adapter=${watched.adapter} address=${watched.address} from=${current} to=${end} — backing off, will resume from cursor`,
+        describeError(err),
+      );
+      io.resetClient();
+      return false;
     }
     current = end + 1n;
   }
+  return true;
+}
+
+/** Compact, log-safe description of an error (avoids dumping raw Socket objects). */
+function describeError(err: unknown): { name?: string; message: string } {
+  if (err instanceof Error) return { name: err.name, message: err.message };
+  return { message: String(err) };
 }
 
 export function registerDynamicFrontierBook(address: string): void {
@@ -192,7 +268,13 @@ export function registerDynamicPmMarket(address: string): void {
   pmMarketAddresses.add(address.toLowerCase());
 }
 
-export async function runPollCycle(): Promise<void> {
+/**
+ * One full scan cycle across all watched contracts. Each contract contains its
+ * own RPC errors (see {@link pollContract}), so one geth blip never aborts the
+ * cycle or kills the loop. Returns false if any contract hit an RPC error this
+ * cycle, so the supervisor can apply backoff before the next pass.
+ */
+export async function runPollCycle(): Promise<boolean> {
   const staticContracts: WatchedContract[] = [
     {
       adapter: "bridge",
@@ -235,9 +317,12 @@ export async function runPollCycle(): Promise<void> {
     ),
   ];
 
+  let allOk = true;
   for (const watched of [...staticContracts, ...dynamicContracts]) {
-    await pollContract(watched);
+    const ok = await pollContract(watched);
+    if (!ok) allOk = false;
   }
+  return allOk;
 }
 
 export async function loadDynamicContractsFromDb(): Promise<void> {

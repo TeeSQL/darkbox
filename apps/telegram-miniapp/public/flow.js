@@ -264,7 +264,7 @@ const murmurs = [
   '▸ no one outside saw what changed',
 ];
 const activityLines = [
-  'your daemon keeps moving after you close the phone.',
+  'your daemon will keep trading for you until reveal. Trying to answer questions... who will win the hackathon?',
   'it is whisper-quiet here; the hall is not.',
   'the room outside keeps making markets without showing its hands.',
   'your daemon can react while your screen is dark.',

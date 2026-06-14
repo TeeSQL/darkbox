@@ -372,9 +372,6 @@ function typeWhisperConvo() {
   if (!el) return;
   convoTyped = true;
 
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) return; // leave the resting ask in place
-
   let i = 0;
   function nextTransient() {
     if (i >= WHISPER_THREAD.length) {

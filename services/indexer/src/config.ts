@@ -14,4 +14,16 @@ export const config = {
   snapshotIntervalMs: parseInt(process.env["SNAPSHOT_INTERVAL_MS"] ?? "60000", 10),
   marketLifecycleEnabled: process.env["MARKET_LIFECYCLE_ENABLED"] !== "false",
   marketLifecycleIntervalMs: parseInt(process.env["MARKET_LIFECYCLE_INTERVAL_MS"] ?? "60000", 10),
+
+  // Demo faucet: mints $5 of TRADABLE ERC20 sUSDC straight to a new user's
+  // trading address so they can approve/split/trade. Runs server-side on the
+  // core (fresh-chain RPC + sealed minter key). All values env-only.
+  syntheticUsdcAddress: (process.env["SYNTHETIC_USDC_ADDRESS"] ?? "").toLowerCase(),
+  // The minter private key is read ONLY here and never logged. Empty => endpoint
+  // is treated as not-configured and returns 503.
+  demoFaucetMinterKey: process.env["DEMO_FAUCET_MINTER_KEY"] ?? "",
+  // $5 = 5_000_000 base units (6-decimal sUSDC).
+  demoFaucetAmount: process.env["DEMO_FAUCET_AMOUNT"] ?? "5000000",
+  // Small global cap on total grants (anti-drain).
+  demoFaucetGlobalCap: parseInt(process.env["DEMO_FAUCET_GLOBAL_CAP"] ?? "100", 10),
 };

@@ -328,7 +328,7 @@ let convoTyped = false;
 
 const WHISPER_THREAD = [
   [{ t: 'everybody here are ' }, { t: 'provably blind', c: 'c-blind' }, { t: '.' }],
-  [{ t: 'it walks into the hall alone.' }],
+  [{ t: 'daemon', c: 'c-blind' }, { t: ' walks into the hall alone.' }],
   [{ t: 'and on Sunday, 5:00 PM, it ' }, { t: 'confesses', c: 'c-confess' }, { t: '.' }],
 ];
 const WHISPER_FINAL = [{ t: 'whisper your ' }, { t: 'daemon', c: 'c-blind' }, { t: "'s orders." }];

@@ -3,6 +3,7 @@ import type {
   AccountMapping,
   DepositIntent,
   DepositRecord,
+  FaucetMintRecord,
   WithdrawalRecord,
 } from "./types.js";
 
@@ -32,6 +33,16 @@ export interface BridgeStore {
   getWithdrawal(withdrawalId: Hex): WithdrawalRecord | undefined;
   putWithdrawal(record: WithdrawalRecord): void;
   listWithdrawals(): WithdrawalRecord[];
+
+  // faucet mints
+  getFaucetMint(operationId: Hex): FaucetMintRecord | undefined;
+  getHumanPromoMint(gameId: Hex, telegramId: string): FaucetMintRecord | undefined;
+  getDaemonFundingMint(gameId: Hex, daemonId: string): FaucetMintRecord | undefined;
+  getDaemonFundingMintByAddress(gameId: Hex, daemonAddress: Address): FaucetMintRecord | undefined;
+  getDaemonFundingMintByShadow(gameId: Hex, shadowAccount: Hex): FaucetMintRecord | undefined;
+  putFaucetMint(record: FaucetMintRecord): void;
+  listPendingFaucetMints(limit?: number): FaucetMintRecord[];
+  listFaucetMints(): FaucetMintRecord[];
 }
 
 export class InMemoryBridgeStore implements BridgeStore {
@@ -40,6 +51,7 @@ export class InMemoryBridgeStore implements BridgeStore {
   private mappingsByShadow = new Map<string, AccountMapping>();
   private intents = new Map<Hex, DepositIntent>();
   private withdrawals = new Map<Hex, WithdrawalRecord>();
+  private faucetMints = new Map<string, FaucetMintRecord>();
 
   getDeposit(depositOpId: Hex): DepositRecord | undefined {
     return this.deposits.get(depositOpId);
@@ -82,5 +94,53 @@ export class InMemoryBridgeStore implements BridgeStore {
   }
   listWithdrawals(): WithdrawalRecord[] {
     return [...this.withdrawals.values()];
+  }
+
+  getFaucetMint(operationId: Hex): FaucetMintRecord | undefined {
+    return this.faucetMints.get(operationId.toLowerCase());
+  }
+  getHumanPromoMint(gameId: Hex, telegramId: string): FaucetMintRecord | undefined {
+    return [...this.faucetMints.values()].find(
+      (r) =>
+        r.kind === "human_promo" &&
+        r.gameId.toLowerCase() === gameId.toLowerCase() &&
+        r.telegramId === telegramId,
+    );
+  }
+  getDaemonFundingMint(gameId: Hex, daemonId: string): FaucetMintRecord | undefined {
+    return [...this.faucetMints.values()].find(
+      (r) =>
+        r.kind === "daemon_funding" &&
+        r.gameId.toLowerCase() === gameId.toLowerCase() &&
+        r.daemonId === daemonId,
+    );
+  }
+  getDaemonFundingMintByAddress(gameId: Hex, daemonAddress: Address): FaucetMintRecord | undefined {
+    return [...this.faucetMints.values()].find(
+      (r) =>
+        r.kind === "daemon_funding" &&
+        r.gameId.toLowerCase() === gameId.toLowerCase() &&
+        r.daemonAddress?.toLowerCase() === daemonAddress.toLowerCase(),
+    );
+  }
+  getDaemonFundingMintByShadow(gameId: Hex, shadowAccount: Hex): FaucetMintRecord | undefined {
+    return [...this.faucetMints.values()].find(
+      (r) =>
+        r.kind === "daemon_funding" &&
+        r.gameId.toLowerCase() === gameId.toLowerCase() &&
+        r.shadowAccount.toLowerCase() === shadowAccount.toLowerCase(),
+    );
+  }
+  putFaucetMint(record: FaucetMintRecord): void {
+    this.faucetMints.set(record.operationId.toLowerCase(), record);
+  }
+  listPendingFaucetMints(limit = 100): FaucetMintRecord[] {
+    return [...this.faucetMints.values()]
+      .filter((r) => r.state === "pending")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, limit);
+  }
+  listFaucetMints(): FaucetMintRecord[] {
+    return [...this.faucetMints.values()];
   }
 }

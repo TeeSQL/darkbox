@@ -18,10 +18,6 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
     const invite = db.getInvite(telegramId);
     const registration = db.getRegistration(telegramId);
 
-    const now = Date.now();
-    const unlockAt = invite ? Date.parse(invite.withdrawalUnlockAt) : 0;
-    const promoLocked = Boolean(invite) && now < unlockAt;
-
     // Best-effort: the player's own indexer-sourced holdings (the CVM-reported
     // balance), keyed by shadow account. Reads the canonical /internal/balances
     // route (micro-USDC) and converts to a USDC decimal string. Never blocks
@@ -61,20 +57,14 @@ export async function selfRoutes(app: FastifyInstance): Promise<void> {
       fundingStatus: invite ? "promo_funded" : "unfunded",
       enteredViaInvite: Boolean(invite),
       inviteId: invite?.inviteId ?? null,
-      // Withdrawable balance is owned by the bridge; until that read is wired we
-      // report the conservative locked-promo view rather than inventing a number.
-      withdrawableAvailableBalance: promoLocked ? "0.00" : null,
+      // Withdrawable balance is owned by the bridge; null = "ask the bridge",
+      // not zero. Promo faucet credit is withdrawable once minted.
+      withdrawableAvailableBalance: null,
       // Indexer-sourced holdings (USDC decimal; null when the indexer has no row
       // for this account yet, or was briefly unreachable).
       shadowBalance,
       instructionCommitmentHash: registration?.instructionHash ?? null,
-      withdrawalLock: invite
-        ? {
-            locked: promoLocked,
-            reason: promoLocked ? "promo_bonus_unlock" : null,
-            unlockAt: invite.withdrawalUnlockAt,
-          }
-        : { locked: false, reason: null, unlockAt: null },
+      withdrawalLock: { locked: false, reason: null, unlockAt: null },
       registrationFreezeAt: config.registrationFreezeAt,
       updatedAt: new Date().toISOString(),
     };

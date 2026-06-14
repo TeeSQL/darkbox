@@ -9,7 +9,7 @@
  *
  * Canonical deposit/withdrawal coordination lives in services/bridge (watcher +
  * coordinators + signing service). The gateway is the authenticated public face:
- * it validates shape + the promo withdrawal-lock, then hands off to the bridge.
+ * it validates shape, then hands off to the bridge.
  * Withdrawals are demo-gated off (see config.withdrawalsEnabled).
  */
 import { createHash } from "node:crypto";
@@ -222,17 +222,13 @@ export async function withdrawalsRoutes(app: FastifyInstance): Promise<void> {
 
   // ── Withdrawals ───────────────────────────────────────────────────────────
   app.get<{ Params: { owner: string } }>("/api/withdrawable/:owner", async (req, reply) => {
-    const invite = db.getInvite(req.telegramUser.id);
-    const now = Date.now();
-    const promoLocked = Boolean(invite) && now < Date.parse(invite!.withdrawalUnlockAt);
     return reply.send({
       owner: req.params.owner,
-      // Promo-locked players have nothing withdrawable; real available balance is
-      // resolved by the bridge once wired. Null = "ask the bridge", not zero.
-      withdrawableAvailableBalance: promoLocked ? "0.00" : null,
+      // Resolved by the bridge once wired. Null = "ask the bridge", not zero.
+      withdrawableAvailableBalance: null,
       currency: "USDC",
-      locked: promoLocked,
-      unlockAt: invite?.withdrawalUnlockAt ?? null,
+      locked: false,
+      unlockAt: null,
       updatedAt: new Date().toISOString(),
     });
   });
@@ -248,11 +244,6 @@ export async function withdrawalsRoutes(app: FastifyInstance): Promise<void> {
     const parsed = submitWithdrawalRequestSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return reply.status(400).send({ error: "invalid_body", detail: parsed.error.issues });
-    }
-    // Promo lock guard (defence in depth; the signer also enforces invariants).
-    const invite = db.getInvite(req.telegramUser.id);
-    if (invite && Date.now() < Date.parse(invite.withdrawalUnlockAt)) {
-      return reply.status(409).send({ error: "promo_locked", unlockAt: invite.withdrawalUnlockAt });
     }
     // Hand off to the bridge withdrawal coordinator (shadow burn → signer).
     // Wiring point: POST {bridgeUrl}/internal/withdrawals once bridge exposes HTTP.

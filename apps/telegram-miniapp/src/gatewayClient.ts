@@ -81,6 +81,40 @@ export interface LeaderboardRow {
   updatedAt?: string;
 }
 
+export interface DepositIntentResult {
+  depositOpId: string;
+  status: "intent_created";
+  owner: string;
+  amount: string;
+  chainId?: number;
+  token: string;
+  updatedAt: string;
+}
+
+export interface DepositStatus {
+  depositOpId: string;
+  status: "pending_bridge_reconciliation" | "credited" | "failed";
+  updatedAt: string;
+}
+
+export interface WithdrawableBalance {
+  owner: string;
+  withdrawableAvailableBalance: string;
+  updatedAt: string;
+}
+
+export interface WithdrawalResult {
+  withdrawalId: string;
+  status: "shadow_burn_submitted";
+  updatedAt: string;
+}
+
+export interface WithdrawalStatus {
+  withdrawalId: string;
+  status: "shadow_burn_submitted" | "settled" | "failed";
+  updatedAt: string;
+}
+
 export interface GatewayClientConfig {
   /** Authenticated player API, e.g. http://localhost:8090 or https://gateway.darkbox… */
   gatewayBaseUrl: string;
@@ -164,6 +198,26 @@ export function createGatewayClient(config: GatewayClientConfig) {
       revealSaltHash?: string;
       runtimeHash?: string;
     }) => api<RegisterResult>("POST", "/api/registrations", opts),
+
+    // ── Deposits & withdrawals ────────────────────────────────────────────
+    createDepositIntent: (opts: {
+      amount: string;
+      owner?: string;
+      chainId?: number;
+      token?: "USDC";
+    }) => api<DepositIntentResult>("POST", "/api/deposit-intents", opts),
+
+    getDeposit: (depositOpId: string) =>
+      api<DepositStatus>("GET", `/api/deposits/${encodeURIComponent(depositOpId)}`),
+
+    getWithdrawable: (owner: string) =>
+      api<WithdrawableBalance>("GET", `/api/withdrawable/${encodeURIComponent(owner)}`),
+
+    submitWithdrawal: (opts: { owner?: string; amount: string; token?: "USDC" }) =>
+      api<WithdrawalResult>("POST", "/api/withdrawals/commands", opts),
+
+    getWithdrawal: (withdrawalId: string) =>
+      api<WithdrawalStatus>("GET", `/api/withdrawals/${encodeURIComponent(withdrawalId)}`),
 
     // ── Public spectator API (no auth) ────────────────────────────────────
     async leaderboard(): Promise<LeaderboardRow[]> {

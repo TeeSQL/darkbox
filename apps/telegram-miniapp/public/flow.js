@@ -319,25 +319,97 @@ function syncNotifyToggle() {
   notifyToggle.textContent = enabled ? 'on' : 'off';
 }
 
+// ── Whisper intro: a living thread ────────────────────────────────────────
+// One line types a sentence, holds, erases it, types the next — like the hall
+// thinking out loud — then settles on the ask. The field stays usable the
+// whole time. Accent words keep their colour (provably blind = violet,
+// confesses = ember).
+let convoTyped = false;
+
+const WHISPER_THREAD = [
+  [{ t: 'everybody here are ' }, { t: 'provably blind', c: 'c-blind' }, { t: '.' }],
+  [{ t: 'daemon', c: 'c-blind' }, { t: ' walks into the hall alone.' }],
+  [{ t: 'and on Sunday, 5:00 PM, it ' }, { t: 'confesses', c: 'c-confess' }, { t: '.' }],
+];
+const WHISPER_FINAL = [{ t: 'whisper your ' }, { t: 'daemon', c: 'c-blind' }, { t: "'s orders." }];
+
+function typeSegments(el, segs, done) {
+  el.textContent = '';
+  el.classList.add('typing');
+  let si = 0;
+  let ci = 0;
+  let span = null;
+  (function step() {
+    if (si >= segs.length) { done(); return; }
+    const seg = segs[si];
+    if (ci === 0) {
+      span = document.createElement('span');
+      if (seg.c) span.className = seg.c;
+      el.appendChild(span);
+    }
+    const ch = seg.t[ci];
+    span.textContent += ch;
+    ci += 1;
+    if (ci >= seg.t.length) { si += 1; ci = 0; }
+    window.setTimeout(step, ch === ' ' ? 95 : 58);
+  })();
+}
+
+function eraseEl(el, done) {
+  el.classList.add('typing');
+  (function step() {
+    const span = el.lastElementChild;
+    if (!span) { el.textContent = ''; done(); return; }
+    if (span.textContent.length > 1) span.textContent = span.textContent.slice(0, -1);
+    else span.remove();
+    window.setTimeout(step, 22);
+  })();
+}
+
+function typeWhisperConvo() {
+  if (convoTyped) return;
+  const el = document.querySelector('#whisper-thread');
+  if (!el) return;
+  convoTyped = true;
+
+  let i = 0;
+  function nextTransient() {
+    if (i >= WHISPER_THREAD.length) {
+      el.className = 'cline';
+      typeSegments(el, WHISPER_FINAL, () => el.classList.remove('typing'));
+      return;
+    }
+    el.className = 'cline';
+    typeSegments(el, WHISPER_THREAD[i], () => {
+      window.setTimeout(() => eraseEl(el, () => { i += 1; nextTransient(); }), 950);
+    });
+  }
+  el.className = 'cline';
+  el.textContent = '';
+  window.setTimeout(nextTransient, 260);
+}
+
 function showView(id) {
   views.forEach((view) => view.classList.toggle('active', view.id === id));
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderPrivateState();
-  if (id === 'v-whisper') window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
+  if (id === 'v-whisper') {
+    window.setTimeout(() => input?.focus({ preventScroll: true }), 80);
+    typeWhisperConvo();
+  }
   tg?.HapticFeedback?.impactOccurred?.('light');
 }
 
 function formatCountdown(ms) {
   if (ms <= 0) return 'BOXES OPEN NOW';
   const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const hh = String(hours).padStart(2, '0');
   const mm = String(minutes).padStart(2, '0');
   const ss = String(seconds).padStart(2, '0');
-  return days > 0 ? `SEALED · ${days}D ${hh}:${mm}:${ss}` : `SEALED · ${hh}:${mm}:${ss}`;
+  return `SEALED · ${hh}:${mm}:${ss}`;
 }
 
 function tickCountdown() {
@@ -546,20 +618,184 @@ async function grantMicForVisuals(event) {
   try {
     const allowed = await requestMicAccess('mic allowed. terminal recording stays off until you press its mic.');
     setMainMicGrantState(Boolean(allowed));
-    if (whisperStatus && allowed) whisperStatus.textContent = 'mic allowed for hall effects. open the private terminal to record.';
+    if (whisperStatus && allowed) whisperStatus.textContent = 'keep your voice down. everyone in here does.';
   } catch (_) {
     setMainMicGrantState(false);
     if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
   }
 }
 
+// ── Main whisper mic: tap-to-toggle + hold-to-talk (web + miniapp) ─────────
+// Fast tap  → latch recording on; tap again to stop.
+// Press &   → hold-to-talk; recording lasts until release.
+//   hold > HOLD_THRESHOLD_MS
+const HOLD_THRESHOLD_MS = 1000;
+let mainRecognition;
+let mainListening = false; // recognizer actually running
+let mainWanted = false; // we want it running (drives auto-restart)
+let mainBaseText = '';
+let mainFinalText = '';
+let mainStream = null; // fallback open-mic stream when SpeechRecognition is absent
+let mainMode = 'idle'; // 'idle' | 'recording'
+let micPressTimer = null;
+let micHoldMode = false; // current press has crossed 1s → hold-to-talk (release stops)
+let micPressWillStop = false; // this gesture is a tap-to-stop on an active recording
+
+function setMainVoiceState(state) {
+  // state: 'idle' | 'recording' | 'hold'
+  const active = state !== 'idle';
+  voiceButton?.classList.toggle('listening', active);
+  voiceButton?.setAttribute('aria-pressed', active ? 'true' : 'false');
+  voiceButton?.setAttribute('aria-label', active ? 'Stop recording' : 'Record whisper');
+  if (voiceButton) voiceButton.dataset.recordingMode = state;
+  if (voiceStateEl) {
+    const granted = hasMicGrantThisSession();
+    voiceStateEl.dataset.state = active ? 'recording' : granted ? 'mic-allowed' : 'idle';
+    voiceStateEl.textContent = {
+      idle: granted ? 'mic allowed' : 'allow mic',
+      recording: 'recording · tap to stop',
+      hold: 'recording · release to stop',
+    }[state] || (granted ? 'mic allowed' : 'allow mic');
+  }
+}
+
+function ensureMainRecognition() {
+  if (mainRecognition || !SpeechRecognition) return mainRecognition;
+  mainRecognition = new SpeechRecognition();
+  mainRecognition.lang = 'en-US';
+  mainRecognition.interimResults = true;
+  mainRecognition.continuous = true;
+  mainRecognition.onstart = () => { mainListening = true; };
+  mainRecognition.onerror = () => {
+    mainWanted = false;
+    mainListening = false;
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'voice broke. type or try again.';
+  };
+  mainRecognition.onend = () => {
+    mainListening = false;
+    if (mainWanted) {
+      window.setTimeout(() => {
+        if (!mainWanted || mainListening) return;
+        try { mainRecognition.start(); } catch (_) { mainWanted = false; }
+      }, 120);
+      return;
+    }
+    setMainVoiceState('idle');
+  };
+  mainRecognition.onresult = (event) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      if (result.isFinal) mainFinalText += `${result[0].transcript} `;
+      else interim += result[0].transcript;
+    }
+    const spoken = `${mainFinalText}${interim}`.trim();
+    if (input) input.value = [mainBaseText, spoken].filter(Boolean).join(mainBaseText && spoken ? ' ' : '').trimStart();
+    handleInput();
+  };
+  return mainRecognition;
+}
+
+async function startMainRecording() {
+  if (mainMode === 'recording') return true;
+  let allowed = false;
+  try { allowed = await requestMicAccess('recording. speak your order.'); }
+  catch (_) { allowed = false; }
+  if (!allowed) {
+    mainMode = 'idle';
+    setMainVoiceState('idle');
+    if (whisperStatus) whisperStatus.textContent = 'mic denied. type the whisper instead.';
+    return false;
+  }
+  setMainMicGrantState(true);
+  mainMode = 'recording';
+  const recognizer = ensureMainRecognition();
+  if (recognizer) {
+    mainBaseText = input?.value.trim() || '';
+    mainFinalText = '';
+    mainWanted = true;
+    try { recognizer.start(); } catch (_) {}
+  } else {
+    // Some webviews (notably iOS Telegram) lack SpeechRecognition. Keep an open
+    // mic stream so the recording state is honest; the user types to finish.
+    try { mainStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+    catch (_) { mainStream = null; }
+    if (whisperStatus) whisperStatus.textContent = 'recording. transcription unavailable here — type to finish.';
+  }
+  return true;
+}
+
+function stopMainRecording(statusText = 'recording stopped. review before sealing.') {
+  if (mainMode === 'idle') return;
+  mainMode = 'idle';
+  mainWanted = false;
+  try { mainRecognition?.stop?.(); } catch (_) {}
+  if (mainStream) {
+    mainStream.getTracks().forEach((track) => track.stop());
+    mainStream = null;
+  }
+  setMainVoiceState('idle');
+  if (whisperStatus) whisperStatus.textContent = statusText;
+  handleInput();
+}
+
+function onMicPointerDown(event) {
+  event.preventDefault(); // keep textarea focus so the keyboard/layout doesn't jump
+  try { voiceButton?.setPointerCapture?.(event.pointerId); } catch (_) {}
+  if (mainMode === 'recording') {
+    // A press on an already-recording mic ends it on release (tap-to-stop).
+    micPressWillStop = true;
+    return;
+  }
+  micPressWillStop = false;
+  micHoldMode = false;
+  // Recording starts immediately on press — same for tap and hold.
+  startMainRecording();
+  setMainVoiceState('recording');
+  // If the finger is still down after 1s, this press becomes hold-to-talk.
+  micPressTimer = window.setTimeout(() => {
+    micPressTimer = null;
+    if (mainMode === 'idle') return; // stopped / denied meanwhile
+    micHoldMode = true;
+    setMainVoiceState('hold');
+  }, HOLD_THRESHOLD_MS);
+}
+
+function onMicPointerUp() {
+  if (micPressTimer) { window.clearTimeout(micPressTimer); micPressTimer = null; }
+  if (micPressWillStop) {
+    micPressWillStop = false;
+    stopMainRecording();
+    return;
+  }
+  if (micHoldMode) {
+    micHoldMode = false;
+    stopMainRecording(); // held past 1s → release ends recording
+  } else {
+    setMainVoiceState('recording'); // released within 1s → latch until next tap
+  }
+}
+
 function syncKeyboardState() {
   const viewport = window.visualViewport;
+  // Only top-align for a REAL on-screen keyboard (viewport shrinks). Focus alone
+  // (e.g. desktop, or tapping the mic) must not re-align, or the composer hops.
   const keyboardOpen = document.activeElement === input && viewport && viewport.height < window.innerHeight * 0.82;
-  document.body.classList.toggle('keyboard-open', Boolean(keyboardOpen || document.activeElement === input));
+  document.body.classList.toggle('keyboard-open', Boolean(keyboardOpen));
 }
 
 navButtons.forEach((button) => {
+  // Non-<button> nav controls (e.g. the wordmark home link) need keyboard support.
+  if (button.tagName !== 'BUTTON') {
+    button.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        button.click();
+      }
+    });
+  }
   button.addEventListener('click', async () => {
     const next = button.getAttribute('data-go');
     if (next === 'v-seal' && !input?.value.trim()) {
@@ -586,7 +822,13 @@ stakeButtons.forEach((button) => {
 input?.addEventListener('input', handleInput);
 input?.addEventListener('focus', syncKeyboardState);
 input?.addEventListener('blur', () => window.setTimeout(syncKeyboardState, 120));
-voiceButton?.addEventListener('click', grantMicForVisuals);
+// Two-mode mic: tap to latch recording, hold (≥600ms) for push-to-talk.
+// pointerdown preventDefault also keeps textarea focus, so the keyboard/layout
+// doesn't jump. Works for both web and the Telegram Mini App webview.
+voiceButton?.addEventListener('pointerdown', onMicPointerDown);
+voiceButton?.addEventListener('pointerup', onMicPointerUp);
+voiceButton?.addEventListener('pointercancel', onMicPointerUp);
+voiceButton?.addEventListener('contextmenu', (event) => event.preventDefault());
 terminalInput?.addEventListener('input', handleTerminalInput);
 terminalSealButton?.addEventListener('click', sealTerminalWhisper);
 terminalVoiceButton?.addEventListener('click', startVoice);

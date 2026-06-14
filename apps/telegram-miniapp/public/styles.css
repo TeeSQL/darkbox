@@ -9,7 +9,8 @@
   --silver: #d7d7df;
   --bone: #e7e3d9;
   --mut: #8a8a96;
-  --violet: #8b7bff;
+  --violet: #8b7bff;   /* the cold of the seal — secrecy only: lock, "only you", verify */
+  --ember: #ff6a2c;    /* heat & eruption — light through a seal, the flood when boxes open */
   --hot: #ff4a7e;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --display: "Chakra Petch", "JetBrains Mono", sans-serif;
@@ -176,8 +177,13 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   white-space: nowrap;
 }
+.wm-home { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: opacity 0.15s ease; }
+.wm-home:hover { opacity: 0.78; }
+.wm-home:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 3px; }
 .st { display: inline-flex; align-items: center; min-width: 0; text-align: right; }
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--silver); box-shadow: 0 0 8px var(--silver); margin-right: 7px; flex: 0 0 auto; }
+/* Topbar SEALED dot: violet + slow breath, consistent with the landing seal. */
+.st .dot { background: var(--violet); box-shadow: 0 0 8px var(--violet); animation: sealedBreath 3.4s ease-in-out infinite; }
 .content {
   flex: 1;
   display: flex;
@@ -188,7 +194,20 @@ button { -webkit-tap-highlight-color: transparent; }
   padding: 42px 22px calc(116px + env(safe-area-inset-bottom));
   text-align: center;
 }
-.landing-content { padding-top: calc(44px + env(safe-area-inset-top)); }
+.landing-content { padding-top: calc(44px + env(safe-area-inset-top)); position: relative; z-index: 1; }
+/* Mic-on landing field (three.js). Sits behind the content, fades in only when
+   the mic wakes; non-interactive. */
+.landing-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.landing-bg.on { opacity: 1; }
 .wrap { width: 100%; max-width: 560px; margin: 0 auto; }
 .hall-wrap { max-width: 640px; }
 .hero-wm {
@@ -205,6 +224,14 @@ button { -webkit-tap-highlight-color: transparent; }
   color: transparent;
   filter: drop-shadow(0 0 26px rgba(176, 166, 206, 0.3));
 }
+/* Stacked emblem logo (miniapp landing) — the only loud object in the room. */
+.hero-logo { background: none; }
+.hero-logo img {
+  display: block;
+  width: clamp(150px, 50vw, 270px);
+  height: auto;
+  margin: 0 auto;
+}
 .sealed {
   display: flex;
   align-items: center;
@@ -216,7 +243,21 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 12px;
   letter-spacing: 0.14em;
 }
-.sealed .dot { width: 7px; height: 7px; margin-right: 2px; }
+.sealed .dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  background: var(--violet);
+  box-shadow: 0 0 8px var(--violet);
+  animation: sealedBreath 3.4s ease-in-out infinite;
+}
+@keyframes sealedBreath {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 5px rgba(139, 123, 255, 0.45); }
+  50% { opacity: 1; box-shadow: 0 0 15px rgba(139, 123, 255, 0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sealed .dot, .st .dot { animation: none; }
+}
 .sep { color: #54545e; }
 .loop-strip {
   width: min(680px, 100%);
@@ -240,18 +281,53 @@ button { -webkit-tap-highlight-color: transparent; }
 .eyebrow { margin-bottom: 13px; color: var(--mut); font-size: 11px; letter-spacing: 0.22em; }
 .headline { color: var(--silver); font-size: clamp(1.4rem, 7vw, 2.05rem); line-height: 1.22; letter-spacing: 0.005em; }
 .sub { margin-top: 15px; color: var(--mut); font-size: 13px; line-height: 1.7; }
+/* Reserve the status line's tallest (initial) height so swapping the message on
+   mic click can't shrink it and re-center the column — keeps the composer fixed. */
+#whisper-status { min-height: 5.2em; }
+
+/* Whisper intro as a living thread: one line types a sentence, erases it, and
+   types the next, settling on the ask. JS (typeWhisperConvo) drives it; CSS
+   provides the caret and the accent colours. The .convo reserves a fixed
+   height so swapping lines never shifts the field below it. */
+.convo {
+  min-height: 2.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* One consistent size for every thread line, so they all stay on a single row. */
+#whisper-thread {
+  margin: 0;
+  font-size: clamp(0.8rem, 3.8vw, 1.25rem);
+  line-height: 1.3;
+  color: var(--silver);
+  white-space: nowrap;
+}
+.c-blind { color: var(--violet); }   /* "provably blind" — the cold of the seal */
+.c-confess { color: var(--ember); }  /* "confesses" — the heat */
+.cline.typing::after {
+  content: '▌';
+  margin-left: 2px;
+  color: var(--mut);
+  animation: caret 1.05s steps(1) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cline.typing::after { display: none; }
+}
 .tell { color: var(--violet); }
 .whisper { width: 100%; margin-top: 28px; text-align: left; }
 .whisper-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start; /* top-align the prompt with the first line of the field */
   gap: 14px;
   min-height: 116px;
   border-bottom: 1px solid var(--hair2);
   padding: 12px 4px 14px;
 }
-.prompt { color: var(--violet); font-size: 16px; line-height: 1.4; padding-bottom: 2px; }
+.whisper-field .voice-button { align-self: center; } /* keep the mic centred */
+.prompt { color: var(--violet); font-size: 16px; line-height: 1.45; }
 textarea {
   width: 100%;
   min-width: 0;

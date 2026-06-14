@@ -438,10 +438,16 @@ function setSelectedDaemon({ image, name, seed }) {
     const videoSrc = daemonVideoFor(selectedDaemon.image);
     waitDaemonVideoEl.poster = selectedDaemon.image;
     waitDaemonVideoEl.setAttribute('aria-label', `${selectedDaemon.name} daemon animation`);
-    waitDaemonVideoEl.oncanplay = () => {
+    // Telegram's webview can silently reject a single play() (autoplay gating),
+    // leaving the video "starting paused" on its first frame. Retry on every
+    // readiness event plus a short delayed nudge so muted playback actually kicks.
+    const tryPlayWaitVideo = () => {
       waitDaemonVideoEl.hidden = false;
-      waitDaemonVideoEl.play().catch(() => {});
+      const p = waitDaemonVideoEl.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     };
+    waitDaemonVideoEl.oncanplay = tryPlayWaitVideo;
+    waitDaemonVideoEl.onloadeddata = tryPlayWaitVideo;
     waitDaemonVideoEl.onerror = () => {
       waitDaemonVideoEl.hidden = true;
       waitDaemonVideoEl.removeAttribute('src');
@@ -451,6 +457,7 @@ function setSelectedDaemon({ image, name, seed }) {
       waitDaemonVideoEl.src = videoSrc;
       waitDaemonVideoEl.load();
     }
+    setTimeout(tryPlayWaitVideo, 350);
   }
   const revealKey = `${selectedDaemon.image}|${selectedDaemon.name}|${selectedDaemon.seed}`;
   if (revealKey !== dispatchedRevealKey) {
@@ -564,7 +571,19 @@ function renderLiveMarkets() {
   }
   marketRowsEl.innerHTML = rows.map((row, index) => {
     const yes = row.latest_yes_price ?? row.latest_trade_price;
-    const priceLabel = yes != null ? `${Math.round(Number(yes) * 100)}¢ yes` : (row.status || 'Active');
+    // Prices are micro-USDC book marks (e.g. 1050000), not 0–1 probabilities.
+    // Show implied YES odds = yes/(yes+no) so the label reads like a real
+    // prediction market (~40–60¢) instead of dumping the raw micro value.
+    const yP = yes != null ? Number(yes) : null;
+    const noP = row.latest_no_price != null ? Number(row.latest_no_price) : null;
+    let priceLabel;
+    if (yP != null && noP != null && yP + noP > 0) {
+      priceLabel = `${Math.round((100 * yP) / (yP + noP))}¢ yes`;
+    } else if (yP != null) {
+      priceLabel = `${Math.min(99, Math.max(1, Math.round(yP / 10000)))}¢ yes`;
+    } else {
+      priceLabel = row.status || 'Active';
+    }
     return `
     <div class="market-row">
       <span class="rank">${index + 1}</span>

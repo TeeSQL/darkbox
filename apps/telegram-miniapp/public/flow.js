@@ -552,9 +552,11 @@ function renderPrivateState() {
   // Balance + PnL. When authed (real account) BOTH come from the backend — never
   // mix a real balance with a mock PnL. The hash-mock is only for the no-gateway
   // (non-Telegram / offline) preview.
-  let balance = selectedStake + (h % 900) / 100;
-  let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
-  let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
+  // Online (devnet reachable) → never show a mock number: default to the $5 promo
+  // balance and +$0.00 PnL; live.self refines below. Mock is only the offline preview.
+  let balance = live.online ? 5 : selectedStake + (h % 900) / 100;
+  let pnl = live.online ? 0 : ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
+  let pnlNote = live.online ? 'no trades yet' : (pnl >= 0 ? 'unrealized' : 'drawdown');
   if (live.self) {
     // ── Balance: the indexer's holdings when it has a row for this account (the
     // CVM-reported balance), else the $5 promo. Using "indexer when present, else

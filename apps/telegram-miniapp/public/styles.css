@@ -765,7 +765,8 @@ html.bestiary-html .daemon-stage {
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.32);
   isolation: isolate;
 }
-.daemon-wait-portrait img {
+.daemon-wait-portrait img,
+.daemon-wait-portrait video {
   position: relative;
   z-index: 1;
   display: block;
@@ -775,10 +776,19 @@ html.bestiary-html .daemon-stage {
   background: #101016;
   filter: contrast(1.08) brightness(1.08) saturate(1.12);
 }
+.daemon-wait-portrait video {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.daemon-wait-portrait video[hidden] {
+  display: none;
+}
 .daemon-wait-portrait.daemon-wait-alive {
   animation: daemonWaitBreath 3.8s ease-in-out infinite;
 }
-.daemon-wait-portrait.daemon-wait-alive img {
+.daemon-wait-portrait.daemon-wait-alive img,
+.daemon-wait-portrait.daemon-wait-alive video {
   animation: daemonWaitPhotoPulse 3.8s ease-in-out infinite;
 }
 .daemon-wait-portrait.mic-reactive {

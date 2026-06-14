@@ -27,6 +27,7 @@ const daemonNameEl = document.querySelector('#daemon-name');
 const revealDaemonNameEl = document.querySelector('#reveal-daemon-name');
 const revealDaemonMetaEl = document.querySelector('#reveal-daemon-meta');
 const waitDaemonImageEl = document.querySelector('#daemon-wait-image');
+const waitDaemonVideoEl = document.querySelector('#daemon-wait-video');
 const daemonBalanceEl = document.querySelector('#daemon-balance');
 const daemonPnlEl = document.querySelector('#daemon-pnl');
 const daemonPnlNoteEl = document.querySelector('#daemon-pnl-note');
@@ -421,6 +422,10 @@ function stableVisualSeed() {
   }
 }
 
+function daemonVideoFor(image) {
+  return image.replace('/daemons/', '/daemons/videos/').replace(/\.(webp|png|jpe?g)$/i, '.mp4');
+}
+
 function setSelectedDaemon({ image, name, seed }) {
   selectedDaemon.image = image;
   selectedDaemon.name = name;
@@ -428,6 +433,24 @@ function setSelectedDaemon({ image, name, seed }) {
   if (waitDaemonImageEl) {
     if (waitDaemonImageEl.getAttribute('src') !== selectedDaemon.image) waitDaemonImageEl.src = selectedDaemon.image;
     waitDaemonImageEl.alt = `${selectedDaemon.name} daemon portrait`;
+  }
+  if (waitDaemonVideoEl) {
+    const videoSrc = daemonVideoFor(selectedDaemon.image);
+    waitDaemonVideoEl.poster = selectedDaemon.image;
+    waitDaemonVideoEl.setAttribute('aria-label', `${selectedDaemon.name} daemon animation`);
+    waitDaemonVideoEl.oncanplay = () => {
+      waitDaemonVideoEl.hidden = false;
+      waitDaemonVideoEl.play().catch(() => {});
+    };
+    waitDaemonVideoEl.onerror = () => {
+      waitDaemonVideoEl.hidden = true;
+      waitDaemonVideoEl.removeAttribute('src');
+    };
+    if (waitDaemonVideoEl.getAttribute('src') !== videoSrc) {
+      waitDaemonVideoEl.hidden = true;
+      waitDaemonVideoEl.src = videoSrc;
+      waitDaemonVideoEl.load();
+    }
   }
   const revealKey = `${selectedDaemon.image}|${selectedDaemon.name}|${selectedDaemon.seed}`;
   if (revealKey !== dispatchedRevealKey) {

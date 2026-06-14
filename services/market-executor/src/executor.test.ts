@@ -20,6 +20,9 @@ const NO_BOOK: Address = "0x00000000000000000000000000000000000000b2";
 const YES_TOKEN: Address = "0x00000000000000000000000000000000000000c1";
 const NO_TOKEN: Address = "0x00000000000000000000000000000000000000c2";
 const TX_HASH: Hex = `0x${"33".repeat(32)}`;
+const CLOSE_TIME = 1_750_000_000n;
+const RESOLVE_BY = 1_750_086_400n;
+const CREATED_AT_BLOCK = 4242n;
 
 function proposal(overrides: Partial<ProposalRow> = {}): ProposalRow {
   return {
@@ -67,6 +70,9 @@ class FakeFactory implements FactoryClient {
       noBook: NO_BOOK,
       yesToken: YES_TOKEN,
       noToken: NO_TOKEN,
+      closeTime: CLOSE_TIME,
+      resolveBy: RESOLVE_BY,
+      createdAtBlock: CREATED_AT_BLOCK,
     };
   }
 
@@ -152,6 +158,14 @@ test("(a) approved proposal → createMarket with right params → markDeployed 
   assert.equal(dep.result.noToken, NO_TOKEN);
   assert.equal(dep.result.txHash, TX_HASH);
   assert.equal(dep.result.creatorAddress, COORDINATOR);
+  // The real close/resolve/block values are threaded through as JSON-safe
+  // strings (NOT the old hardcoded 0/0/0).
+  assert.equal(dep.result.closeTime, CLOSE_TIME.toString());
+  assert.equal(dep.result.resolveBy, RESOLVE_BY.toString());
+  assert.equal(dep.result.createdAtBlock, CREATED_AT_BLOCK.toString());
+  assert.notEqual(dep.result.closeTime, "0");
+  assert.notEqual(dep.result.resolveBy, "0");
+  assert.notEqual(dep.result.createdAtBlock, "0");
   assert.equal(indexer.failed.length, 0);
 });
 
@@ -165,6 +179,9 @@ test("(b) idempotency: existing market found → createMarket NOT called, but ma
     noBook: NO_BOOK,
     yesToken: zeroAddress,
     noToken: zeroAddress,
+    closeTime: CLOSE_TIME,
+    resolveBy: RESOLVE_BY,
+    createdAtBlock: CREATED_AT_BLOCK,
   };
   const indexer = new FakeIndexer();
   const deps = baseDeps(factory, indexer);
@@ -211,6 +228,9 @@ test("runOnce processes every approved proposal and contains per-proposal failur
       noBook: NO_BOOK,
       yesToken: YES_TOKEN,
       noToken: NO_TOKEN,
+      closeTime: CLOSE_TIME,
+      resolveBy: RESOLVE_BY,
+      createdAtBlock: CREATED_AT_BLOCK,
     };
   }) as FactoryClient["createMarket"];
 

@@ -41,6 +41,12 @@ export interface CreatedMarket {
   noBook: Address;
   yesToken: Address;
   noToken: Address;
+  /** Market close time (unix seconds) — from the create input / MarketCreated log. */
+  closeTime: bigint;
+  /** Resolve-by deadline (unix seconds) — from the create input / MarketCreated log. */
+  resolveBy: bigint;
+  /** Block number the MarketCreated event was mined in. */
+  createdAtBlock: bigint;
 }
 
 /**
@@ -158,7 +164,18 @@ export class ViemMarketFactoryClient implements FactoryClient {
       noToken = zeroAddress;
     }
 
-    return { txHash, marketId, marketAddress, yesBook, noBook, yesToken, noToken };
+    return {
+      txHash,
+      marketId,
+      marketAddress,
+      yesBook,
+      noBook,
+      yesToken,
+      noToken,
+      closeTime: input.closeTime,
+      resolveBy: input.resolveBy,
+      createdAtBlock: receipt.blockNumber,
+    };
   }
 
   async findExistingMarketByQuestion(
@@ -201,7 +218,18 @@ export class ViemMarketFactoryClient implements FactoryClient {
       [yesBook, noBook] = await this.readBooks(marketId);
     }
 
-    return { txHash: null, marketId, marketAddress, yesBook, noBook, yesToken, noToken };
+    return {
+      txHash: null,
+      marketId,
+      marketAddress,
+      yesBook,
+      noBook,
+      yesToken,
+      noToken,
+      closeTime: match.args.closeTime!,
+      resolveBy: match.args.resolveBy!,
+      createdAtBlock: match.blockNumber,
+    };
   }
 
   private async readBooks(marketId: Hex): Promise<[Address, Address]> {

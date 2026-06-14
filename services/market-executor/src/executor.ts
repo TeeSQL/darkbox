@@ -122,6 +122,9 @@ export async function processProposal(
       noToken: result.noToken,
       txHash: result.txHash,
       creatorAddress: deps.coordinatorAddress,
+      closeTime: result.closeTime.toString(),
+      resolveBy: result.resolveBy.toString(),
+      createdAtBlock: result.createdAtBlock.toString(),
     });
     log("marked deployed", { proposalId, marketId: result.marketId });
     return result;

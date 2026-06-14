@@ -575,6 +575,11 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
       // The creator is the executor's coordinator address (factory owner); it
       // sends it so the indexer needn't know the coordinator key/address.
       const creatorAddress = asText(body["creatorAddress"], "0x0000000000000000000000000000000000000000").toLowerCase();
+      // bigint-as-string from the executor (JSON-safe); pg coerces the numeric
+      // string into BIGINT. Default "0" preserves the old behavior if absent.
+      const closeTime = asText(body["closeTime"], "0");
+      const resolveBy = asText(body["resolveBy"], "0");
+      const createdAtBlock = asText(body["createdAtBlock"], "0");
       const ts = nowSeconds();
 
       const result = await withTransaction(async (client) => {
@@ -586,6 +591,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
                  deploy_error = NULL,
                  deployed_at = NOW()
            WHERE proposal_id = $1
+             AND status IN ('approved', 'deployed')
            RETURNING proposal_id, question, description, metadata_uri`,
           [req.params.proposalId, marketId, txHash],
         );
@@ -597,7 +603,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
              market_id, game_id, creator_address, market_address, question, metadata_uri,
              close_time, resolve_by, resolver_type, status, yes_token, no_token,
              yes_book, no_book, created_at_block, created_at_ts
-           ) VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 'AdminManual', 'Active', $7, $8, $9, $10, 0, $11)
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AdminManual', 'Active', $9, $10, $11, $12, $13, $14)
            ON CONFLICT (market_id) DO NOTHING`,
           [
             marketId,
@@ -606,10 +612,13 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
             marketAddress,
             asText(proposal["question"]),
             asText(proposal["metadata_uri"]),
+            closeTime,
+            resolveBy,
             yesToken || null,
             noToken || null,
             yesBook || null,
             noBook || null,
+            createdAtBlock,
             ts,
           ],
         );

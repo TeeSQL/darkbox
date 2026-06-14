@@ -32,6 +32,12 @@ export interface DeployedResult {
   txHash: Hex | null;
   /** Coordinator (factory owner) address — recorded as the markets.creator_address. */
   creatorAddress: Address;
+  /** bigint as string (JSON-safe): market close time, unix seconds. */
+  closeTime: string;
+  /** bigint as string (JSON-safe): resolve-by deadline, unix seconds. */
+  resolveBy: string;
+  /** bigint as string (JSON-safe): block the market was created in. */
+  createdAtBlock: string;
 }
 
 /** The indexer operations the executor depends on (faked in tests). */

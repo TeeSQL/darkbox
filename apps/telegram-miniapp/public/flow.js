@@ -77,6 +77,7 @@ const live = {
   activity: null,    // ActivityStats from /public/activity
   markets: null,     // PublicMarket[] from /public/markets
   promoCredit: null, // { currency, amount, type } from claimInvite()
+  online: false,     // gateway/public API reachable → live data is authoritative
   claimed: false,    // ran claimInvite() this session
   committed: false,  // sealed a whisper to the mesh this session
 };
@@ -136,10 +137,17 @@ async function refreshPublic() {
     client.activity().catch(() => null),
     client.markets().catch(() => null),
   ]);
-  if (Array.isArray(leaderboard) && leaderboard.length) live.leaderboard = leaderboard;
-  if (game) live.game = game;
-  if (activity) live.activity = activity;
-  if (Array.isArray(markets) && markets.length) live.markets = markets;
+  // game/activity/markets return null on failure (leaderboard returns [] on
+  // failure, so it can't signal reachability). Any non-null ⇒ the gateway is up,
+  // and live data — including legitimately EMPTY results — is authoritative.
+  const online = game != null || activity != null || markets != null;
+  if (online) {
+    live.online = true;
+    live.leaderboard = Array.isArray(leaderboard) ? leaderboard : [];
+    if (game) live.game = game;
+    if (activity) live.activity = activity;
+    if (markets) live.markets = markets;
+  }
   renderPrivateState();
 }
 
@@ -423,37 +431,34 @@ function renderPrivateState() {
   if (revealDaemonNameEl) revealDaemonNameEl.textContent = ownName;
   if (revealDaemonMetaEl) revealDaemonMetaEl.textContent = `${status} · ${fingerprint(instructionSeed)}`;
   setSelectedDaemon({ image: daemonImage, name: ownName, seed: visualSeed });
-  // Balance: the player's real playable balance — the $5 promo credit plus any
-  // bridge/indexer-available — when authed, else the mock.
+  // Balance + PnL. When authed (real account) BOTH come from the backend — never
+  // mix a real balance with a mock PnL. The hash-mock is only for the no-gateway
+  // (non-Telegram / offline) preview.
   let balance = selectedStake + (h % 900) / 100;
   let pnl = ((hashNumber(`${visualSeed}:pnl`) % 520) - 140) / 100;
   let pnlNote = pnl >= 0 ? 'unrealized' : 'drawdown';
   if (live.self) {
+    // ── Balance: $5 promo credit + any bridge/indexer-available ──────────────
     let real = 0;
     let known = false;
-    // The $5 promo counts toward the playable balance even while it's withdrawal-
-    // locked. self/status doesn't carry the amount, so use the (idempotent) claim.
+    // self/status doesn't carry the promo amount, so use the (idempotent) claim.
     if (live.promoCredit && live.self.fundingStatus === 'promo_funded') {
       const p = Number(live.promoCredit.amount);
       if (Number.isFinite(p)) { real += p; known = true; }
     }
-    // Real deposits / withdrawable from the bridge+indexer once present.
     const wb = live.self.withdrawableAvailableBalance;
     if (wb != null && Number.isFinite(Number(wb))) { real += Number(wb); known = true; }
     if (known) balance = real;
-    const lock = live.self.withdrawalLock;
-    if (lock && lock.locked) {
-      pnlNote = lock.unlockAt
-        ? `locked · unlocks ${new Date(lock.unlockAt).toLocaleDateString([], { weekday: 'short' })}`
-        : 'locked';
-    } else if (live.self.fundingStatus === 'promo_funded') {
-      pnlNote = 'promo balance';
+
+    // ── PnL: real. $0 until the daemon actually trades (leaderboard row). A real
+    // account with an untouched $5 must read +$0.00, never a mock number. ──────
+    pnl = 0;
+    pnlNote = 'no trades yet';
+    const liveRow = myLeaderboardRow();
+    if (liveRow && liveRow.pnl != null) {
+      const rp = Number(liveRow.pnl);
+      if (Number.isFinite(rp)) { pnl = rp; pnlNote = rp >= 0 ? 'realized' : 'drawdown'; }
     }
-  }
-  const liveRow = myLeaderboardRow();
-  if (liveRow && liveRow.pnl != null) {
-    const real = Number(liveRow.pnl);
-    if (Number.isFinite(real)) { pnl = real; pnlNote = real >= 0 ? 'realized' : 'drawdown'; }
   }
   // Real instruction fingerprint once a whisper is committed to the mesh.
   if (live.self && live.self.instructionCommitmentHash && fingerprintEl) {
@@ -470,23 +475,20 @@ function renderPrivateState() {
   if (daemonMurmurEl) daemonMurmurEl.textContent = pick(murmurs, visualSeed, 3);
   if (daemonActivityLineEl) daemonActivityLineEl.textContent = pick(activityLines, visualSeed, 4);
   if (stakeEncourageEl) stakeEncourageEl.textContent = stakeEncouragement[selectedStake] || 'add funds when you want more heat.';
-  // Aggregate tiles: live indexer counters when present (honest, even at zero),
+  // Aggregate tiles: live indexer counters when connected (honest, even at zero),
   // mock only when the public API is unreachable.
   const g = live.game;
-  const a = live.activity;
-  if (metricVolumeEl) {
-    metricVolumeEl.textContent = g
-      ? formatUsdK(g.total_volume_usdc)
-      : `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
+  if (live.online) {
+    if (metricVolumeEl) metricVolumeEl.textContent = formatUsdK(g ? g.total_volume_usdc : 0);
+    if (metricTradesEl) metricTradesEl.textContent = String((g && g.total_trades) ?? 0);
+    if (metricSealedEl) metricSealedEl.textContent = String((g && g.active_agents) ?? 0);
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String((g && g.positions_opened) ?? 0);
+  } else {
+    if (metricVolumeEl) metricVolumeEl.textContent = `$${(10.2 + (h % 7200) / 1000).toFixed(1)}k`;
+    if (metricTradesEl) metricTradesEl.textContent = String(220 + (h % 260));
+    if (metricSealedEl) metricSealedEl.textContent = String(76 + (h % 35));
+    if (metricFingerprintsEl) metricFingerprintsEl.textContent = String(130 + (h % 80));
   }
-  if (metricTradesEl) metricTradesEl.textContent = g ? String(g.total_trades ?? 0) : String(220 + (h % 260));
-  if (metricSealedEl) metricSealedEl.textContent = g ? String(g.active_agents ?? 0) : String(76 + (h % 35));
-  if (metricFingerprintsEl) {
-    metricFingerprintsEl.textContent = g
-      ? String(g.positions_opened ?? 0)
-      : String(130 + (h % 80));
-  }
-  void a;
   renderMarkets(PUBLIC_MARKET_SEED);
   renderLeaderboard(visualSeed, ownName);
 }
@@ -494,6 +496,12 @@ function renderPrivateState() {
 function renderLiveMarkets() {
   if (!marketRowsEl) return;
   const all = live.markets || [];
+  if (!all.length) {
+    marketRowsEl.innerHTML = '<div class="market-row empty"><span class="market-q">no markets open yet — the hall is still sealing.</span></div>';
+    if (hallNewMarketEl) hallNewMarketEl.textContent = 'awaiting first market';
+    if (hallNewMarketMetaEl) hallNewMarketMetaEl.textContent = 'the box is still sealed.';
+    return;
+  }
   const open = all.filter((m) => (m.status || '').toLowerCase() !== 'resolved');
   const rows = (open.length ? open : all).slice(0, 5);
   const newest = [...all].sort((a, b) => Number(b.created_at_ts || 0) - Number(a.created_at_ts || 0))[0];
@@ -518,7 +526,7 @@ function renderLiveMarkets() {
 
 function renderMarkets(seed) {
   if (!marketRowsEl) return;
-  if (live.markets && live.markets.length) { renderLiveMarkets(); return; }
+  if (live.online) { renderLiveMarkets(); return; }
   const rows = marketQuestions.map((question, index) => {
     const base = hashNumber(`${seed}:market:${question}`);
     const size = 650 + (base % 5200);
@@ -546,6 +554,11 @@ function shortAgent(id) {
 
 function renderLiveLeaderboard() {
   if (!leaderboardRowsEl) return;
+  if (!(live.leaderboard || []).length) {
+    leaderboardRowsEl.innerHTML = '<div class="brow empty"><span class="dn">no daemons ranked yet — the board fills as daemons trade.</span></div>';
+    if (hallBigWinEl) hallBigWinEl.textContent = 'no moves yet';
+    return;
+  }
   const myId = live.self && live.self.agentId;
   const rows = (live.leaderboard || []).slice(0, 6).map((row) => {
     const pctRaw = row.pnlPct != null ? Number(row.pnlPct) : null;
@@ -572,7 +585,7 @@ function renderLiveLeaderboard() {
 
 function renderLeaderboard(seed, ownName) {
   if (!leaderboardRowsEl) return;
-  if (live.leaderboard && live.leaderboard.length) { renderLiveLeaderboard(); return; }
+  if (live.online) { renderLiveLeaderboard(); return; }
   const rows = [ownName, ...names.filter((name) => name !== ownName)]
     .slice(0, 6)
     .map((name, index) => ({

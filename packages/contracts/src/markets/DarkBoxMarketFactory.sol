@@ -128,6 +128,25 @@ contract DarkBoxMarketFactory {
     // ---------------------------------------------------------------------
 
     function createMarket(CreateMarketParams calldata params) external returns (bytes32 marketId, address market) {
+        (marketId, market) = _createMarketShell(params);
+        _createBooks(marketId);
+
+        // Optional initial liquidity: pull, then split to the creator.
+        if (params.initialLiquidity > 0) {
+            _pull(msg.sender, params.initialLiquidity);
+            if (!IERC20(collateralToken).approve(market, params.initialLiquidity)) revert TransferFailed();
+            DarkBoxBinaryMarket(market).split(params.initialLiquidity, msg.sender);
+        }
+    }
+
+    /// @notice Arc/testnet-friendly market creation path: deploy only the market
+    ///         vault + outcome tokens. Call `createYesBook` and `createNoBook`
+    ///         in separate transactions to stay under chains with 30M gas caps.
+    function createMarketShell(CreateMarketParams calldata params) external returns (bytes32 marketId, address market) {
+        return _createMarketShell(params);
+    }
+
+    function _createMarketShell(CreateMarketParams calldata params) internal returns (bytes32 marketId, address market) {
         if (msg.sender != owner && msg.sender != coordinator) revert NotCoordinator();
         _validate(params);
         if (address(frontierFactory) == address(0)) revert FrontierNotSet();
@@ -186,15 +205,6 @@ contract DarkBoxMarketFactory {
             params.resolveBy,
             ResolverType.AdminManual
         );
-
-        _createBooks(marketId);
-
-        // Optional initial liquidity: pull, then split to the creator.
-        if (params.initialLiquidity > 0) {
-            _pull(msg.sender, params.initialLiquidity);
-            if (!IERC20(collateralToken).approve(market, params.initialLiquidity)) revert TransferFailed();
-            m.split(params.initialLiquidity, msg.sender);
-        }
     }
 
     function _validate(CreateMarketParams calldata params) internal view {
@@ -229,37 +239,62 @@ contract DarkBoxMarketFactory {
     // ---------------------------------------------------------------------
 
     /// @notice Legacy/recovery hook. Normal market creation calls this automatically.
+    /// @dev On 30M-gas-cap chains prefer `createYesBook` then `createNoBook`.
     function createBooks(bytes32 marketId) external returns (address yesBook, address noBook) {
         if (msg.sender != coordinator && msg.sender != owner) revert NotCoordinator();
         return _createBooks(marketId);
     }
 
-    function _createBooks(bytes32 marketId) internal returns (address yesBook, address noBook) {
-        MarketInfo storage info = markets[marketId];
-        if (info.market == address(0)) revert UnknownMarket();
-        if (info.booksRegistered) revert BooksAlreadyRegistered();
-        if (address(frontierFactory) == address(0)) revert FrontierNotSet();
+    function createYesBook(bytes32 marketId) external returns (address yesBook) {
+        if (msg.sender != coordinator && msg.sender != owner) revert NotCoordinator();
+        MarketInfo storage info = _bookInfo(marketId);
+        if (info.yesBook != address(0)) revert BooksAlreadyRegistered();
+        DarkBoxBinaryMarket m = DarkBoxBinaryMarket(info.market);
+        yesBook = _createFrontierBook(m.yesToken());
+        info.yesBook = yesBook;
+        _finalizeBooksIfReady(marketId, info, m.yesToken(), m.noToken());
+    }
 
+    function createNoBook(bytes32 marketId) external returns (address noBook) {
+        if (msg.sender != coordinator && msg.sender != owner) revert NotCoordinator();
+        MarketInfo storage info = _bookInfo(marketId);
+        if (info.noBook != address(0)) revert BooksAlreadyRegistered();
+        DarkBoxBinaryMarket m = DarkBoxBinaryMarket(info.market);
+        noBook = _createFrontierBook(m.noToken());
+        info.noBook = noBook;
+        _finalizeBooksIfReady(marketId, info, m.yesToken(), m.noToken());
+    }
+
+    function _createBooks(bytes32 marketId) internal returns (address yesBook, address noBook) {
+        MarketInfo storage info = _bookInfo(marketId);
+        if (info.booksRegistered) revert BooksAlreadyRegistered();
         DarkBoxBinaryMarket m = DarkBoxBinaryMarket(info.market);
         address yesTok = m.yesToken();
         address noTok = m.noToken();
+        if (info.yesBook == address(0)) info.yesBook = _createFrontierBook(yesTok);
+        if (info.noBook == address(0)) info.noBook = _createFrontierBook(noTok);
+        _finalizeBooksIfReady(marketId, info, yesTok, noTok);
+        return (info.yesBook, info.noBook);
+    }
 
-        yesBook = frontierFactory.createGeoBookWithFees(
-            yesTok, collateralToken, bookTickSpacing, bookStartTick, feeRecipient, bookMakerFeeBps, bookTakerFeeBps
+    function _bookInfo(bytes32 marketId) internal view returns (MarketInfo storage info) {
+        info = markets[marketId];
+        if (info.market == address(0)) revert UnknownMarket();
+        if (address(frontierFactory) == address(0)) revert FrontierNotSet();
+    }
+
+    function _createFrontierBook(address token0) internal returns (address book) {
+        book = frontierFactory.createGeoBookWithFees(
+            token0, collateralToken, bookTickSpacing, bookStartTick, feeRecipient, bookMakerFeeBps, bookTakerFeeBps
         );
-        noBook = frontierFactory.createGeoBookWithFees(
-            noTok, collateralToken, bookTickSpacing, bookStartTick, feeRecipient, bookMakerFeeBps, bookTakerFeeBps
-        );
+        if (book == address(0)) revert InvalidBook();
+    }
 
-        // Validate the books the (owner-mutable) Frontier factory handed back
-        // before latching them in (audit M-3): non-zero and distinct.
-        if (yesBook == address(0) || noBook == address(0) || yesBook == noBook) revert InvalidBook();
-
-        info.yesBook = yesBook;
-        info.noBook = noBook;
+    function _finalizeBooksIfReady(bytes32 marketId, MarketInfo storage info, address yesTok, address noTok) internal {
+        if (info.yesBook == address(0) || info.noBook == address(0)) return;
+        if (info.yesBook == info.noBook) revert InvalidBook();
         info.booksRegistered = true;
-
-        emit BooksRegistered(marketId, yesBook, noBook, yesTok, noTok);
+        emit BooksRegistered(marketId, info.yesBook, info.noBook, yesTok, noTok);
     }
 
     // ---------------------------------------------------------------------

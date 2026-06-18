@@ -18,6 +18,12 @@
       "@darkbox/shared/*": [
         "packages/shared/src/*"
       ],
+      "@darkbox/deployments": [
+        "packages/deployments/src/index.ts"
+      ],
+      "@darkbox/deployments/*": [
+        "packages/deployments/src/*"
+      ],
       "@darkbox/bridge": [
         "services/bridge/src/index.ts"
       ],

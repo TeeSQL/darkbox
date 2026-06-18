@@ -1,0 +1,22 @@
+{
+  "chainId": 5042002,
+  "deployer": "0xCa1370C6226A867BE549A0aEB613f27BdD11370B",
+  "frontier": {
+    "factory": "0xE391ab3eA709f66896eE774FBD16096b0e2972a6",
+    "router": "0x965648Aecdd23b91970E497f497D51AAFFFBEaDD",
+    "lens": "0x25C53b1E4f36B17187C6e0Bc27F59Ba9feb44a37"
+  },
+  "darkbox": {
+    "syntheticUSDC": "0xfF3088439D59559eb3Ba740429eBBA5303FB3D80",
+    "marketFactory": "0x23bc8FB74d4Bb89e899BC1558B08A843E6eE9796"
+  },
+  "canonicalMarket": {
+    "marketId": "0x411057b1581c43730758ee056a2a9f92c097dce4ad350b054e987742812184a9",
+    "market": "0x4fbe02ed6F654ce151f993EAaf4FB5b2a83B32E9",
+    "question": "Will DarkBox win a grant from ARC?",
+    "yesToken": "0x206f4b9069757A82d2059C369A9ED0c66fc437ad",
+    "noToken": "0x95c9e2D314166531DdF20d1a45b5dC3dc528bdC1",
+    "yesBook": "0x8dF8bba836512dEFf4B3755EA0b0c5B81764a83D",
+    "noBook": "0xb14cA2720F22E98aABce78a1F9f032D0dBaE5ED8"
+  }
+}

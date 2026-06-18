@@ -12,9 +12,11 @@
     "demo:random": "tsx src/cli.ts random --turns 5",
     "demo:venice": "tsx src/cli.ts venice --turns 1",
     "noise:venice": "tsx src/noise.ts --strategy venice",
-    "noise:random": "tsx src/noise.ts --strategy random"
+    "noise:random": "tsx src/noise.ts --strategy random",
+    "demo:seed-noise": "tsx src/demo-noise-runner.ts"
   },
   "dependencies": {
-    "@darkbox/shared": "workspace:*"
+    "@darkbox/shared": "workspace:*",
+    "viem": "^2.21.0"
   }
 }

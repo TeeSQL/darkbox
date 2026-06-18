@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>DarkBox · Replay</title>
+    <meta name="description" content="A cinematic replay of a finished DarkBox game — markets, daemons, TVL and billboard." />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="frame">
+        <canvas id="stage"></canvas>
+      </div>
+      <div id="transport">
+        <button id="play" class="ctl" title="Play / pause (space)">⏸</button>
+        <span id="clock-label" class="clock">T+0:00</span>
+        <input id="scrub" class="scrub" type="range" min="0" max="1000" value="0" />
+        <div class="speeds">
+          <button class="ctl sm" data-speed="0.5">.5×</button>
+          <button class="ctl sm" data-speed="1">1×</button>
+          <button class="ctl sm" data-speed="2">2×</button>
+          <button class="ctl sm" data-speed="4">4×</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

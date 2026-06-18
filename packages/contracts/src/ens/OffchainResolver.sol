@@ -124,6 +124,10 @@ contract OffchainResolver is IExtendedResolver {
     }
 
     function supportsInterface(bytes4 interfaceID) external pure returns (bool) {
-        return interfaceID == type(IExtendedResolver).interfaceId || interfaceID == 0x01ffc9a7;
+        return interfaceID == type(IExtendedResolver).interfaceId
+            || interfaceID == 0x01ffc9a7 // ERC-165
+            || interfaceID == 0x3b3b57de // addr(bytes32)
+            || interfaceID == 0x59d1d43c // text(bytes32,string)
+            || interfaceID == 0xbc1c58d1; // contenthash(bytes32)
     }
 }
